@@ -1,0 +1,167 @@
+import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
+
+plugins {
+	id 'net.fabricmc.fabric-loom-remap' version "${loom_version}"
+	id 'maven-publish'
+	id "org.jetbrains.kotlin.jvm" version "2.3.0"
+}
+
+version = project.mod_version
+group = project.maven_group
+
+base {
+	archivesName = project.archives_base_name
+}
+
+repositories {
+	// Add repositories to retrieve artifacts from in here.
+	// You should only use this when depending on other mods because
+	// Loom adds the essential maven repositories to download Minecraft and libraries from automatically.
+	// See https://docs.gradle.org/current/userguide/declaring_repositories.html
+	// for more information about repositories.
+}
+
+loom {
+	splitEnvironmentSourceSets()
+
+	mods {
+		"kts4mc" {
+			sourceSet sourceSets.main
+			sourceSet sourceSets.client
+		}
+	}
+
+}
+
+dependencies {
+	implementation 'org.jetbrains.kotlin:kotlin-scripting-common'
+	implementation 'org.jetbrains.kotlin:kotlin-scripting-jvm'
+	implementation 'org.jetbrains.kotlin:kotlin-scripting-jvm-host'
+	implementation 'org.jetbrains.kotlin:kotlin-scripting-dependencies'
+	implementation 'org.jetbrains.kotlin:kotlin-scripting-dependencies-maven'
+
+	// To change the versions see the gradle.properties file
+	minecraft "com.mojang:minecraft:${project.minecraft_version}"
+	mappings loom.officialMojangMappings()
+	modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
+
+	// Fabric API. This is technically optional, but you probably want it anyway.
+	modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
+	modImplementation "net.fabricmc:fabric-language-kotlin:${project.fabric_kotlin_version}"
+}
+
+processResources {
+	inputs.property "version", project.version
+
+	filesMatching("fabric.mod.json") {
+		expand "version": inputs.properties.version
+	}
+}
+
+tasks.withType(JavaCompile).configureEach {
+	it.options.release = 21
+}
+
+tasks.withType(KotlinCompile).configureEach {
+	kotlinOptions {
+		jvmTarget = 21
+	}
+}
+
+java {
+	// Loom will automatically attach sourcesJar to a RemapSourcesJar task and to the "build" task
+	// if it is present.
+	// If you remove this line, sources will not be generated.
+	withSourcesJar()
+
+	sourceCompatibility = JavaVersion.VERSION_21
+	targetCompatibility = JavaVersion.VERSION_21
+}
+
+jar {
+	inputs.property "archivesName", project.base.archivesName
+
+	from("LICENSE") {
+		rename { "${it}_${inputs.properties.archivesName}"}
+	}
+}
+
+// configure the maven publication
+publishing {
+	publications {
+		create("mavenJava", MavenPublication) {
+			artifactId = project.archives_base_name
+			from components.java
+		}
+	}
+
+	// See https://docs.gradle.org/current/userguide/publishing_maven.html for information on how to set up publishing.
+	repositories {
+		// Add repositories to publish to here.
+		// Notice: This block does NOT have the same function as the block in the top level.
+		// The repositories here will be used for publishing your artifact, not for
+		// retrieving dependencies.
+	}
+}
+
+
+// ==================== KTS4MC 存根生成任务 ====================
+
+// 生成存根 JAR 的任务
+tasks.register('generateStubJar', JavaExec) {
+	group = 'kts4mc'
+	description = 'Generate Kotlin stub JAR from Minecraft classes for IDE support'
+
+	classpath = sourceSets.main.runtimeClasspath
+	mainClass = 'top.kts4mc.stub.JarStubGenerator'
+
+	def outputJar = file("build/libs/kts4mc-stubs-${project.version}.jar")
+
+	doFirst {
+		def minecraftMavenDir = file(".gradle/loom-cache/minecraftMaven/net/minecraft")
+		def commonJar = fileTree(minecraftMavenDir)
+				.include("**/minecraft-common-*/**/*.jar")
+				.exclude("**/*-sources.jar")
+				.files
+		def minecraftJar = commonJar.find { it.name.contains("minecraft-common") }
+
+		if (!minecraftJar) {
+			throw new GradleException("Minecraft JAR not found in .gradle/loom-cache/minecraftMaven")
+		}
+
+		args = [minecraftJar.absolutePath, outputJar.absolutePath]
+		println "============================================"
+		println "Generating KTS4MC Stubs"
+		println "Input: ${minecraftJar}"
+		println "Output: ${outputJar}"
+		println "============================================"
+	}
+
+	dependsOn compileJava, compileKotlin
+}
+
+// 发布存根 JAR 到本地目录
+tasks.register('publishStubs', Copy) {
+	group = 'kts4mc'
+	description = 'Copy stub JAR to published-stubs directory'
+
+	from("build/libs") {
+		include "kts4mc-stubs-*.jar"
+	}
+	into "published-stubs"
+
+	dependsOn 'generateStubJar'
+
+	doLast {
+		println "Stubs published to: ${file("published-stubs").absolutePath}"
+	}
+}
+
+// 清理存根
+tasks.register('cleanStubs', Delete) {
+	group = 'kts4mc'
+	description = 'Clean generated stub files'
+
+	delete "build/libs/kts4mc-stubs-*.jar"
+	delete "published-stubs"
+}
