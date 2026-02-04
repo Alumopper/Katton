@@ -6,7 +6,7 @@ Katton is a Minecraft Fabric mod that brings Kotlin scripting support to datapac
 
 - [x] Basic Kotlin script support
 - [x] Script hot-reloading
-- [ ] Simple API for common tasks (e.g., registering commands, items, blocks)
+- [ ] Simple API for common tasks (e.g., registering c【ommands, items, blocks)
 - [ ] Documentation and usage examples
 - [ ] Support for `#load` and `#tick` tags
 

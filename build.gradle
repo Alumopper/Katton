@@ -31,6 +31,8 @@ loom {
 		}
 	}
 
+	accessWidenerPath = file("src/main/resources/katton.accesswidener")
+
 }
 
 dependencies {
@@ -102,66 +104,4 @@ publishing {
 		// The repositories here will be used for publishing your artifact, not for
 		// retrieving dependencies.
 	}
-}
-
-
-// ==================== KTS4MC 存根生成任务 ====================
-
-// 生成存根 JAR 的任务
-tasks.register('generateStubJar', JavaExec) {
-	group = 'kts4mc'
-	description = 'Generate Kotlin stub JAR from Minecraft classes for IDE support'
-
-	classpath = sourceSets.main.runtimeClasspath
-	mainClass = 'top.kts4mc.stub.JarStubGenerator'
-
-	def outputJar = file("build/libs/kts4mc-stubs-${project.version}.jar")
-
-	doFirst {
-		def minecraftMavenDir = file(".gradle/loom-cache/minecraftMaven/net/minecraft")
-		def commonJar = fileTree(minecraftMavenDir)
-				.include("**/minecraft-common-*/**/*.jar")
-				.exclude("**/*-sources.jar")
-				.files
-		def minecraftJar = commonJar.find { it.name.contains("minecraft-common") }
-
-		if (!minecraftJar) {
-			throw new GradleException("Minecraft JAR not found in .gradle/loom-cache/minecraftMaven")
-		}
-
-		args = [minecraftJar.absolutePath, outputJar.absolutePath]
-		println "============================================"
-		println "Generating KTS4MC Stubs"
-		println "Input: ${minecraftJar}"
-		println "Output: ${outputJar}"
-		println "============================================"
-	}
-
-	dependsOn compileJava, compileKotlin
-}
-
-// 发布存根 JAR 到本地目录
-tasks.register('publishStubs', Copy) {
-	group = 'kts4mc'
-	description = 'Copy stub JAR to published-stubs directory'
-
-	from("build/libs") {
-		include "kts4mc-stubs-*.jar"
-	}
-	into "published-stubs"
-
-	dependsOn 'generateStubJar'
-
-	doLast {
-		println "Stubs published to: ${file("published-stubs").absolutePath}"
-	}
-}
-
-// 清理存根
-tasks.register('cleanStubs', Delete) {
-	group = 'kts4mc'
-	description = 'Clean generated stub files'
-
-	delete "build/libs/kts4mc-stubs-*.jar"
-	delete "published-stubs"
 }

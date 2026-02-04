@@ -1,23 +1,18 @@
-package top.kts4mc.engine
+package top.katton.engine
 
 import net.minecraft.commands.CommandSourceStack
 import net.minecraft.server.MinecraftServer
-import kotlin.reflect.full.createType
-import kotlin.script.experimental.annotations.KotlinScript
 import kotlin.script.experimental.api.CompiledScript
 import kotlin.script.experimental.api.EvaluationResult
 import kotlin.script.experimental.api.ResultWithDiagnostics
 import kotlin.script.experimental.api.ScriptCompilationConfiguration
-import kotlin.script.experimental.api.ScriptCompiler
 import kotlin.script.experimental.api.ScriptDiagnostic
 import kotlin.script.experimental.api.ScriptEvaluationConfiguration
 import kotlin.script.experimental.api.defaultImports
 import kotlin.script.experimental.api.enableScriptsInstancesSharing
-import kotlin.script.experimental.api.onFailure
 import kotlin.script.experimental.api.onSuccess
 import kotlin.script.experimental.api.providedProperties
 import kotlin.script.experimental.host.toScriptSource
-import kotlin.script.experimental.jvm.dependenciesFromClassContext
 import kotlin.script.experimental.jvm.dependenciesFromCurrentContext
 import kotlin.script.experimental.jvm.jvm
 import kotlin.script.experimental.jvmhost.BasicJvmScriptingHost
@@ -35,6 +30,11 @@ class ScriptEngine {
         jvm {
             dependenciesFromCurrentContext(wholeClasspath = true)
         }
+        defaultImports(
+            "top.kts4mc.api.Katton",
+            "top.kts4mc.api.KattonEvents",
+            "top.kts4mc.api.KattonCommands"
+        )
         providedProperties(
             "server" to MinecraftServer::class,
             "source" to CommandSourceStack::class

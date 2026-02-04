@@ -1,4 +1,4 @@
-package top.kts4mc
+package top.katton
 
 import net.fabricmc.api.ClientModInitializer
 

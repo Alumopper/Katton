@@ -1,4 +1,4 @@
-package top.kts4mc.command
+package top.katton.command
 
 import com.mojang.brigadier.CommandDispatcher
 import kotlinx.coroutines.runBlocking
@@ -9,8 +9,8 @@ import net.minecraft.commands.Commands.literal
 import net.minecraft.commands.arguments.IdentifierArgument
 import net.minecraft.network.chat.Component
 import net.minecraft.resources.Identifier
-import top.kts4mc.KTS4MC
-import top.kts4mc.engine.ScriptLoader
+import top.katton.Katton
+import top.katton.engine.ScriptLoader
 import kotlin.script.experimental.jvm.util.isError
 
 object ScriptCommand {
@@ -20,14 +20,14 @@ object ScriptCommand {
                 .requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS))
                 .then(argument("script", IdentifierArgument.id())
                     .suggests { context, builder ->
-                        KTS4MC.scriptLoader.scripts.forEach {
+                        Katton.scriptLoader.scripts.forEach {
                             builder.suggest(it.key.toString())
                         }
                         builder.buildFuture()
                     }
                     .executes { context ->
                         val id = IdentifierArgument.getId(context, "script")
-                        executeScript(context.source, id, KTS4MC.scriptLoader)
+                        executeScript(context.source, id, Katton.scriptLoader)
                     })
         )
     }

@@ -1,0 +1,3 @@
+accessWidener v2 named
+
+accessible method net/minecraft/server/commands/SpreadPlayersCommand spreadPlayers (Lnet/minecraft/commands/CommandSourceStack;Lnet/minecraft/world/phys/Vec2;FFIZLjava/util/Collection;)I

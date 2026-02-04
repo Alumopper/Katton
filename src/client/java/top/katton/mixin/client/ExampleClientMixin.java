@@ -1,15 +1,15 @@
-package top.kts4mc.mixin;
+package top.katton.mixin.client;
 
-import net.minecraft.server.MinecraftServer;
+import net.minecraft.client.Minecraft;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-@Mixin(MinecraftServer.class)
-public class ExampleMixin {
-	@Inject(at = @At("HEAD"), method = "loadLevel")
+@Mixin(Minecraft.class)
+public class ExampleClientMixin {
+	@Inject(at = @At("HEAD"), method = "run")
 	private void init(CallbackInfo info) {
-		// This code is injected into the start of MinecraftServer.loadLevel()V
+		// This code is injected into the start of Minecraft.run()V
 	}
 }
