@@ -44,13 +44,7 @@ object ScriptCommand {
         //执行脚本
         val compiled = script.get()
         val result = runBlocking {
-            loader.engine.execute(
-                compiled,
-                mapOf(
-                    "server" to server,
-                    "source" to source
-                )
-            )
+            loader.engine.execute(compiled)
         }
 
         if(result.isError()){

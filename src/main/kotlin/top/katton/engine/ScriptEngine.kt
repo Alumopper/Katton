@@ -1,7 +1,5 @@
 package top.katton.engine
 
-import net.minecraft.commands.CommandSourceStack
-import net.minecraft.server.MinecraftServer
 import kotlin.script.experimental.api.CompiledScript
 import kotlin.script.experimental.api.EvaluationResult
 import kotlin.script.experimental.api.ResultWithDiagnostics
@@ -11,45 +9,57 @@ import kotlin.script.experimental.api.ScriptEvaluationConfiguration
 import kotlin.script.experimental.api.defaultImports
 import kotlin.script.experimental.api.enableScriptsInstancesSharing
 import kotlin.script.experimental.api.onSuccess
-import kotlin.script.experimental.api.providedProperties
 import kotlin.script.experimental.host.toScriptSource
 import kotlin.script.experimental.jvm.dependenciesFromCurrentContext
 import kotlin.script.experimental.jvm.jvm
 import kotlin.script.experimental.jvmhost.BasicJvmScriptingHost
 import kotlin.script.experimental.jvmhost.JvmScriptCompiler
 
+/**
+ * ScriptEngine compiles and executes Kotlin script sources.
+ *
+ * It keeps caches for compiled scripts and loaded script classes to avoid
+ * repeated compilation and class loading, improving execution performance.
+ */
 class ScriptEngine {
 
     private val compiler = JvmScriptCompiler()
 
-    private val compiledCache = mutableMapOf<String, Pair<Int, CompiledScript>>()
+    // Cache mapping script name -> (sourceHash, CompiledScript)
+    // The hash ensures we only reuse the compiled artifact when the source is unchanged.
+    private val compiledCache = java.util.concurrent.ConcurrentHashMap<String, Pair<Int, CompiledScript>>()
 
+    // Shared scripting host (currently unused but kept for potential future use)
     private val sharedHost = BasicJvmScriptingHost()
 
+    // Base compilation configuration for all scripts.
+    // Includes classpath dependencies and default imports commonly used by scripts.
     private val baseConfig = ScriptCompilationConfiguration {
         jvm {
             dependenciesFromCurrentContext(wholeClasspath = true)
         }
-        defaultImports(
-            "top.kts4mc.api.Katton",
-            "top.kts4mc.api.KattonEvents",
-            "top.kts4mc.api.KattonCommands"
-        )
-        providedProperties(
-            "server" to MinecraftServer::class,
-            "source" to CommandSourceStack::class
-        )
     }
 
+    // Evaluation configuration: enable sharing of script instances if needed.
     private val evaluationConfig = ScriptEvaluationConfiguration {
         enableScriptsInstancesSharing()
     }
 
-    suspend fun compile(name: String, sourceCode: String, providedProps: Map<String, kotlin.reflect.KType> = emptyMap()): ResultWithDiagnostics<CompiledScript>{
-        // 计算源码哈希
+    /**
+     * Compile the provided script source into a CompiledScript.
+     *
+     * This method uses an internal cache keyed by name + source hash to avoid
+     * recompilation when the same source is passed again.
+     *
+     * @param name A stable name or id for the script (used as cache key and source name).
+     * @param sourceCode The Kotlin script source text.
+     * @return ResultWithDiagnostics wrapping the compiled script or diagnostics on failure.
+     */
+    suspend fun compile(name: String, sourceCode: String): ResultWithDiagnostics<CompiledScript>{
+        // Calculate the hash of the source to detect changes.
         val sourceHash = sourceCode.hashCode()
         
-        // 检查缓存：名称和源码哈希都匹配才使用缓存
+        // Check cache: only reuse compiled script when both name and source hash match.
         compiledCache[name]?.let { (cachedHash, compiled) ->
             if (cachedHash == sourceHash) {
                 return ResultWithDiagnostics.Success(compiled)
@@ -58,25 +68,47 @@ class ScriptEngine {
 
         val source = sourceCode.toScriptSource(name)
 
-        val configWithProvided = ScriptCompilationConfiguration(baseConfig) {
-            providedProperties(*providedProps.toList().toTypedArray())
-        }
-        return compiler(source, configWithProvided).onSuccess { compiled ->
-            // 缓存时保存源码哈希
+        return compiler(source, baseConfig).onSuccess { compiled ->
+            // Save compiled script together with its source hash for future reuse.
             compiledCache[name] = sourceHash to compiled
             ResultWithDiagnostics.Success(compiled)
         }
     }
 
+    /**
+     * Updates the cache by removing scripts that are no longer present in the provided set.
+     * This ensures deleted scripts are removed from memory.
+     *
+     * @param validScriptNames The set of script names that are currently valid/loaded.
+     */
+    fun updateCache(validScriptNames: Set<String>) {
+        val keysToRemove = compiledCache.keys.filter { it !in validScriptNames }
+        keysToRemove.forEach { name ->
+            compiledCache.remove(name)?.let { (_, compiledScript) ->
+                classCache.remove(compiledScript)
+            }
+        }
+    }
+
+    // Cache mapping CompiledScript -> loaded KClass to avoid repeated getClass operations.
     private val classCache = java.util.concurrent.ConcurrentHashMap<CompiledScript, kotlin.reflect.KClass<*>>()
 
+    /**
+     * Execute a compiled script and return its evaluation result.
+     *
+     * The engine will load the script's class (cached when possible) and attempt to
+     * instantiate it. Instantiation prefers a no-arg Kotlin constructor, falling back
+     * to Java reflection when necessary.
+     *
+     * @param compiled The compiled script to execute.
+     * @return ResultWithDiagnostics containing EvaluationResult or diagnostics on failure.
+     */
     suspend fun execute(
-        compiled: CompiledScript,
-        bindings: Map<String, Any?> = emptyMap()
+        compiled: CompiledScript
     ): ResultWithDiagnostics<EvaluationResult> {
-        // 使用缓存的 Class 避免每次 getClass 重复加载
+        // Use cached class to avoid repeated getClass() calls for the same compiled script.
         val scriptClass = classCache.getOrPut(compiled) {
-            // 使用基础配置加载类，不包含具体 bindings 数据，保证配置一致性以命中内部缓存
+            // Load the class using the evaluation configuration; return any failure immediately.
             when (val res = compiled.getClass(evaluationConfig)) {
                 is ResultWithDiagnostics.Success -> res.value
                 is ResultWithDiagnostics.Failure -> return res
@@ -84,25 +116,21 @@ class ScriptEngine {
         }
 
         return try {
-            // 尝试获取 Kotlin 构造函数
+            // Try to find a Kotlin constructor (may have parameter metadata).
             val ctor = scriptClass.constructors.firstOrNull()
             
             val instance = if (ctor != null) {
-                // 匹配构造参数
-                val args = ctor.parameters.map { param ->
-                    bindings[param.name]
-                }.toTypedArray()
-                ctor.call(*args)
+                // Prefer calling the Kotlin constructor without parameters.
+                ctor.call()
             } else {
-                // 回退到 Java 反射 (处理 Kotlin 反射不可用的情况)
-                // 假设参数顺序严格遵循 providedProperties 的定义顺序: server, source
+                // Fallback to Java reflection: obtain the first Java constructor and call it.
+                // This handles environments where Kotlin reflection metadata is not available.
                 val javaCtor = scriptClass.java.constructors.firstOrNull()
                     ?: throw IllegalStateException("No constructor found for script class ${scriptClass.simpleName}")
-                
-                val args = arrayOf(bindings["server"], bindings["source"])
-                javaCtor.newInstance(*args)
+                javaCtor.newInstance()
             }
 
+            // Wrap the created instance as the script evaluation result.
             ResultWithDiagnostics.Success(
                 EvaluationResult(
                     returnValue = kotlin.script.experimental.api.ResultValue.Value(
@@ -116,6 +144,7 @@ class ScriptEngine {
                 )
             )
         } catch (e: Throwable) {
+            // Convert exception into a ScriptDiagnostic to return as failure diagnostics.
             ResultWithDiagnostics.Failure(
                listOf(
                    ScriptDiagnostic(

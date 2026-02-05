@@ -32,6 +32,7 @@ class ScriptLoader : PreparableReloadListener{
         return Optional.ofNullable(scripts[identifier])
     }
     val engine = ScriptEngine()
+    var mainScript: Map<Identifier, CompiledScript> = mapOf()
 
     override fun reload(
         sharedState: PreparableReloadListener.SharedState,
@@ -39,6 +40,7 @@ class ScriptLoader : PreparableReloadListener{
         preparationBarrier: PreparableReloadListener.PreparationBarrier,
         executor2: Executor
     ): CompletableFuture<Void> {
+        INSTANCE = this
         val manager = sharedState.resourceManager()
         val completableFuture = CompletableFuture.supplyAsync(
     { this.tagsLoader.load(manager) }, executor
@@ -49,7 +51,12 @@ class ScriptLoader : PreparableReloadListener{
             val map2 = Maps.newHashMap<Identifier, CompletableFuture<CompiledScript>>()
             for(entry in map.entries){
                 val id1 = entry.key
-                val id2 = LISTER.fileToId(id1)
+                val rawId = LISTER.fileToId(id1)
+                val id2 = if (rawId.path.endsWith(".main")) {
+                    Identifier.fromNamespaceAndPath(rawId.namespace, rawId.path.removeSuffix(".main"))
+                } else {
+                    rawId
+                }
                 map2.put(id2, CompletableFuture.supplyAsync({
                     val script = readScript(entry.value)
                     val result = runBlocking {
@@ -67,6 +74,11 @@ class ScriptLoader : PreparableReloadListener{
             .thenCompose(preparationBarrier::wait)
             .thenAcceptAsync ({ pair ->
                 val map = pair.second
+                
+                // Synchronize the cache: remove scripts that are no longer in the loaded map
+                val activeScriptNames = map.keys.map { it.toString() }.toSet()
+                this.engine.updateCache(activeScriptNames)
+
                 val builder = ImmutableMap.builder<Identifier, CompiledScript>()
                 map.forEach { id, completableFuturex ->
                     completableFuturex.handle { script, throwable ->
@@ -79,31 +91,20 @@ class ScriptLoader : PreparableReloadListener{
                 }
                 this.scripts = builder.build()
                 this.tags = this.tagsLoader.build(pair.first)
+                this.mainScript = scripts.filter { it.key.path == "main" }
             }, executor2)
     }
 
     private fun readScript(resource: Resource): String {
         try {
-            val bufferedReader = resource.openAsReader()
-            val var2: List<*>
-            try {
-                var2 = bufferedReader.lines().toList().filterNot { line -> line.startsWith("@file:") }
-            }catch (e: Throwable){
-                try {
-                    bufferedReader.close()
-                } catch (e2: Throwable) {
-                    e.addSuppressed(e2)
-                }
-                throw e
-            }
-            bufferedReader.close()
-            return var2.joinToString("\n")
-        } catch(e2: Throwable) {
-            throw CompletionException(e2)
+            return resource.openAsReader().use { it.readText() }
+        } catch(e: Exception) {
+            throw CompletionException(e)
         }
     }
 
     companion object {
+        var INSTANCE: ScriptLoader? = null
         private val LOGGER = LogUtils.getLogger()
         val TYPE_KEY = ResourceKey.createRegistryKey<Registry<CompiledScript>>(
             Identifier.withDefaultNamespace("scripts")

@@ -17,13 +17,13 @@
 	"entrypoints": {
 		"main": [
 			{
-				"value": "top.kts4mc.KTS4MC",
+				"value": "top.katton.Katton",
 				"adapter": "kotlin"
 			}
 		],
 		"client": [
 			{
-				"value": "top.kts4mc.KTS4MCClient",
+				"value": "top.katton.KTS4MCClient",
 				"adapter": "kotlin"
 			}
 		]
