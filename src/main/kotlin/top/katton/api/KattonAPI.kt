@@ -6,6 +6,7 @@ import com.mojang.brigadier.StringReader
 import com.mojang.datafixers.util.Pair
 import com.mojang.logging.LogUtils
 import net.minecraft.ChatFormatting
+import net.minecraft.advancements.criterion.NbtPredicate
 import net.minecraft.commands.CommandSourceStack
 import net.minecraft.commands.arguments.EntityAnchorArgument
 import net.minecraft.commands.arguments.selector.EntitySelector
@@ -118,39 +119,20 @@ fun executeCommandAsServer(command: String) {
     srv.commands.performPrefixedCommand(source, command)
 }
 
-/**
- * Parse an entity selector string into an EntitySelector.
- *
- * @param source command source used for context during parsing
- * @param selector selector string to parse
- * @return parsed EntitySelector
- */
-fun parseEntitySelector(source: CommandSourceStack, selector: String): EntitySelector {
-    val reader = StringReader(selector)
-    val parser = EntitySelectorParser(reader, true)
-    return parser.parse()
+fun findPlayer(player: String): ServerPlayer?{
+    return requireServer().playerList.getPlayerByName(player)
 }
 
-/**
- * Select entities matching the selector string.
- *
- * @param source command source used for selection context
- * @param selector selector string
- * @return list of matching Entity instances
- */
-fun selectEntities(source: CommandSourceStack, selector: String): List<Entity> {
-    return parseEntitySelector(source, selector).findEntities(source)
+fun findPlayer(uuid: UUID): ServerPlayer?{
+    return requireServer().playerList.getPlayer(uuid)
 }
 
-/**
- * Select players matching the selector string.
- *
- * @param source command source used for selection context
- * @param selector selector string
- * @return list of matching ServerPlayer instances
- */
-fun selectPlayers(source: CommandSourceStack, selector: String): List<net.minecraft.server.level.ServerPlayer> {
-    return parseEntitySelector(source, selector).findPlayers(source)
+fun findEntities(level: ServerLevel, selector: EntitySelector): List<Entity> {
+    return selector.findEntities(requireServer().createCommandSourceStack().withLevel(level))
+}
+
+fun findEntity(uuid: UUID): Entity?{
+    return requireServer().allLevels.firstNotNullOfOrNull { it.getEntity(uuid) }
 }
 
 /**
@@ -168,8 +150,7 @@ fun parseNbt(nbt: String): CompoundTag = TagParser.parseCompoundFully(nbt)
  * @return CompoundTag representing the entity's data
  */
 fun getEntityNbt(entity: Entity): CompoundTag {
-    val accessor = EntityDataAccessor(entity)
-    return accessor.data
+    return NbtPredicate.getEntityTagToCompare(entity);
 }
 
 /**

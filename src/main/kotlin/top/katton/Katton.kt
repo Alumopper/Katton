@@ -5,6 +5,7 @@ import net.fabricmc.api.ModInitializer
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents
 import net.fabricmc.fabric.api.resource.v1.ResourceLoader
+import net.fabricmc.loader.api.FabricLoader
 import net.minecraft.resources.Identifier
 import net.minecraft.server.packs.PackType
 import org.slf4j.LoggerFactory
@@ -12,6 +13,8 @@ import top.katton.api.server
 import top.katton.command.ScriptCommand
 import top.katton.engine.ScriptLoader
 import top.katton.util.Event
+import java.io.File
+import kotlin.script.experimental.api.valueOrThrow
 
 object Katton : ModInitializer {
     private val logger = LoggerFactory.getLogger("katton")
@@ -19,6 +22,31 @@ object Katton : ModInitializer {
 	val scriptLoader = ScriptLoader()
 
 	override fun onInitialize() {
+		val gameDir = FabricLoader.getInstance().gameDir.toFile()
+		val ktScriptsDir = File(gameDir, "ktscripts")
+		if (ktScriptsDir.exists() && ktScriptsDir.isDirectory) {
+			ktScriptsDir.listFiles()?.forEach { subFolder ->
+				if (subFolder.isDirectory) {
+					val serversDir = File(subFolder, "servers")
+					if (serversDir.exists() && serversDir.isDirectory) {
+						serversDir.listFiles { _, name -> name.endsWith(".kts") }?.forEach { scriptFile ->
+							runBlocking {
+								try {
+									logger.info("Compiling and executing script: ${scriptFile.absolutePath}")
+									val source = scriptFile.readText()
+									val compileResult = scriptLoader.engine.compile(scriptFile.absolutePath, source)
+									val compiled = compileResult.valueOrThrow()
+									scriptLoader.engine.execute(compiled)
+								} catch (e: Exception) {
+									logger.error("Failed to execute script: ${scriptFile.absolutePath}", e)
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+
 		ResourceLoader.get(PackType.SERVER_DATA).registerReloader(
 			Identifier.parse("katton:scripts"), scriptLoader
 		)
