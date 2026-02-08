@@ -7,9 +7,9 @@ import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents
 import net.fabricmc.fabric.api.resource.v1.ResourceLoader
 import net.fabricmc.loader.api.FabricLoader
 import net.minecraft.resources.Identifier
+import net.minecraft.server.MinecraftServer
 import net.minecraft.server.packs.PackType
 import org.slf4j.LoggerFactory
-import top.katton.api.server
 import top.katton.command.ScriptCommand
 import top.katton.engine.ScriptLoader
 import top.katton.util.Event
@@ -18,6 +18,10 @@ import kotlin.script.experimental.api.valueOrThrow
 
 object Katton : ModInitializer {
     private val logger = LoggerFactory.getLogger("katton")
+    /**
+     * Current minecraft server instance. Maybe null during client-side execution.
+     */
+    var server: MinecraftServer? = null
 
 	val scriptLoader = ScriptLoader()
 

@@ -80,6 +80,7 @@ import net.minecraft.world.scores.criteria.ObjectiveCriteria
 import net.minecraft.world.waypoints.Waypoint
 import net.minecraft.world.waypoints.WaypointStyleAsset
 import net.minecraft.world.waypoints.WaypointTransmitter
+import top.katton.Katton
 import java.util.*
 import java.util.function.Consumer
 import kotlin.math.min
@@ -90,13 +91,11 @@ private val LOGGER = LogUtils.getLogger()
 /**
  * Current minecraft server instance. Maybe null during client-side execution.
  */
-var server: MinecraftServer? = null
+val server: MinecraftServer?
+    get() = Katton.server
 
-
-private fun requireServer(): MinecraftServer =
+internal fun requireServer(): MinecraftServer =
     server ?: error("MinecraftServer is not available (client-side or not started)")
-
-
 /**
  * Execute a command as the provided command source.
  *
