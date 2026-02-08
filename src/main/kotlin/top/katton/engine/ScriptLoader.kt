@@ -12,6 +12,7 @@ import net.minecraft.resources.Identifier
 import net.minecraft.resources.ResourceKey
 import net.minecraft.server.packs.resources.PreparableReloadListener
 import net.minecraft.server.packs.resources.Resource
+import net.minecraft.server.packs.resources.ResourceManager
 import net.minecraft.tags.TagLoader
 import java.util.*
 import java.util.concurrent.CompletableFuture
@@ -42,35 +43,14 @@ class ScriptLoader : PreparableReloadListener{
     ): CompletableFuture<Void> {
         INSTANCE = this
         val manager = sharedState.resourceManager()
-        val completableFuture = CompletableFuture.supplyAsync(
+        val tagProcessor = CompletableFuture.supplyAsync(
     { this.tagsLoader.load(manager) }, executor
         )
-        val completableFuture2: CompletableFuture<Map<Identifier, CompletableFuture<CompiledScript>>> = CompletableFuture.supplyAsync(
-            {LISTER.listMatchingResources(manager)}, executor
-        ).thenCompose { map ->
-            val map2 = Maps.newHashMap<Identifier, CompletableFuture<CompiledScript>>()
-            for(entry in map.entries){
-                val id1 = entry.key
-                val rawId = LISTER.fileToId(id1)
-                val id2 = if (rawId.path.endsWith(".main")) {
-                    Identifier.fromNamespaceAndPath(rawId.namespace, rawId.path.removeSuffix(".main"))
-                } else {
-                    rawId
-                }
-                map2.put(id2, CompletableFuture.supplyAsync({
-                    val script = readScript(entry.value)
-                    val result = runBlocking {
-                        engine.compile(id2.toString(), script)
-                    }.valueOrThrow()
-                    result
-                }, executor))
-            }
-            val completableFutures = map2.values.toTypedArray()
-            return@thenCompose CompletableFuture.allOf(*completableFutures)
-                .handle { _,_ -> map2 }
-        }
-
-        return completableFuture.thenCombine(completableFuture2) { a, b -> Pair.of(a, b) }
+        val ktsFileProcessor = loadScripts(KTS_LISTER, manager, executor, ::processScriptId)
+        val ktFileProcessor = loadScripts(KT_LISTER, manager, executor, ::processScriptId)
+        return tagProcessor
+            .thenCombine(ktsFileProcessor) { a, b -> Pair.of(a, b) }
+            .thenCombine(ktFileProcessor) { a, c -> Pair.of(a.first, mergeScriptMaps(a.second, c)) }
             .thenCompose(preparationBarrier::wait)
             .thenAcceptAsync ({ pair ->
                 val map = pair.second
@@ -106,13 +86,58 @@ class ScriptLoader : PreparableReloadListener{
         }
     }
 
+    private fun processScriptId(rawId: Identifier): Identifier {
+        return if (rawId.path.endsWith(".main")) {
+            Identifier.fromNamespaceAndPath(rawId.namespace, rawId.path.removeSuffix(".main"))
+        } else {
+            rawId
+        }
+    }
+
+    private fun mergeScriptMaps(
+        map1: Map<Identifier, CompletableFuture<CompiledScript>>,
+        map2: Map<Identifier, CompletableFuture<CompiledScript>>
+    ): Map<Identifier, CompletableFuture<CompiledScript>> {
+        val merged = Maps.newHashMap<Identifier, CompletableFuture<CompiledScript>>()
+        merged.putAll(map1)
+        merged.putAll(map2)
+        return merged
+    }
+
+    private fun loadScripts(
+        lister: FileToIdConverter,
+        manager: ResourceManager,
+        executor: Executor,
+        idProcessor: (Identifier) -> Identifier
+    ): CompletableFuture<Map<Identifier, CompletableFuture<CompiledScript>>> {
+        return CompletableFuture.supplyAsync({ lister.listMatchingResources(manager) }, executor)
+            .thenCompose { map ->
+                val map2 = Maps.newHashMap<Identifier, CompletableFuture<CompiledScript>>()
+                for(entry in map.entries){
+                    val id1 = entry.key
+                    val rawId = lister.fileToId(id1)
+                    val id2 = idProcessor(rawId)
+                    map2[id2] = CompletableFuture.supplyAsync({
+                        val script = readScript(entry.value)
+                        val result = runBlocking {
+                            engine.compile(id2.toString(), script)
+                        }.valueOrThrow()
+                        result
+                    }, executor)
+                }
+                val completableFutures = map2.values.toTypedArray()
+                CompletableFuture.allOf(*completableFutures)
+                    .handle { _,_ -> map2 }
+            }
+    }
+
     companion object {
         var INSTANCE: ScriptLoader? = null
         private val LOGGER = LogUtils.getLogger()
         val TYPE_KEY = ResourceKey.createRegistryKey<Registry<CompiledScript>>(
             Identifier.withDefaultNamespace("scripts")
         )
-        val LISTER = FileToIdConverter(Registries.elementsDirPath(TYPE_KEY), ".kts")
-
+        val KTS_LISTER = FileToIdConverter(Registries.elementsDirPath(TYPE_KEY), ".kts")
+        val KT_LISTER = FileToIdConverter(Registries.elementsDirPath(TYPE_KEY), ".kt")
     }
 }

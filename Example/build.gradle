@@ -1,0 +1,92 @@
+plugins {
+	id 'org.jetbrains.kotlin.jvm' version '2.3.0'
+}
+
+group = 'com.example'
+version = '1.0.0'
+
+repositories {
+	mavenCentral()
+	// 添加本地 maven 仓库，用的父级项目的缓存
+	maven {
+		url file('../.gradle/loom-cache/minecraftMaven')
+	}
+    maven {
+        url file('../.gradle/loom-cache/remapped_mods')
+    }
+	// 添加 flatDir 以支持本地库
+	flatDir {
+		dirs file('../build/libs')
+	}
+}
+
+dependencies {
+	// 引用父项目 Katton 的 JAR 包，如果不在父项目的话请用@file:DependsOn 注解
+    compileOnly 'top.katton:katton-1.0.0'
+//    // 复制minecraft包文件地址，如果不在父项目的话请用@file:DependsOn 注解
+    compileOnly 'net.minecraft:minecraft-common-87fec13750:1.21.11-loom.mappings.1_21_11.layered+hash.2198-v2'
+    compileOnly 'remapped.net.fabricmc.fabric-api:fabric-lifecycle-events-v1-4abd26ae-common:2.6.15+4ebb5c083e'
+	implementation 'org.jetbrains.kotlin:kotlin-scripting-common'
+	implementation 'org.jetbrains.kotlin:kotlin-scripting-jvm'
+	implementation 'org.jetbrains.kotlin:kotlin-scripting-dependencies'
+	implementation 'org.jetbrains.kotlin:kotlin-scripting-dependencies-maven'
+	implementation 'org.jetbrains.kotlin:kotlin-main-kts'
+	// coroutines dependency is required for this particular definition
+	implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2'
+
+	// KTS4MC 存根 - 提供 Minecraft API 类型
+	implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk8"
+}
+
+sourceSets {
+	main {
+		resources {
+            // 将项目添加为源以提供类型检查
+			srcDirs = [
+                    'src/main/resources',
+                    'datapacks/example'
+            ]
+		}
+	}
+}
+
+kotlin {
+	jvmToolchain(21)
+}
+
+// 任务：将 Example/datapacks 复制并合并到 run/saves/test/datapacks
+// Example/datapacks 优先级更高，会覆盖目标目录中的同名文件
+tasks.register('copyDatapacks', Copy) {
+    group = 'Katton'
+    description = 'Copy and merge datapacks from Example/datapacks to run/saves/test/datapacks'
+
+    // 源目录
+    from layout.projectDirectory.dir('datapacks')
+
+    // 目标目录
+    into layout.projectDirectory.dir('../run/saves/test/datapacks')
+
+    // 如果文件冲突，使用 Example/datapacks 的文件（覆盖目标文件）
+    duplicatesStrategy = DuplicatesStrategy.INCLUDE
+
+    // 显示复制的文件
+    eachFile { details ->
+        logger.lifecycle("Copying datapack: ${details.sourcePath}")
+    }
+}
+
+// 任务：清理并强制重新复制所有 datapacks
+tasks.register('cleanAndCopyDatapacks') {
+    dependsOn 'copyDatapacks'
+    group = 'Katton'
+    description = 'Clean target datapacks directory and copy all datapacks fresh'
+
+    doFirst {
+        // 删除目标目录
+        def targetDir = file('../run/saves/test/datapacks')
+        if (targetDir.exists()) {
+            logger.lifecycle("Cleaning target directory: ${targetDir.absolutePath}")
+            delete targetDir
+        }
+    }
+}
