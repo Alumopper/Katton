@@ -9,17 +9,21 @@ import net.minecraft.world.entity.projectile.arrow.Arrow
 import net.minecraft.world.level.Level
 import top.katton.api.KattonEvents
 import top.katton.api.getEntityNbt
+import top.katton.api.tell
 
 fun main() {
     KattonEvents.ServerEntity.onEntityLoad += { entity: Entity, level: ServerLevel -> run {
         if(entity !is Arrow) return@run
         //if an arrow is shot by a player, check the bow's data
-        if(entity.owner is ServerPlayer) {
-            onArrowShot(entity.owner as ServerPlayer, entity)
+        val player = entity.owner
+        if(player is ServerPlayer) {
+            tell(player,"hello")
+            onArrowShot(player, entity)
         }
     } }
 
     KattonEvents.ServerTick.onStartServerTick += { server: MinecraftServer ->
+
         processTNTArrow()
     }
 }

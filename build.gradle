@@ -52,7 +52,7 @@ dependencies {
 	implementation 'org.jetbrains.kotlin:kotlin-scripting-jvm-host'
 	implementation 'org.jetbrains.kotlin:kotlin-scripting-dependencies'
 	implementation 'org.jetbrains.kotlin:kotlin-scripting-dependencies-maven'
-    implementation 'org.jetbrains.kotlin:kotlin-main-kts'
+    compileOnly 'org.jetbrains.kotlin:kotlin-main-kts'
 
 	// To change the versions see the gradle.properties file
 	minecraft "com.mojang:minecraft:${project.minecraft_version}"
@@ -118,21 +118,20 @@ publishing {
 	}
 }
 
+def datapacksDir = layout.projectDirectory.dir('Example/datapacks')
+def targetDatapacksDir = layout.projectDirectory.dir('run/saves/test/datapacks')
+
 // 任务：将 Example/datapacks 复制并合并到 run/saves/test/datapacks
 // Example/datapacks 优先级更高，会覆盖目标目录中的同名文件
 tasks.register('copyDatapacks', Copy) {
     group = 'Katton'
     description = 'Copy and merge datapacks from Example/datapacks to run/saves/test/datapacks'
 
-    // 源目录
-    from layout.projectDirectory.dir('Example/datapacks')
-
-    // 目标目录
-    into layout.projectDirectory.dir('run/saves/test/datapacks')
+    from datapacksDir
+    into targetDatapacksDir
 
     // 如果文件冲突，使用 Example/datapacks 的文件（覆盖目标文件）
     duplicatesStrategy = DuplicatesStrategy.INCLUDE
-
     // 显示复制的文件
     eachFile { details ->
         logger.lifecycle("Copying datapack: ${details.sourcePath}")
@@ -140,14 +139,13 @@ tasks.register('copyDatapacks', Copy) {
 }
 
 // 任务：清理并强制重新复制所有 datapacks
-tasks.register('cleanAndCopyDatapacks') {
-    dependsOn 'copyDatapacks'
+tasks.register('cleanDatapacks') {
     group = 'Katton'
-    description = 'Clean target datapacks directory and copy all datapacks fresh'
+    description = 'Clean target datapacks directory'
 
     doFirst {
         // 删除目标目录
-        def targetDir = file('run/saves/test/datapacks')
+        def targetDir = targetDatapacksDir.asFile
         if (targetDir.exists()) {
             logger.lifecycle("Cleaning target directory: ${targetDir.absolutePath}")
             delete targetDir

@@ -119,9 +119,11 @@ class ScriptLoader : PreparableReloadListener{
                     val id2 = idProcessor(rawId)
                     map2[id2] = CompletableFuture.supplyAsync({
                         val script = readScript(entry.value)
+                        LOGGER.info("Loading script $id2")
                         val result = runBlocking {
                             engine.compile(id2.toString(), script)
                         }.valueOrThrow()
+                        LOGGER.info("Loaded script $id2")
                         result
                     }, executor)
                 }
