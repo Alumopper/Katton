@@ -23,7 +23,9 @@ fun main() {
     } }
 
     KattonEvents.ServerTick.onStartServerTick += { server: MinecraftServer ->
-
+        server.playerList.players.forEach { player ->
+            tell(player, "hello")
+        }
         processTNTArrow()
     }
 }
