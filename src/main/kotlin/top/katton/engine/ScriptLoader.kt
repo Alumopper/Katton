@@ -78,7 +78,7 @@ class ScriptLoader : PreparableReloadListener{
     private fun readScript(resource: Resource): String {
         try {
             return resource.openAsReader().use {
-                it.readLines().filter { line -> line.startsWith("@file:") }
+                it.readLines().filter { line -> !line.startsWith("@file:") }
                     .joinToString("\n")
             }
         } catch(e: Exception) {

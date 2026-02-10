@@ -1,15 +1,18 @@
 package top.katton.engine
 
+import net.fabricmc.loader.api.FabricLoader
 import kotlin.script.experimental.api.CompiledScript
 import kotlin.script.experimental.api.EvaluationResult
 import kotlin.script.experimental.api.ResultWithDiagnostics
 import kotlin.script.experimental.api.ScriptCompilationConfiguration
 import kotlin.script.experimental.api.ScriptDiagnostic
 import kotlin.script.experimental.api.ScriptEvaluationConfiguration
+import kotlin.script.experimental.api.compilerOptions
 import kotlin.script.experimental.api.defaultImports
 import kotlin.script.experimental.api.enableScriptsInstancesSharing
 import kotlin.script.experimental.api.onSuccess
 import kotlin.script.experimental.host.toScriptSource
+import kotlin.script.experimental.jvm.baseClassLoader
 import kotlin.script.experimental.jvm.dependenciesFromCurrentContext
 import kotlin.script.experimental.jvm.jvm
 import kotlin.script.experimental.jvmhost.BasicJvmScriptingHost
@@ -66,7 +69,9 @@ class ScriptEngine {
             }
         }
 
-        val source = sourceCode.toScriptSource(name)
+        // Remap imports to support "Named" class names in scripts running on Intermediary/Obfuscated runtimes.
+        val remappedSourceCode = ScriptRemapper.remap(sourceCode)
+        val source = remappedSourceCode.toScriptSource(name)
 
         return compiler(source, baseConfig).onSuccess { compiled ->
             // Save compiled script together with its source hash for future reuse.
@@ -108,10 +113,61 @@ class ScriptEngine {
     ): ResultWithDiagnostics<EvaluationResult> {
         // Use cached class to avoid repeated getClass() calls for the same compiled script.
         val scriptClass = classCache.getOrPut(compiled) {
-            // Load the class using the evaluation configuration; return any failure immediately.
-            when (val res = compiled.getClass(evaluationConfig)) {
-                is ResultWithDiagnostics.Success -> res.value
-                is ResultWithDiagnostics.Failure -> return res
+            // Try to load using standard mechanism, but if we suspect bytecode mismatch (Named vs Intermediary),
+            // we should try our custom reloader directly if configured.
+            // For now, let's inject the Remapping loader logic here.
+            
+            // First, try standard loading. If it matches environment, good.
+            // But since the user asked for bytecode remapping, we should attempt it if possible.
+            // Optimization: Only try remapping if the compilation produced 'Named' references that differ from runtime.
+            // We'll unconditionally attempt remapping if the helper is available, or use a flag.
+            
+            try {
+                // Determine the parent ClassLoader. Use context classloader or dependencies' loader.
+                val parentLoader = Thread.currentThread().contextClassLoader 
+                    ?: this.javaClass.classLoader
+                
+                // Remap bytecode from Named -> Intermediary and load
+                val remappedLoader = try {
+                     RuntimeRemapper.remapAndLoad(compiled, parentLoader)
+                } catch (e: Throwable) {
+                     // If remapping fails (e.g. types not compatible), fall back to standard load
+                     // e.g. maybe compiled script is already Intermediary
+                     null
+                }
+
+                if (remappedLoader != null) {
+                    // Try to load the main script class from our new loader
+                    // We need to know the class name. 
+                    // CompiledScript doesn't easily expose the main class name without `getClass`.
+                    // But we can infer it or ask `compiled` for properties.
+                    // KJvmCompiledScript has `scriptRawName` or we can scan the remapped classes.
+                    
+                    // Fallback to standard getClass(config) which uses the config's classloader?
+                    // We can supply our remapped loader to the config!
+                    
+                    val configWithLoader = ScriptEvaluationConfiguration(evaluationConfig) {
+                        jvm {
+                            baseClassLoader(remappedLoader)
+                        }
+                    }
+                    val res = compiled.getClass(configWithLoader)
+                    if (res is ResultWithDiagnostics.Success) {
+                        res.value
+                    } else {
+                        // fallback
+                        (compiled.getClass(evaluationConfig) as? ResultWithDiagnostics.Success)?.value 
+                            ?: throw IllegalStateException("Could not load script class")
+                    }
+                } else {
+                     val res = compiled.getClass(evaluationConfig)
+                     if (res is ResultWithDiagnostics.Failure) return res
+                     (res as ResultWithDiagnostics.Success).value
+                }
+            } catch (e: Throwable) {
+                 val res = compiled.getClass(evaluationConfig)
+                 if (res is ResultWithDiagnostics.Failure) return res
+                 (res as ResultWithDiagnostics.Success).value
             }
         }
 

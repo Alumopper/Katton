@@ -2,7 +2,6 @@
 
 package top.katton.api
 
-import com.mojang.brigadier.StringReader
 import com.mojang.datafixers.util.Pair
 import com.mojang.logging.LogUtils
 import net.minecraft.ChatFormatting
@@ -10,7 +9,6 @@ import net.minecraft.advancements.criterion.NbtPredicate
 import net.minecraft.commands.CommandSourceStack
 import net.minecraft.commands.arguments.EntityAnchorArgument
 import net.minecraft.commands.arguments.selector.EntitySelector
-import net.minecraft.commands.arguments.selector.EntitySelectorParser
 import net.minecraft.core.BlockPos
 import net.minecraft.core.Holder
 import net.minecraft.core.HolderSet
@@ -43,6 +41,8 @@ import net.minecraft.util.Mth
 import net.minecraft.util.valueproviders.IntProvider
 import net.minecraft.world.Container
 import net.minecraft.world.Difficulty
+import net.minecraft.world.clock.ClockTimeMarker
+import net.minecraft.world.clock.WorldClock
 import net.minecraft.world.damagesource.DamageSource
 import net.minecraft.world.damagesource.DamageType
 import net.minecraft.world.damagesource.DamageTypes
@@ -77,12 +77,15 @@ import net.minecraft.world.phys.Vec2
 import net.minecraft.world.phys.Vec3
 import net.minecraft.world.scores.*
 import net.minecraft.world.scores.criteria.ObjectiveCriteria
+import net.minecraft.world.timeline.Timeline
 import net.minecraft.world.waypoints.Waypoint
 import net.minecraft.world.waypoints.WaypointStyleAsset
 import net.minecraft.world.waypoints.WaypointTransmitter
 import top.katton.Katton
+import top.katton.util.Result
 import java.util.*
 import java.util.function.Consumer
+import kotlin.jvm.optionals.getOrDefault
 import kotlin.math.min
 import kotlin.math.sqrt
 
@@ -501,7 +504,7 @@ fun banIp(ip: String) {
 fun getOrCreateBossBar(identifier: Identifier, title: Component): CustomBossEvent {
     val qwq = requireServer().customBossEvents
     if (qwq.get(identifier) != null) return qwq.get(identifier)!!
-    return qwq.create(identifier,title)
+    return qwq.create(requireServer().overworld().random, identifier,title)
 }
 
 /**
@@ -1485,7 +1488,7 @@ fun playSound(level: ServerLevel, players: Collection<ServerPlayer>, sound: Iden
  * @return sampled integer or null on invalid range
  */
 fun randomSample(randomSequence: Identifier? = null, broadcast: Boolean = false, min: Int = Int.MIN_VALUE, max: Int = Int.MAX_VALUE): Int?{
-    val randomSource = randomSequence?.let { requireServer().overworld().getRandomSequence(it) } ?: requireServer().overworld().random
+    val randomSource = randomSequence?.let { requireServer().getRandomSequence(it) } ?: requireServer().overworld().random
     val l = max.toLong() - min;
     if(l <= 0L) {
         LOGGER.error("Invalid range: min=$min, max=$max")
@@ -1509,7 +1512,7 @@ fun randomSample(randomSequence: Identifier? = null, broadcast: Boolean = false,
  * @param randomSequence sequence identifier
  */
 fun resetSequence(level: ServerLevel, randomSequence: Identifier){
-    level.randomSequences.reset(randomSequence, level.seed)
+    requireServer().randomSequences.reset(randomSequence, level.seed)
 }
 
 /**
@@ -1522,7 +1525,7 @@ fun resetSequence(level: ServerLevel, randomSequence: Identifier){
  * @param includeSequenceID whether to include sequence id
  */
 fun resetSequence(level: ServerLevel, randomSequence: Identifier, seed: Int, includeWorldSeed: Boolean = true, includeSequenceID: Boolean = true){
-    requireServer().overworld().randomSequences.reset(randomSequence, level.seed, seed, includeWorldSeed, includeSequenceID)
+    requireServer().randomSequences.reset(randomSequence, level.seed, seed, includeWorldSeed, includeSequenceID)
 }
 
 /**
@@ -1531,7 +1534,7 @@ fun resetSequence(level: ServerLevel, randomSequence: Identifier, seed: Int, inc
  * @param level server level
  */
 fun resetAllSequences(level: ServerLevel){
-    level.randomSequences.clear()
+    requireServer().randomSequences.clear()
 }
 
 /**
@@ -1543,7 +1546,7 @@ fun resetAllSequences(level: ServerLevel){
  * @param includeSequenceID whether to include sequence id
  */
 fun resetAllSequencesAndSetNewDefaults(level: ServerLevel, seed: Int, includeWorldSeed: Boolean = true, includeSequenceID: Boolean = true){
-    level.randomSequences.setSeedDefaults(seed, includeWorldSeed, includeSequenceID)
+    requireServer().randomSequences.setSeedDefaults(seed, includeWorldSeed, includeSequenceID)
 }
 
 /**
@@ -1801,7 +1804,7 @@ fun summon(
  * @return mutable collection of tag strings
  */
 fun getTags(entity: Entity): MutableCollection<String> {
-    return entity.tags
+    return entity.entityTags()
 }
 
 /**
@@ -2010,48 +2013,54 @@ fun tickStopSprinting(): Boolean {
     return serverTickRateManager.stopSprinting()
 }
 
-
-/**
- * Get current day time of a server level in ticks (0..23999).
- *
- * @param serverLevel server level to query
- * @return day time as int
- */
-fun getDayTime(serverLevel: ServerLevel): Int {
-    return (serverLevel.dayTime % 24000L).toInt()
+fun queryGameTime(level: ServerLevel): Int {
+    return  wrapTime(level.gameTime)
 }
 
-/**
- * Set world time for all server levels.
- *
- * @param level reference server level (used for return)
- * @param i new day time in ticks
- * @return day time for provided level after setting
- */
-fun setTime(level: ServerLevel ,i: Int): Int {
-    for (serverLevel in requireServer().allLevels) {
-        serverLevel.dayTime = i.toLong()
-    }
-
-    requireServer().forceTimeSynchronization()
-    return getDayTime(level)
+fun queryTime(clock: Holder<WorldClock>): Int {
+    return wrapTime(requireServer().clockManager().getTotalTicks(clock))
 }
 
-/**
- * Add time to world time across all server levels.
- *
- * @param level reference server level (used for return)
- * @param i amount of ticks to add
- * @return resulting day time for the given level
- */
-fun addTime(level: ServerLevel, i: Int): Int {
-    for (serverLevel in requireServer().allLevels) {
-        serverLevel.dayTime += i
+fun queryTimelineTicks(clock: Holder<WorldClock>, timeline: Holder<Timeline>): Result<Int> {
+    if(clock != timeline.value().clock()){
+        return Result.failure("Timeline ${timeline.value()} is not valid for clock ${clock.value()}")
     }
+    val currentTicks = timeline.value().getCurrentTicks(requireServer().clockManager())
+    return Result.success(wrapTime(currentTicks))
+}
 
-    requireServer().forceTimeSynchronization()
-    val j = getDayTime(level)
-    return j
+
+fun queryTimelineRepetitions(clock: Holder<WorldClock>, timeline: Holder<Timeline>): Result<Int> {
+    if(clock != timeline.value().clock()){
+        return Result.failure("Timeline ${timeline.value()} is not valid for clock ${clock.value()}")
+    }
+    val r = timeline.value().getPeriodCount(requireServer().clockManager())
+    return Result.success(wrapTime(r.toLong()))
+}
+
+
+fun setTotalTicks(clock: Holder<WorldClock>, ticks: Int) {
+    requireServer().clockManager().setTotalTicks(clock, ticks.toLong())
+}
+
+fun addTime(clock: Holder<WorldClock>, ticks: Int) {
+    requireServer().clockManager().addTicks(clock, ticks)
+}
+
+fun setTimeToTimeMarker(clock: Holder<WorldClock>, timeMarker: ResourceKey<ClockTimeMarker>): Boolean {
+    return requireServer().clockManager().skipToTimeMarker(clock, timeMarker)
+}
+
+fun setPaused(clock: Holder<WorldClock>, paused: Boolean) {
+    requireServer().clockManager().setPaused(clock, paused)
+}
+
+fun getDefaultClock(level: ServerLevel): Holder<WorldClock>? {
+    return level.dimensionTypeRegistration().value().defaultClock.getOrDefault(null)
+}
+
+private fun wrapTime(ticks: Long): Int {
+    return Math.toIntExact(ticks % 2147483647L)
 }
 
 /**
@@ -2316,7 +2325,7 @@ private fun mutateIcon(serverLevel: ServerLevel, waypointTransmitter: WaypointTr
  * @param intProvider provider to sample from
  * @return resolved duration
  */
-fun getDuration(i: Int, intProvider: IntProvider): Int {
+fun getDuration(level: ServerLevel, i: Int, intProvider: IntProvider): Int {
     return if (i == -1) intProvider.sample(requireServer().overworld().getRandom()) else i
 }
 
@@ -2325,9 +2334,13 @@ fun getDuration(i: Int, intProvider: IntProvider): Int {
  *
  * @param i duration ticks or -1 to sample
  */
-fun setClear(i: Int){
-    requireServer().overworld()
-        .setWeatherParameters(getDuration(i, ServerLevel.RAIN_DELAY), 0, false, false)
+fun setClear(level: ServerLevel, i: Int){
+    requireServer().setWeatherParameters(
+        getDuration(level, i, ServerLevel.RAIN_DELAY),
+        0,
+        false,
+        false
+    )
 }
 
 /**
@@ -2335,20 +2348,30 @@ fun setClear(i: Int){
  *
  * @param i duration ticks or -1 to sample
  */
-fun setRain(i: Int){
-    requireServer().overworld()
-        .setWeatherParameters(0, getDuration(i, ServerLevel.RAIN_DURATION), true, false)
+fun setRain(level: ServerLevel, i: Int){
+    requireServer().setWeatherParameters(
+        getDuration(level, i, ServerLevel.RAIN_DURATION),
+        0,
+        false,
+        false
+    )
 }
+
 
 /**
  * Set thunder weather for specified duration (or sample when -1).
  *
  * @param i duration ticks or -1 to sample
  */
-fun setThunder(i: Int){
-    requireServer().overworld()
-        .setWeatherParameters(0, getDuration(i, ServerLevel.THUNDER_DURATION), true, true)
+fun setThunder(level: ServerLevel, i: Int){
+    requireServer().setWeatherParameters(
+        getDuration(level, i, ServerLevel.THUNDER_DURATION),
+        0,
+        false,
+        false
+    )
 }
+
 
 /**
  * Set world border safe-zone buffer.

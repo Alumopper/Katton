@@ -18,7 +18,7 @@ package top.katton.api
 import net.fabricmc.fabric.api.entity.event.v1.EntityElytraEvents
 import net.fabricmc.fabric.api.entity.event.v1.EntitySleepEvents
 import net.fabricmc.fabric.api.entity.event.v1.ServerEntityCombatEvents
-import net.fabricmc.fabric.api.entity.event.v1.ServerEntityWorldChangeEvents
+import net.fabricmc.fabric.api.entity.event.v1.ServerEntityLevelChangeEvents
 import net.fabricmc.fabric.api.entity.event.v1.ServerLivingEntityEvents
 import net.fabricmc.fabric.api.entity.event.v1.ServerPlayerEvents
 import net.fabricmc.fabric.api.entity.event.v1.effect.ServerMobEffectEvents
@@ -40,6 +40,7 @@ import net.fabricmc.fabric.api.item.v1.DefaultItemComponentEvents
 import net.fabricmc.fabric.api.item.v1.EnchantmentEvents
 import net.fabricmc.fabric.api.loot.v3.LootTableEvents
 import net.fabricmc.fabric.api.message.v1.ServerMessageEvents
+import net.fabricmc.fabric.api.util.EventResult
 import net.fabricmc.fabric.api.util.TriState
 import net.minecraft.world.InteractionResult
 import top.katton.util.Event
@@ -124,13 +125,13 @@ object KattonEvents {
             }
         }
 
-        val onStartWorldTick = Event.createReloadable(ServerTickEvents.START_WORLD_TICK) { startWorldTicks ->
+        val onStartWorldTick = Event.createReloadable(ServerTickEvents.START_LEVEL_TICK) { startWorldTicks ->
             { server ->
                 startWorldTicks.forEach { e -> e.onStartTick(server) }
             }
         }
 
-        val onEndWorldTick = Event.createReloadable(ServerTickEvents.END_WORLD_TICK) { endWorldTicks ->
+        val onEndWorldTick = Event.createReloadable(ServerTickEvents.END_LEVEL_TICK) { endWorldTicks ->
             { server ->
                 endWorldTicks.forEach { e -> e.onEndTick(server) }
             }
@@ -165,14 +166,8 @@ object KattonEvents {
      */
     object ServerChunk {
         val onChunkLoad = Event.createReloadable(ServerChunkEvents.CHUNK_LOAD) { chunkLoads ->
-            { level, chunk ->
-                chunkLoads.forEach { e -> e.onChunkLoad(level, chunk) }
-            }
-        }
-
-        val onChunkGenerate = Event.createReloadable(ServerChunkEvents.CHUNK_GENERATE) { chunkGenerates ->
-            { level, chunk ->
-                chunkGenerates.forEach { e -> e.onChunkGenerate(level, chunk) }
+            { level, chunk, generated ->
+                chunkLoads.forEach { e -> e.onChunkLoad(level, chunk, generated) }
             }
         }
 
@@ -183,10 +178,10 @@ object KattonEvents {
         }
 
         val onChunkLevelTypeChange =
-            Event.createReloadable(ServerChunkEvents.CHUNK_LEVEL_TYPE_CHANGE) { chunkLevelTypeChanges ->
+            Event.createReloadable(ServerChunkEvents.FULL_CHUNK_STATUS_CHANGE) { chunkLevelTypeChanges ->
                 { world, chunk, oldLevelType, newLevelType ->
                     chunkLevelTypeChanges.forEach { e ->
-                        e.onChunkLevelTypeChange(
+                        e.onFullChunkStatusChange(
                             world,
                             chunk,
                             oldLevelType,
@@ -412,13 +407,13 @@ object KattonEvents {
 
         val onAllowBed = Event.createReloadable(EntitySleepEvents.ALLOW_BED) { allowBeds ->
             { entity, pos, state, vanillaResult ->
-                allowBeds.dispatch(InteractionResult.PASS) { e -> e.allowBed(entity, pos, state, vanillaResult) }
+                allowBeds.dispatch(EventResult.PASS) { e -> e.allowBed(entity, pos, state, vanillaResult) }
             }
         }
 
         val onAllowNearbyMonsters = Event.createReloadable(EntitySleepEvents.ALLOW_NEARBY_MONSTERS) { allowNearbyMonsters ->
             { entity, pos, vanillaResult ->
-                allowNearbyMonsters.dispatch(InteractionResult.PASS) { e -> e.allowNearbyMonsters(entity, pos, vanillaResult) }
+                allowNearbyMonsters.dispatch(EventResult.PASS) { e -> e.allowNearbyMonsters(entity, pos, vanillaResult) }
             }
         }
 
@@ -506,16 +501,16 @@ object KattonEvents {
     /**
      * Server entity world change events (after entity/player change world).
      */
-    object ServerEntityWorldChange {
-        val onAfterEntityChangeWorld = Event.createReloadable(ServerEntityWorldChangeEvents.AFTER_ENTITY_CHANGE_WORLD) { afterEntityChangeWorlds ->
+    object ServerEntityLevelChange {
+        val onAfterEntityChangeLevel = Event.createReloadable(ServerEntityLevelChangeEvents.AFTER_ENTITY_CHANGE_LEVEL) { afterEntityChangeWorlds ->
             { entity, newEntity, oldWorld, newWorld ->
-                afterEntityChangeWorlds.forEach { e -> e.afterChangeWorld(entity, newEntity, oldWorld, newWorld) }
+                afterEntityChangeWorlds.forEach { e -> e.afterChangeLevel(entity, newEntity, oldWorld, newWorld) }
             }
         }
 
-        val onAfterPlayerChangeWorld = Event.createReloadable(ServerEntityWorldChangeEvents.AFTER_PLAYER_CHANGE_WORLD) { afterPlayerChangeWorlds ->
+        val onAfterPlayerChangeLevel = Event.createReloadable(ServerEntityLevelChangeEvents.AFTER_PLAYER_CHANGE_LEVEL) { afterPlayerChangeWorlds ->
             { player, oldWorld, newWorld ->
-                afterPlayerChangeWorlds.forEach { e -> e.afterChangeWorld(player, oldWorld, newWorld) }
+                afterPlayerChangeWorlds.forEach { e -> e.afterChangeLevel(player, oldWorld, newWorld) }
             }
         }
     }

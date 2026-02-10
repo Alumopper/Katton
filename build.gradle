@@ -1,9 +1,9 @@
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 plugins {
-	id 'net.fabricmc.fabric-loom-remap' version "${loom_version}"
+	id 'net.fabricmc.fabric-loom' version "${loom_version}"
 	id 'maven-publish'
-	id "org.jetbrains.kotlin.jvm" version "2.3.0"
+	id "org.jetbrains.kotlin.jvm" version "2.3.10"
 }
 
 version = project.mod_version
@@ -43,9 +43,6 @@ sourceSets {
     }
 }
 
-
-
-
 dependencies {
 	implementation 'org.jetbrains.kotlin:kotlin-scripting-common'
 	implementation 'org.jetbrains.kotlin:kotlin-scripting-jvm'
@@ -56,12 +53,11 @@ dependencies {
 
 	// To change the versions see the gradle.properties file
 	minecraft "com.mojang:minecraft:${project.minecraft_version}"
-	mappings loom.officialMojangMappings()
-	modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
+	implementation "net.fabricmc:fabric-loader:${project.loader_version}"
 
 	// Fabric API. This is technically optional, but you probably want it anyway.
-	modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
-	modImplementation "net.fabricmc:fabric-language-kotlin:${project.fabric_kotlin_version}"
+	implementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
+	implementation "net.fabricmc:fabric-language-kotlin:${project.fabric_kotlin_version}"
 }
 
 processResources {
@@ -73,12 +69,12 @@ processResources {
 }
 
 tasks.withType(JavaCompile).configureEach {
-	it.options.release = 21
+	it.options.release = 25
 }
 
-tasks.withType(KotlinCompile).configureEach {
+tasks.withType(KotlinCompile).all {
 	kotlinOptions {
-		jvmTarget = 21
+		jvmTarget = 25
 	}
 }
 
@@ -88,8 +84,8 @@ java {
 	// If you remove this line, sources will not be generated.
 	withSourcesJar()
 
-	sourceCompatibility = JavaVersion.VERSION_21
-	targetCompatibility = JavaVersion.VERSION_21
+	sourceCompatibility = JavaVersion.VERSION_25
+	targetCompatibility = JavaVersion.VERSION_25
 }
 
 jar {
@@ -125,7 +121,7 @@ def targetDatapacksDir = layout.projectDirectory.dir('run/saves/test/datapacks')
 // Example/datapacks 优先级更高，会覆盖目标目录中的同名文件
 tasks.register('copyDatapacks', Copy) {
     group = 'Katton'
-    description = 'Copy and merge datapacks from Example/datapacks to run/saves/test/datapacks'
+    description = 'Copy and merge datapacks from Example/datapacks to run/saves/新的世界/datapacks'
 
     from datapacksDir
     into targetDatapacksDir

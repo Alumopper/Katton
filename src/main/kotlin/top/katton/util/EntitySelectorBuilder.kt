@@ -286,7 +286,7 @@ class EntitySelectorBuilder {
 
     fun type(typeTag: TagKey<EntityType<*>>, inverse: Boolean): EntitySelectorBuilder {
         val predicate = Predicate<Entity> { entity ->
-            entity.type.`is`(typeTag) != inverse
+            entity.`is`(typeTag) != inverse
         }
         this.predicates.add(predicate)
         return this
@@ -295,9 +295,9 @@ class EntitySelectorBuilder {
     fun tag(tag: String, inverse: Boolean): EntitySelectorBuilder {
         val predicate = Predicate<Entity> { entity ->
             if(tag == "") {
-                entity.tags.isEmpty() != inverse
+                entity.entityTags().isEmpty() != inverse
             }else{
-                entity.tags.contains(tag) != inverse
+                entity.entityTags().contains(tag) != inverse
             }
         }
         this.predicates.add(predicate)

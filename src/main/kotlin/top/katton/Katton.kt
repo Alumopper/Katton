@@ -51,7 +51,7 @@ object Katton : ModInitializer {
 			}
 		}
 
-		ResourceLoader.get(PackType.SERVER_DATA).registerReloader(
+		ResourceLoader.get(PackType.SERVER_DATA).registerReloadListener(
 			Identifier.parse("katton:scripts"), scriptLoader
 		)
 
