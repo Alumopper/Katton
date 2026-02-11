@@ -28,7 +28,7 @@ abstract class Event<T> {
     abstract fun invoker(): T
 
     companion object {
-        fun <T : Any> createReloadable(event: FabricEvent<T>, callback: (List<T>) -> T): Event<T> {
+        fun <T : Any, U: Any> createReloadable(event: FabricEvent<U>, adapter: (T) -> U, callback: (List<T>) -> T): Event<T> {
             val e = object : Event<T>() {
                 override fun invoker(): T {
                     return callback(handlers)
@@ -50,7 +50,7 @@ abstract class Event<T> {
                 }
 
                 // 注册到 Fabric 事件，当 Fabric 事件触发时，依次调用所有子事件的 invoker
-                event.register(callback(invokerList))
+                event.register(adapter(callback(invokerList)))
                 newList
             }
 

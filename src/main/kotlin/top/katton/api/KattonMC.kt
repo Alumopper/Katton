@@ -31,6 +31,7 @@ import net.minecraft.world.scores.ScoreHolder
 import net.minecraft.world.scores.Scoreboard
 import java.util.UUID
 
+@Suppress("unused")
 object KattonMC {
     val server: MinecraftServer
         get() = requireServer()

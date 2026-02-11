@@ -1,35 +1,27 @@
-//@file:DependsOn("../../versions/1.21.11/minecraft.jar")
-//@file:DependsOn("../../mods/katton-1.0.0.jar")
+@file:DependsOn(
+"G:\\AST\\kts4mc-template-1.21.11\\run\\saves\\新的世界\\datapacks\\lib\\26.1-snapshot-6-Fabric.jar",
+"G:\\AST\\kts4mc-template-1.21.11\\build\\libs\\katton-1.0.0.jar"
+)
+
 import net.minecraft.core.component.DataComponents
-import net.minecraft.server.MinecraftServer
-import net.minecraft.server.level.ServerLevel
 import net.minecraft.server.level.ServerPlayer
-import net.minecraft.world.entity.Entity
+import net.minecraft.world.entity.projectile.Projectile
 import net.minecraft.world.entity.projectile.arrow.Arrow
 import net.minecraft.world.level.Level
 import top.katton.api.KattonEvents
 import top.katton.api.getEntityNbt
-import top.katton.api.tell
 
-fun main() {
-    KattonEvents.ServerEntity.onEntityLoad += { entity: Entity, level: ServerLevel -> run {
-        if(entity !is Arrow) return@run
-        //if an arrow is shot by a player, check the bow's data
-        val player = entity.owner
-        if(player is ServerPlayer) {
-            tell(player,"hello")
-            onArrowShot(player, entity)
-        }
-    } }
-
-    KattonEvents.ServerTick.onStartServerTick += { server: MinecraftServer ->
-        server.playerList.players.forEach { player ->
-            tell(player, "hello")
-        }
-        processTNTArrow()
+KattonEvents.ServerEntity.onEntityLoad += { arg -> run {
+    if(arg.entity !is Arrow) return@run
+    //if a player shoots an arrow, check the bow's data
+    if((arg.entity as Projectile).owner is ServerPlayer) {
+        onArrowShot((arg.entity as Projectile).owner as ServerPlayer, arg.entity as Arrow)
     }
+} }
+
+KattonEvents.ServerTick.onStartServerTick += { _ ->
+    processTNTArrow()
 }
-val mainScript = main()
 
 val tntArrow = HashSet<Arrow>()
 

@@ -34,14 +34,14 @@ loom {
 	accessWidenerPath = file("src/main/resources/katton.accesswidener")
 
 }
-
-sourceSets {
-    test {
-        java.srcDirs += ['Example/datapacks']
-        kotlin.srcDirs += ['Example/datapacks']
-        resources.srcDirs += ['Example/datapacks']
-    }
-}
+//
+//sourceSets {
+//    test {
+//        java.srcDirs += ['Example/datapacks']
+//        kotlin.srcDirs += ['Example/datapacks']
+//        resources.srcDirs += ['Example/datapacks']
+//    }
+//}
 
 dependencies {
 	implementation 'org.jetbrains.kotlin:kotlin-scripting-common'

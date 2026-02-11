@@ -21,6 +21,7 @@ import net.fabricmc.fabric.api.entity.event.v1.ServerEntityCombatEvents
 import net.fabricmc.fabric.api.entity.event.v1.ServerEntityLevelChangeEvents
 import net.fabricmc.fabric.api.entity.event.v1.ServerLivingEntityEvents
 import net.fabricmc.fabric.api.entity.event.v1.ServerPlayerEvents
+import net.fabricmc.fabric.api.entity.event.v1.effect.EffectEventContext
 import net.fabricmc.fabric.api.entity.event.v1.effect.ServerMobEffectEvents
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerBlockEntityEvents
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerChunkEvents
@@ -37,12 +38,44 @@ import net.fabricmc.fabric.api.event.player.UseBlockCallback
 import net.fabricmc.fabric.api.event.player.UseEntityCallback
 import net.fabricmc.fabric.api.event.player.UseItemCallback
 import net.fabricmc.fabric.api.item.v1.DefaultItemComponentEvents
+import net.fabricmc.fabric.api.item.v1.EnchantingContext
 import net.fabricmc.fabric.api.item.v1.EnchantmentEvents
+import net.fabricmc.fabric.api.item.v1.EnchantmentSource
 import net.fabricmc.fabric.api.loot.v3.LootTableEvents
 import net.fabricmc.fabric.api.message.v1.ServerMessageEvents
 import net.fabricmc.fabric.api.util.EventResult
 import net.fabricmc.fabric.api.util.TriState
+import net.minecraft.commands.CommandSourceStack
+import net.minecraft.core.BlockPos
+import net.minecraft.core.Direction
+import net.minecraft.core.Holder
+import net.minecraft.core.Registry
+import net.minecraft.network.chat.ChatType.Bound
+import net.minecraft.network.chat.Component
+import net.minecraft.network.chat.PlayerChatMessage
+import net.minecraft.resources.ResourceKey
+import net.minecraft.server.MinecraftServer
+import net.minecraft.server.level.FullChunkStatus
+import net.minecraft.server.level.ServerLevel
+import net.minecraft.server.packs.resources.ResourceManager
+import net.minecraft.world.InteractionHand
 import net.minecraft.world.InteractionResult
+import net.minecraft.world.effect.MobEffectInstance
+import net.minecraft.world.entity.ConversionParams
+import net.minecraft.world.entity.Entity
+import net.minecraft.world.entity.EquipmentSlot
+import net.minecraft.world.entity.LivingEntity
+import net.minecraft.world.entity.Mob
+import net.minecraft.world.entity.player.Player
+import net.minecraft.world.item.ItemStack
+import net.minecraft.world.item.context.UseOnContext
+import net.minecraft.world.item.enchantment.Enchantment.Builder
+import net.minecraft.world.level.Level
+import net.minecraft.world.level.block.state.BlockState
+import net.minecraft.world.level.chunk.LevelChunk
+import net.minecraft.world.level.storage.loot.LootContext
+import net.minecraft.world.phys.BlockHitResult
+import net.minecraft.world.phys.Vec3
 import top.katton.util.Event
 import top.katton.util.Extension.dispatch
 
@@ -54,622 +87,911 @@ import top.katton.util.Extension.dispatch
  */
 object KattonEvents {
 
+    private fun <B> unit(): (List<(B) -> Unit>) -> (B) -> Unit = { events ->
+        { arg: B -> events.forEach { e -> e(arg) } }
+    }
+
+    private fun <B, R> firstNotNullOfOrNull(): (List<(B) -> R?>) -> (B) -> R? = { events ->
+        { arg: B -> events.firstNotNullOfOrNull { e -> e(arg) } }
+    }
+
+    private fun <B> all(): (List<(B) -> Boolean>) -> (B) -> Boolean = { events ->
+        { arg: B -> events.all { e -> e(arg) } }
+    }
+
+    private fun <B> any(): (List<(B) -> Boolean>) -> (B) -> Boolean = { events ->
+        { arg: B -> events.any { e -> e(arg) } }
+    }
+
+    private fun <B> triState(): (List<(B) -> TriState>) -> (B) -> TriState = { events ->
+        { arg: B ->
+            var status = TriState.DEFAULT
+            for (e in events) {
+                status = e(arg)
+                if (status != TriState.DEFAULT) break
+            }
+            status
+        }
+    }
+
+    private fun <B, R> dispatch(passValue: R): (List<(B) -> R>) -> (B) -> R = { events ->
+        { arg: B -> events.dispatch(passValue) { e -> e(arg) } }
+    }
+
+
     /**
      * Server lifecycle related events: server start/stop, datapack reload, save hooks.
      */
     object ServerLifecycle {
-        val onServerStarting = Event.createReloadable(ServerLifecycleEvents.SERVER_STARTING) { startings ->
-            {
-                startings.forEach { e -> e.onServerStarting(it) }
-            }
-        }
 
-        val onServerStarted = Event.createReloadable(ServerLifecycleEvents.SERVER_STARTED) { starteds ->
-            {
-                starteds.forEach { e -> e.onServerStarted(it) }
-            }
-        }
+        data class ServerArg(val server: MinecraftServer)
 
-        val onServerStopped = Event.createReloadable(ServerLifecycleEvents.SERVER_STOPPED) { stoppeds ->
-            {
-                stoppeds.forEach { e -> e.onServerStopped(it) }
-            }
-        }
+        val onServerStarting = Event.createReloadable(ServerLifecycleEvents.SERVER_STARTING,
+            { c -> ServerLifecycleEvents.ServerStarting {c(ServerArg(it))} },
+            unit<ServerArg>()
+        )
+
+        val onServerStarted = Event.createReloadable(ServerLifecycleEvents.SERVER_STARTED,
+            { c -> ServerLifecycleEvents.ServerStarted {c(ServerArg(it))} },
+            unit<ServerArg>()
+        )
+
+        val onServerStopped = Event.createReloadable(ServerLifecycleEvents.SERVER_STOPPED,
+            { c -> ServerLifecycleEvents.ServerStopped {c(ServerArg(it))} },
+            unit<ServerArg>()
+        )
+
+        data class SyncDatapackContentsArg(
+            val player: net.minecraft.server.level.ServerPlayer,
+            val joined: Boolean
+        )
 
         val onSyncDatapackContents =
-            Event.createReloadable(ServerLifecycleEvents.SYNC_DATA_PACK_CONTENTS) { syncDatapackContents ->
-                { player, joined ->
-                    syncDatapackContents.forEach { e -> e.onSyncDataPackContents(player, joined) }
-                }
-            }
+            Event.createReloadable(ServerLifecycleEvents.SYNC_DATA_PACK_CONTENTS,
+            { c -> ServerLifecycleEvents.SyncDataPackContents {a, b -> c(SyncDatapackContentsArg(a, b))} },
+            unit<SyncDatapackContentsArg>()
+        )
+
+        data class StartDatapackReloadArg(
+            val server: MinecraftServer,
+            val resourceManager: ResourceManager
+        )
 
         val onStartDatapackReload =
-            Event.createReloadable(ServerLifecycleEvents.START_DATA_PACK_RELOAD) { startDatapackReloads ->
-                { server, resourceManager ->
-                    startDatapackReloads.forEach { e -> e.startDataPackReload(server, resourceManager) }
-                }
-            }
+            Event.createReloadable(ServerLifecycleEvents.START_DATA_PACK_RELOAD,
+            { c -> ServerLifecycleEvents.StartDataPackReload {a, b -> c(StartDatapackReloadArg(a, b))} },
+            unit<StartDatapackReloadArg>()
+        )
 
-        val onEndDatapackReload = Event.createReloadable(ServerLifecycleEvents.END_DATA_PACK_RELOAD) { endDatapackReloads ->
-            { server, resourceManager, success ->
-                endDatapackReloads.forEach { e -> e.endDataPackReload(server, resourceManager, success) }
-            }
-        }
+        data class EndDatapackReloadArg(
+            val server: MinecraftServer,
+            val resourceManager: ResourceManager,
+            val success: Boolean
+        )
 
-        val onBeforeSave = Event.createReloadable(ServerLifecycleEvents.BEFORE_SAVE) { beforeSaves ->
-            { server, flush, flushPlayers ->
-                beforeSaves.forEach { e -> e.onBeforeSave(server, flush, flushPlayers) }
-            }
-        }
+        val onEndDatapackReload = Event.createReloadable(ServerLifecycleEvents.END_DATA_PACK_RELOAD,
+            { c -> ServerLifecycleEvents.EndDataPackReload {a, b, c -> c(EndDatapackReloadArg(a, b, c))} },
+            unit<EndDatapackReloadArg>()
+        )
 
-        val onAfterSave = Event.createReloadable(ServerLifecycleEvents.AFTER_SAVE) { afterSaves ->
-            { server, flush, flushPlayers ->
-                afterSaves.forEach { e -> e.onAfterSave(server, flush, flushPlayers) }
-            }
-        }
+        data class SaveArg(
+            val server: MinecraftServer,
+            val flush: Boolean,
+            val force: Boolean
+        )
+
+        val onBeforeSave = Event.createReloadable(ServerLifecycleEvents.BEFORE_SAVE,
+            { c -> ServerLifecycleEvents.BeforeSave {a, b, c -> c(SaveArg(a, b, c))} },
+            unit<SaveArg>()
+        )
+
+        val onAfterSave = Event.createReloadable(ServerLifecycleEvents.AFTER_SAVE,
+            { c -> ServerLifecycleEvents.AfterSave {a, b, c -> c(SaveArg(a, b, c))} },
+            unit<SaveArg>()
+        )
     }
 
     /**
      * Server tick events (server/world start/end ticks).
      */
     object ServerTick {
-        val onStartServerTick = Event.createReloadable(ServerTickEvents.START_SERVER_TICK) { startServerTicks ->
-            { server ->
-                startServerTicks.forEach { e -> e.onStartTick(server) }
-            }
-        }
+        data class ServerTickArg(val server: MinecraftServer)
 
-        val onEndServerTick = Event.createReloadable(ServerTickEvents.END_SERVER_TICK) { endServerTicks ->
-            { server ->
-                endServerTicks.forEach { e -> e.onEndTick(server) }
-            }
-        }
+        val onStartServerTick = Event.createReloadable(ServerTickEvents.START_SERVER_TICK,
+            { c -> ServerTickEvents.StartTick {c(ServerTickArg(it))} },
+            unit<ServerTickArg>()
+        )
 
-        val onStartWorldTick = Event.createReloadable(ServerTickEvents.START_LEVEL_TICK) { startWorldTicks ->
-            { server ->
-                startWorldTicks.forEach { e -> e.onStartTick(server) }
-            }
-        }
+        val onEndServerTick = Event.createReloadable(ServerTickEvents.END_SERVER_TICK,
+            { c -> ServerTickEvents.EndTick {c(ServerTickArg(it))} },
+            unit<ServerTickArg>()
+        )
 
-        val onEndWorldTick = Event.createReloadable(ServerTickEvents.END_LEVEL_TICK) { endWorldTicks ->
-            { server ->
-                endWorldTicks.forEach { e -> e.onEndTick(server) }
-            }
-        }
+        data class WorldTickArg(val world: ServerLevel)
+
+        val onStartWorldTick = Event.createReloadable(ServerTickEvents.START_LEVEL_TICK,
+            { c -> ServerTickEvents.StartLevelTick {c(WorldTickArg(it))} },
+            unit<WorldTickArg>()
+        )
+
+        val onEndWorldTick = Event.createReloadable(ServerTickEvents.END_LEVEL_TICK,
+            { c -> ServerTickEvents.EndLevelTick {c(WorldTickArg(it))} },
+            unit<WorldTickArg>()
+        )
     }
 
     /**
      * General server entity lifecycle events (load/unload/equipment changes).
      */
     object ServerEntity {
-        val onEntityLoad = Event.createReloadable(ServerEntityEvents.ENTITY_LOAD) { entityLoads ->
-            { entity, level ->
-                entityLoads.forEach { e -> e.onLoad(entity, level) }
-            }
-        }
+        data class EntityLoadArg(
+            val entity: Entity,
+            val world: ServerLevel
+        )
 
-        val onEntityUnload = Event.createReloadable(ServerEntityEvents.ENTITY_UNLOAD) { entityUnloads ->
-            { entity, level ->
-                entityUnloads.forEach { e -> e.onUnload(entity, level) }
-            }
-        }
+        val onEntityLoad = Event.createReloadable(ServerEntityEvents.ENTITY_LOAD,
+            { c -> ServerEntityEvents.Load {a, b -> c(EntityLoadArg(a, b))} },
+            unit<EntityLoadArg>()
+        )
 
-        val onEquipmentChange = Event.createReloadable(ServerEntityEvents.EQUIPMENT_CHANGE) { equipmentChanges ->
-            { entity, slot, previousItem, newItem ->
-                equipmentChanges.forEach { e -> e.onChange(entity, slot, previousItem, newItem) }
-            }
-        }
+        val onEntityUnload = Event.createReloadable(ServerEntityEvents.ENTITY_UNLOAD,
+            { c -> ServerEntityEvents.Unload {a, b -> c(EntityLoadArg(a, b))} },
+            unit<EntityLoadArg>()
+        )
+
+        data class EquipmentChangeArg(
+            val entity: Entity,
+            val slot: EquipmentSlot,
+            val from: ItemStack,
+            val to: ItemStack
+        )
+
+        val onEquipmentChange = Event.createReloadable(ServerEntityEvents.EQUIPMENT_CHANGE,
+            { c -> ServerEntityEvents.EquipmentChange {a, b, c, d -> c(EquipmentChangeArg(a, b, c, d))} },
+            unit<EquipmentChangeArg>()
+        )
     }
 
     /**
      * Server chunk lifecycle events (load/generate/unload/level-type change).
      */
     object ServerChunk {
-        val onChunkLoad = Event.createReloadable(ServerChunkEvents.CHUNK_LOAD) { chunkLoads ->
-            { level, chunk, generated ->
-                chunkLoads.forEach { e -> e.onChunkLoad(level, chunk, generated) }
-            }
-        }
+        data class ChunkLoadArg(
+            val world: ServerLevel,
+            val chunk: LevelChunk,
+            val isNew: Boolean
+        )
 
-        val onChunkUnload = Event.createReloadable(ServerChunkEvents.CHUNK_UNLOAD) { chunkUnloads ->
-            { level, chunk ->
-                chunkUnloads.forEach { e -> e.onChunkUnload(level, chunk) }
-            }
-        }
+        val onChunkLoad = Event.createReloadable(ServerChunkEvents.CHUNK_LOAD,
+            { c -> ServerChunkEvents.Load {a, b, c -> c(ChunkLoadArg(a, b, c))} },
+            unit<ChunkLoadArg>()
+        )
+
+        data class ChunkUnloadArg(
+            val world: ServerLevel,
+            val chunk: LevelChunk
+        )
+
+        val onChunkUnload = Event.createReloadable(ServerChunkEvents.CHUNK_UNLOAD,
+            { c -> ServerChunkEvents.Unload {a, b -> c(ChunkUnloadArg(a, b))} },
+            unit<ChunkUnloadArg>()
+        )
+
+        data class ChunkStatusChangeArg(
+            val world: ServerLevel,
+            val chunk: LevelChunk,
+            val oldStatus: FullChunkStatus,
+            val newStatus: FullChunkStatus
+        )
 
         val onChunkLevelTypeChange =
-            Event.createReloadable(ServerChunkEvents.FULL_CHUNK_STATUS_CHANGE) { chunkLevelTypeChanges ->
-                { world, chunk, oldLevelType, newLevelType ->
-                    chunkLevelTypeChanges.forEach { e ->
-                        e.onFullChunkStatusChange(
-                            world,
-                            chunk,
-                            oldLevelType,
-                            newLevelType
-                        )
-                    }
-                }
-            }
+            Event.createReloadable(ServerChunkEvents.FULL_CHUNK_STATUS_CHANGE,
+                { c -> ServerChunkEvents.FullChunkStatusChange {a, b, c, d -> c(ChunkStatusChangeArg(a, b, c, d))} },
+                unit<ChunkStatusChangeArg>()
+            )
     }
 
     /**
      * Server block-entity lifecycle events (load/unload).
      */
     object ServerBlockEntity {
-        val onBlockEntityLoad = Event.createReloadable(ServerBlockEntityEvents.BLOCK_ENTITY_LOAD) { blockEntityLoads ->
-            { blockEntity, level ->
-                blockEntityLoads.forEach { e -> e.onLoad(blockEntity, level) }
-            }
-        }
+        data class BlockEntityLoadArg(
+            val blockEntity: net.minecraft.world.level.block.entity.BlockEntity,
+            val world: ServerLevel
+        )
 
-        val onBlockEntityUnload =
-            Event.createReloadable(ServerBlockEntityEvents.BLOCK_ENTITY_UNLOAD) { blockEntityUnloads ->
-                { blockEntity, level ->
-                    blockEntityUnloads.forEach { e -> e.onUnload(blockEntity, level) }
-                }
-            }
+        val onBlockEntityLoad = Event.createReloadable(ServerBlockEntityEvents.BLOCK_ENTITY_LOAD,
+            { c -> ServerBlockEntityEvents.Load {a, b -> c(BlockEntityLoadArg(a, b))} },
+            unit<BlockEntityLoadArg>()
+        )
+
+        val onBlockEntityUnload = Event.createReloadable(ServerBlockEntityEvents.BLOCK_ENTITY_UNLOAD,
+            { c -> ServerBlockEntityEvents.Unload {a, b -> c(BlockEntityLoadArg(a, b))} },
+            unit<BlockEntityLoadArg>()
+        )
     }
 
     /**
      * Block interaction events (use with or without item).
      */
     object Block {
-        val onUseItemOn = Event.createReloadable(BlockEvents.USE_ITEM_ON) { listeners ->
-            { itemStack, blockState, level, blockPos, player, interactionHand, blockHitResult ->
-                listeners.firstNotNullOfOrNull {
-                    it.useItemOn(
-                        itemStack,
-                        blockState,
-                        level,
-                        blockPos,
-                        player,
-                        interactionHand,
-                        blockHitResult
-                    )
-                }
-            }
-        }
+        data class UseItemOnArg(
+            val stack: ItemStack,
+            val state: BlockState,
+            val world: Level,
+            val pos: BlockPos,
+            val player: net.minecraft.world.entity.player.Player,
+            val hand: InteractionHand,
+            val hitResult: BlockHitResult
+        )
 
-        val onUseWithoutItem = Event.createReloadable(BlockEvents.USE_WITHOUT_ITEM) { listeners ->
-            { blockState, level, blockPos, player, blockHitResult ->
-                listeners.firstNotNullOfOrNull { it.useWithoutItem(blockState, level, blockPos, player, blockHitResult) }
-            }
-        }
+        val onUseItemOn = Event.createReloadable(BlockEvents.USE_ITEM_ON,
+            { c -> BlockEvents.UseItemOnCallback {a, b, c1, d, e, f, g -> c(UseItemOnArg(a, b, c1, d, e, f, g))} },
+            dispatch<UseItemOnArg, InteractionResult>(InteractionResult.PASS)
+        )
+
+        data class UseWithoutItemArg(
+            val state: BlockState,
+            val world: Level,
+            val pos: BlockPos,
+            val player: net.minecraft.world.entity.player.Player,
+            val hitResult: BlockHitResult
+        )
+
+        val onUseWithoutItem = Event.createReloadable(BlockEvents.USE_WITHOUT_ITEM,
+            { c -> BlockEvents.UseWithoutItemCallback {a, b, c1, d, e -> c(UseWithoutItemArg(a, b, c1, d, e))} },
+            dispatch<UseWithoutItemArg, InteractionResult>(InteractionResult.PASS)
+        )
     }
 
     /**
      * Item interaction events (use / useOn).
      */
     object Item {
-        val onUseOn = Event.createReloadable(ItemEvents.USE_ON) { listeners ->
-            { useOnContext ->
-                listeners.firstNotNullOfOrNull { it.useOn(useOnContext) }
-            }
-        }
 
-        val onUse = Event.createReloadable(ItemEvents.USE) { listeners ->
-            { level, player, interactionHand ->
-                listeners.firstNotNullOfOrNull { it.use(level, player, interactionHand) }
-            }
-        }
+        data class UseOnArg(val context: UseOnContext)
+
+        val onUseOn = Event.createReloadable(ItemEvents.USE_ON,
+            {c -> ItemEvents.UseOnCallback {c(UseOnArg(it))}},
+            dispatch<UseOnArg, InteractionResult>(InteractionResult.PASS)
+        )
+
+        data class UseArg(
+            val world: Level,
+            val player: net.minecraft.world.entity.player.Player,
+            val hand: InteractionHand
+        )
+
+        val onUse = Event.createReloadable(ItemEvents.USE,
+            {c -> ItemEvents.UseCallback {a, b, c1 -> c(UseArg(a, b, c1))}},
+            dispatch<UseArg, InteractionResult>(InteractionResult.PASS)
+        )
     }
 
     /**
      * Player interaction events (attack/use interactions).
      */
     object Player {
-        val onAttackBlock = Event.createReloadable(AttackBlockCallback.EVENT) { attackBlock ->
-            { player, world, hand, pos, direction ->
-                attackBlock.dispatch(InteractionResult.PASS) { e ->
-                    e.interact(player, world, hand, pos, direction)
-                }
-            }
-        }
 
-        val onAttackEntity = Event.createReloadable(AttackEntityCallback.EVENT) { attackEntity ->
-            { player, world, hand, entity, direction ->
-                attackEntity.dispatch(InteractionResult.PASS) { e ->
-                    e.interact(player, world, hand, entity, direction)
-                }
-            }
-        }
+        data class OnAttackBlockArg(
+            val player: net.minecraft.world.entity.player.Player,
+            val world: Level,
+            val hand: InteractionHand,
+            val pos: BlockPos,
+            val direction: Direction,
+        )
 
-        val onUseBlock = Event.createReloadable(UseBlockCallback.EVENT) { useBlock ->
-            { player, world, hand, hitResult ->
-                useBlock.dispatch(InteractionResult.PASS) { e ->
-                    e.interact(player, world, hand, hitResult)
-                }
-            }
-        }
+        val onAttackBlock = Event.createReloadable(AttackBlockCallback.EVENT,
+            {c -> AttackBlockCallback {a, b, c1, d, e -> c(OnAttackBlockArg(a, b, c1, d, e))}},
+            dispatch<OnAttackBlockArg, InteractionResult>(InteractionResult.PASS)
+        )
 
-        val onUseEntity = Event.createReloadable(UseEntityCallback.EVENT) { useEntity ->
-            { player, world, hand, entity, hitResult ->
-                useEntity.dispatch(InteractionResult.PASS) { e ->
-                    e.interact(player, world, hand, entity, hitResult)
-                }
-            }
-        }
+        data class AttackEntityArg(
+            val player: net.minecraft.world.entity.player.Player,
+            val world: Level,
+            val hand: InteractionHand,
+            val entity: Entity,
+            val hitResult: net.minecraft.world.phys.EntityHitResult?
+        )
 
-        val onUseItem = Event.createReloadable(UseItemCallback.EVENT) { useItem ->
-            { player, world, hand ->
-                useItem.dispatch(InteractionResult.PASS) { e ->
-                    e.interact(player, world, hand)
-                }
-            }
-        }
+        val onAttackEntity = Event.createReloadable(AttackEntityCallback.EVENT,
+            { c -> AttackEntityCallback { a, b, c1, d, e -> c(AttackEntityArg(a, b, c1, d, e)) } },
+            dispatch<AttackEntityArg, InteractionResult>(InteractionResult.PASS)
+        )
+
+        data class UseBlockArg(
+            val player: net.minecraft.world.entity.player.Player,
+            val world: Level,
+            val hand: InteractionHand,
+            val hitResult: BlockHitResult
+        )
+
+        val onUseBlock = Event.createReloadable(UseBlockCallback.EVENT,
+            { c -> UseBlockCallback { a, b, c1, d -> c(UseBlockArg(a, b, c1, d)) } },
+            dispatch<UseBlockArg, InteractionResult>(InteractionResult.PASS)
+        )
+
+        data class UseEntityArg(
+            val player: net.minecraft.world.entity.player.Player,
+            val world: Level,
+            val hand: InteractionHand,
+            val entity: Entity,
+            val hitResult: net.minecraft.world.phys.EntityHitResult?
+        )
+
+        val onUseEntity = Event.createReloadable(UseEntityCallback.EVENT,
+            { c -> UseEntityCallback { a, b, c1, d, e -> c(UseEntityArg(a, b, c1, d, e)) } },
+            dispatch<UseEntityArg, InteractionResult>(InteractionResult.PASS)
+        )
+
+        data class UseItemArg(
+            val player: net.minecraft.world.entity.player.Player,
+            val world: Level,
+            val hand: InteractionHand
+        )
+
+        val onUseItem = Event.createReloadable(UseItemCallback.EVENT,
+            { c -> UseItemCallback { a, b, c1 -> c(UseItemArg(a, b, c1)) } },
+            dispatch<UseItemArg, InteractionResult>(InteractionResult.PASS)
+        )
     }
 
     /**
      * Loot table related events (replace/modify/all loaded/modify drops).
      */
     object LootTable {
-        val onLootTableReplace = Event.createReloadable(LootTableEvents.REPLACE) { lootTableLoads ->
-            { key, original, source, registries ->
-                lootTableLoads.dispatch(null) { e ->
-                    e.replaceLootTable(key, original, source, registries)
-                }
-            }
-        }
+        data class LootTableReplaceArg(
+            val key: ResourceKey<net.minecraft.world.level.storage.loot.LootTable>,
+            val original: net.minecraft.world.level.storage.loot.LootTable,
+            val source: net.fabricmc.fabric.api.loot.v3.LootTableSource,
+            val registries: net.minecraft.core.HolderLookup.Provider
+        )
 
-        val onLootTableModify = Event.createReloadable(LootTableEvents.MODIFY) { lootTableLoads ->
-            { key, tableBuilder, source, registries ->
-                lootTableLoads.forEach { it.modifyLootTable(key, tableBuilder, source, registries) }
-            }
-        }
+        val onLootTableReplace = Event.createReloadable(LootTableEvents.REPLACE,
+            { c -> LootTableEvents.Replace { a, b, c1, d -> c(LootTableReplaceArg(a, b, c1, d)) } },
+            firstNotNullOfOrNull<LootTableReplaceArg, net.minecraft.world.level.storage.loot.LootTable?>()
+        )
 
-        val onLootTableAllLoad = Event.createReloadable(LootTableEvents.ALL_LOADED) { lootTableLoads ->
-            { resourceManager, lootManager ->
-                lootTableLoads.forEach { it.onLootTablesLoaded(resourceManager, lootManager) }
-            }
-        }
+        data class LootTableModifyArg(
+            val key: ResourceKey<net.minecraft.world.level.storage.loot.LootTable>,
+            val tableBuilder: net.minecraft.world.level.storage.loot.LootTable.Builder,
+            val source: net.fabricmc.fabric.api.loot.v3.LootTableSource,
+            val registries: net.minecraft.core.HolderLookup.Provider
+        )
 
-        val onLootTableModifyDrops = Event.createReloadable(LootTableEvents.MODIFY_DROPS) { lootTableLoads ->
-            { entry, context, drops ->
-                lootTableLoads.forEach { it.modifyLootTableDrops(entry, context, drops) }
-            }
-        }
+        val onLootTableModify = Event.createReloadable(LootTableEvents.MODIFY,
+            { c -> LootTableEvents.Modify {a, b, c1, d -> c(LootTableModifyArg(a, b, c1, d))} },
+            unit<LootTableModifyArg>()
+        )
+
+        data class LootTableAllLoadArg(
+            val resourceManager: ResourceManager,
+            val lootDataManager: Registry<net.minecraft.world.level.storage.loot.LootTable>
+        )
+
+        val onLootTableAllLoad = Event.createReloadable(LootTableEvents.ALL_LOADED,
+            { c -> LootTableEvents.Loaded {a, b -> c(LootTableAllLoadArg(a, b))} },
+            unit<LootTableAllLoadArg>()
+        )
+
+        data class LootTableModifyDropsArg(
+            val table: Holder<net.minecraft.world.level.storage.loot.LootTable>,
+            val context: LootContext,
+            val drops: List<ItemStack>
+        )
+
+        val onLootTableModifyDrops = Event.createReloadable(LootTableEvents.MODIFY_DROPS,
+            { c -> LootTableEvents.ModifyDrops {a, b, c1 -> c(LootTableModifyDropsArg(a, b, c1))} },
+            unit<LootTableModifyDropsArg>()
+        )
     }
 
     /**
      * ServerPlayer specific events (join/leave/respawn/copy/allow death legacy).
      */
     object ServerPlayer {
-        val onPlayerJoin = Event.createReloadable(ServerPlayerEvents.JOIN) { playerJoins ->
-            { player ->
-                playerJoins.forEach { e -> e.onJoin(player) }
-            }
-        }
+        data class PlayerArg(val player: net.minecraft.server.level.ServerPlayer)
 
-        val onPlayerLeave = Event.createReloadable(ServerPlayerEvents.LEAVE) { playerLeaves ->
-            { player ->
-                playerLeaves.forEach { e -> e.onLeave(player) }
-            }
-        }
+        val onPlayerJoin = Event.createReloadable(ServerPlayerEvents.JOIN,
+            { c -> ServerPlayerEvents.Join {c(PlayerArg(it))} },
+            unit<PlayerArg>()
+        )
 
-        val onAfterPlayerRespawn = Event.createReloadable(ServerPlayerEvents.AFTER_RESPAWN) { afterRespawns ->
-            { oldPlayer, newPlayer, alive ->
-                afterRespawns.forEach { e -> e.afterRespawn(oldPlayer, newPlayer, alive) }
-            }
-        }
+        val onPlayerLeave = Event.createReloadable(ServerPlayerEvents.LEAVE,
+            { c -> ServerPlayerEvents.Leave {c(PlayerArg(it))} },
+            unit<PlayerArg>()
+        )
+
+        data class AfterRespawnArg(
+            val oldPlayer: net.minecraft.server.level.ServerPlayer,
+            val newPlayer: net.minecraft.server.level.ServerPlayer,
+            val alive: Boolean
+        )
+
+        val onAfterPlayerRespawn = Event.createReloadable(ServerPlayerEvents.AFTER_RESPAWN,
+            { c -> ServerPlayerEvents.AfterRespawn {a, b, c1 -> c(AfterRespawnArg(a, b, c1))} },
+            unit<AfterRespawnArg>()
+        )
+
+        data class AllowDeathArg(
+            val player: net.minecraft.server.level.ServerPlayer,
+            val damageSource: net.minecraft.world.damagesource.DamageSource,
+            val damageAmount: Float
+        )
 
         @Deprecated("Use the more general ServerLivingEntityEvents.ALLOW_DEATH event instead and check for instanceof ServerPlayerEntity.")
-        val onPlayerAllowDeath = Event.createReloadable(ServerPlayerEvents.ALLOW_DEATH) { allowDeaths ->
-            { player, damageSource, damageAmount ->
-                allowDeaths.all { e -> e.allowDeath(player, damageSource, damageAmount) }
-            }
-        }
+        val onPlayerAllowDeath = Event.createReloadable(ServerPlayerEvents.ALLOW_DEATH,
+            { c -> ServerPlayerEvents.AllowDeath { a, b, c1 -> c(AllowDeathArg(a, b, c1)) } },
+            all<AllowDeathArg>()
+        )
 
-        val onPlayerCopy = Event.createReloadable(ServerPlayerEvents.COPY_FROM) { playerCopies ->
-            { oldPlayer, newPlayer, alive ->
-                playerCopies.forEach { e -> e.copyFromPlayer(oldPlayer, newPlayer, alive) }
-            }
-        }
+        data class CopyArg(
+            val oldPlayer: net.minecraft.server.level.ServerPlayer,
+            val newPlayer: net.minecraft.server.level.ServerPlayer,
+            val alive: Boolean
+        )
+
+        val onPlayerCopy = Event.createReloadable(ServerPlayerEvents.COPY_FROM,
+            { c -> ServerPlayerEvents.CopyFrom {a, b, c1 -> c(CopyArg(a, b, c1))} },
+            unit<CopyArg>()
+        )
     }
 
     /**
      * Elytra related entity events.
      */
     object EntityElytra {
-        val onEntityElytraAllow = Event.createReloadable(EntityElytraEvents.ALLOW) { elytraAllows ->
-            { entity, ->
-                elytraAllows.all { e -> e.allowElytraFlight(entity) }
-            }
-        }
+        data class ElytraAllowArg(val entity: net.minecraft.world.entity.LivingEntity)
 
-        val onEntityElytraCustom = Event.createReloadable(EntityElytraEvents.CUSTOM) { elytraCustoms ->
-            { entity, tickElytra ->
-                elytraCustoms.any { e -> e.useCustomElytra(entity, tickElytra) }
-            }
-        }
+        val onEntityElytraAllow = Event.createReloadable(EntityElytraEvents.ALLOW,
+            { c -> EntityElytraEvents.Allow { c(ElytraAllowArg(it)) } },
+            all<ElytraAllowArg>()
+        )
+
+        data class ElytraCustomArg(
+            val entity: net.minecraft.world.entity.LivingEntity,
+            val tickElytra: Boolean
+        )
+
+        val onEntityElytraCustom = Event.createReloadable(EntityElytraEvents.CUSTOM,
+            { c -> EntityElytraEvents.Custom { a, b -> c(ElytraCustomArg(a, b)) } },
+            any<ElytraCustomArg>()
+        )
     }
 
     /**
      * Entity sleeping related events (allow/start/stop/bed/nearby monsters etc.).
      */
     object EntitySleep {
-        val onAllowSleeping = Event.createReloadable(EntitySleepEvents.ALLOW_SLEEPING) { allowSleepings ->
-            { entity, pos ->
-                allowSleepings.firstNotNullOfOrNull { e -> e.allowSleep(entity, pos) }
-            }
-        }
+        data class AllowSleepingArg(
+            val entity: net.minecraft.world.entity.LivingEntity,
+            val pos: BlockPos
+        )
 
-        val onStartSleeping = Event.createReloadable(EntitySleepEvents.START_SLEEPING) { startSleepings ->
-            { entity, pos ->
-                startSleepings.forEach { e -> e.onStartSleeping(entity, pos) }
-            }
-        }
+        val onAllowSleeping = Event.createReloadable(EntitySleepEvents.ALLOW_SLEEPING,
+            { c -> EntitySleepEvents.AllowSleeping { a, b -> c(AllowSleepingArg(a, b)) } },
+            firstNotNullOfOrNull<AllowSleepingArg, Player.BedSleepingProblem?>()
+        )
 
-        val onStopSleeping = Event.createReloadable(EntitySleepEvents.STOP_SLEEPING) { stopSleepings ->
-            { entity, pos ->
-                stopSleepings.forEach { e -> e.onStopSleeping(entity, pos) }
-            }
-        }
+        data class SleepingArg(
+            val entity: net.minecraft.world.entity.LivingEntity,
+            val pos: BlockPos
+        )
 
-        val onAllowBed = Event.createReloadable(EntitySleepEvents.ALLOW_BED) { allowBeds ->
-            { entity, pos, state, vanillaResult ->
-                allowBeds.dispatch(EventResult.PASS) { e -> e.allowBed(entity, pos, state, vanillaResult) }
-            }
-        }
+        val onStartSleeping = Event.createReloadable(EntitySleepEvents.START_SLEEPING,
+            { c -> EntitySleepEvents.StartSleeping {a, b -> c(SleepingArg(a, b))} },
+            unit<SleepingArg>()
+        )
 
-        val onAllowNearbyMonsters = Event.createReloadable(EntitySleepEvents.ALLOW_NEARBY_MONSTERS) { allowNearbyMonsters ->
-            { entity, pos, vanillaResult ->
-                allowNearbyMonsters.dispatch(EventResult.PASS) { e -> e.allowNearbyMonsters(entity, pos, vanillaResult) }
-            }
-        }
+        val onStopSleeping = Event.createReloadable(EntitySleepEvents.STOP_SLEEPING,
+            { c -> EntitySleepEvents.StopSleeping {a, b -> c(SleepingArg(a, b))} },
+            unit<SleepingArg>()
+        )
 
-        val onAllowResettingTime = Event.createReloadable(EntitySleepEvents.ALLOW_RESETTING_TIME) { allowResettingTimes ->
-            { player ->
-                allowResettingTimes.all { e -> e.allowResettingTime(player) }
-            }
-        }
+        data class AllowBedArg(
+            val entity: LivingEntity,
+            val pos: BlockPos,
+            val state: BlockState,
+            val vanillaResult: Boolean
+        )
 
-        val onModifySleepingDirection = Event.createReloadable(EntitySleepEvents.MODIFY_SLEEPING_DIRECTION) { modifySleepingDirections ->
-            { entity, pos, direction ->
-                var dir = direction
-                modifySleepingDirections.forEach { e -> dir = e.modifySleepDirection(entity, pos, dir) }
-                dir
-            }
-        }
+        val onAllowBed = Event.createReloadable(EntitySleepEvents.ALLOW_BED,
+            { c -> EntitySleepEvents.AllowBed { a, b, c1, d -> c(AllowBedArg(a, b, c1, d)) } },
+            dispatch<AllowBedArg, EventResult>(EventResult.PASS)
+        )
 
-        val onAllowSettingSpawn = Event.createReloadable(EntitySleepEvents.ALLOW_SETTING_SPAWN) { allowSettingSpawns ->
-            { entity, pos ->
-                allowSettingSpawns.all { e -> e.allowSettingSpawn(entity, pos) }
-            }
-        }
+        data class AllowNearbyMonstersArg(
+            val entity: net.minecraft.world.entity.player.Player,
+            val pos: BlockPos,
+            val vanillaResult: Boolean
+        )
 
-        val onSetBedOccupationState = Event.createReloadable(EntitySleepEvents.SET_BED_OCCUPATION_STATE) { setBedOccupationStates ->
-            { entity, pos, state, occupied ->
-                setBedOccupationStates.any { e -> e.setBedOccupationState(entity, pos, state, occupied) }
-            }
-        }
+        val onAllowNearbyMonsters = Event.createReloadable(EntitySleepEvents.ALLOW_NEARBY_MONSTERS,
+            { c -> EntitySleepEvents.AllowNearbyMonsters { a, b, c1 -> c(AllowNearbyMonstersArg(a, b, c1)) } },
+            dispatch<AllowNearbyMonstersArg, EventResult>(EventResult.PASS)
+        )
 
-        val onModifyWakeUpPosition = Event.createReloadable(EntitySleepEvents.MODIFY_WAKE_UP_POSITION) { modifyWakeUpPositions ->
-            { entity, sleepingPos, bedState, wakeUpPos ->
-                var p = wakeUpPos
-                modifyWakeUpPositions.forEach { e -> p = e.modifyWakeUpPosition(entity, sleepingPos, bedState, p) }
-                p
+        data class AllowResettingTimeArg(val player: net.minecraft.world.entity.player.Player)
+
+        val onAllowResettingTime = Event.createReloadable(EntitySleepEvents.ALLOW_RESETTING_TIME,
+            { c -> EntitySleepEvents.AllowResettingTime { c(AllowResettingTimeArg(it)) } },
+            all<AllowResettingTimeArg>()
+        )
+
+        data class ModifySleepingDirectionArg(
+            val entity: LivingEntity,
+            val pos: BlockPos,
+            val direction: Direction?
+        )
+
+        val onModifySleepingDirection = Event.createReloadable(EntitySleepEvents.MODIFY_SLEEPING_DIRECTION,
+            { c -> EntitySleepEvents.ModifySleepingDirection { a, b, c1 -> c(ModifySleepingDirectionArg(a, b, c1)) } },
+            { events ->
+                { arg: ModifySleepingDirectionArg ->
+                    var dir = arg.direction
+                    events.forEach { e -> dir = e(arg.copy(direction = dir)) }
+                    ModifySleepingDirectionArg(arg.entity, arg.pos, dir).direction
+                }
             }
-        }
+        )
+
+        data class SettingSpawnArg(
+            val entity: LivingEntity,
+            val pos: BlockPos
+        )
+
+        val onAllowSettingSpawn = Event.createReloadable(EntitySleepEvents.ALLOW_SETTING_SPAWN,
+            { c -> EntitySleepEvents.AllowSettingSpawn { a, b -> c(SettingSpawnArg(a, b)) } },
+            all<SettingSpawnArg>()
+        )
+
+        data class SetBedOccupationStateArg(
+            val entity: LivingEntity,
+            val pos: BlockPos,
+            val state: BlockState,
+            val occupied: Boolean
+        )
+
+        val onSetBedOccupationState = Event.createReloadable(EntitySleepEvents.SET_BED_OCCUPATION_STATE,
+            { c -> EntitySleepEvents.SetBedOccupationState { a, b, c1, d -> c(SetBedOccupationStateArg(a, b, c1, d)) } },
+            any<SetBedOccupationStateArg>()
+        )
+
+        data class ModifyWakeUpPositionArg(
+            val entity: LivingEntity,
+            val sleepingPos: BlockPos,
+            val bedState: BlockState,
+            val wakeUpPos: Vec3?
+        )
+
+        val onModifyWakeUpPosition = Event.createReloadable(EntitySleepEvents.MODIFY_WAKE_UP_POSITION,
+            { c -> EntitySleepEvents.ModifyWakeUpPosition { a, b, c1, d -> c(ModifyWakeUpPositionArg(a, b, c1, d)) } },
+            { events ->
+                { arg: ModifyWakeUpPositionArg ->
+                    var p = arg.wakeUpPos
+                    events.forEach { e -> p = e(arg.copy(wakeUpPos = p)) }
+                    ModifyWakeUpPositionArg(arg.entity, arg.sleepingPos, arg.bedState, p).wakeUpPos
+                }
+            }
+        )
     }
 
     /**
      * Server-side living entity events (allow damage, after damage, allow death, after death, conversion).
      */
     object ServerLivingEntity {
-        val onAllowDamage = Event.createReloadable(ServerLivingEntityEvents.ALLOW_DAMAGE) { allowDamageEvents ->
-            { entity, source, amount ->
-                allowDamageEvents.all { it.allowDamage(entity, source, amount) }
-            }
-        }
+        data class AllowDamageArg(
+            val entity: net.minecraft.world.entity.LivingEntity,
+            val source: net.minecraft.world.damagesource.DamageSource,
+            val amount: Float
+        )
 
-        val onAfterDamage = Event.createReloadable(ServerLivingEntityEvents.AFTER_DAMAGE) { afterDamageEvents ->
-            { entity, source, baseDamageTaken, damageTaken, blocked ->
-                afterDamageEvents.forEach { it.afterDamage(entity, source, baseDamageTaken, damageTaken, blocked) }
-            }
-        }
+        val onAllowDamage = Event.createReloadable(ServerLivingEntityEvents.ALLOW_DAMAGE,
+            { c -> ServerLivingEntityEvents.AllowDamage { a, b, c1 -> c(AllowDamageArg(a, b, c1)) } },
+            all<AllowDamageArg>()
+        )
 
-        val onAllowDeath = Event.createReloadable(ServerLivingEntityEvents.ALLOW_DEATH) { allowDeathEvents ->
-            { entity, damageSource, damageAmount ->
-                allowDeathEvents.all { it.allowDeath(entity, damageSource, damageAmount) }
-            }
-        }
+        data class AfterDamageArg(
+            val entity: net.minecraft.world.entity.LivingEntity,
+            val source: net.minecraft.world.damagesource.DamageSource,
+            val initialDamage: Float,
+            val finalDamage: Float,
+            val handled: Boolean
+        )
 
-        val onAfterDeath = Event.createReloadable(ServerLivingEntityEvents.AFTER_DEATH) { afterDeathEvents ->
-            { entity, damageSource ->
-                afterDeathEvents.forEach { it.afterDeath(entity, damageSource) }
-            }
-        }
+        val onAfterDamage = Event.createReloadable(ServerLivingEntityEvents.AFTER_DAMAGE,
+            { c -> ServerLivingEntityEvents.AfterDamage {a, b, c1, d, e -> c(AfterDamageArg(a, b, c1, d, e))} },
+            unit<AfterDamageArg>()
+        )
 
-        val onMobConversion = Event.createReloadable(ServerLivingEntityEvents.MOB_CONVERSION) { mobConversionEvents ->
-            { previous, converted, conversionContext ->
-                mobConversionEvents.forEach { it.onConversion(previous, converted, conversionContext) }
-            }
-        }
+        data class AllowDeathArg(
+            val entity: net.minecraft.world.entity.LivingEntity,
+            val source: net.minecraft.world.damagesource.DamageSource,
+            val amount: Float
+        )
+
+        val onAllowDeath = Event.createReloadable(ServerLivingEntityEvents.ALLOW_DEATH,
+            { c -> ServerLivingEntityEvents.AllowDeath { a, b, c1 -> c(AllowDeathArg(a, b, c1)) } },
+            all<AllowDeathArg>()
+        )
+
+        data class AfterDeathArg(
+            val entity: net.minecraft.world.entity.LivingEntity,
+            val source: net.minecraft.world.damagesource.DamageSource
+        )
+
+        val onAfterDeath = Event.createReloadable(ServerLivingEntityEvents.AFTER_DEATH,
+            { c -> ServerLivingEntityEvents.AfterDeath {a, b -> c(AfterDeathArg(a, b))} },
+            unit<AfterDeathArg>()
+        )
+
+        data class MobConversionArg(
+            val oldEntity: Mob,
+            val newEntity: Mob,
+            val keepEquipment: ConversionParams
+        )
+
+        val onMobConversion = Event.createReloadable(ServerLivingEntityEvents.MOB_CONVERSION,
+            { c -> ServerLivingEntityEvents.MobConversion {a, b, c1 -> c(MobConversionArg(a, b, c1))} },
+            unit<MobConversionArg>()
+        )
     }
 
     /**
      * Server entity combat events (after killed other entity).
      */
     object ServerEntityCombat {
-        val onAfterKilledOtherEntity = Event.createReloadable(ServerEntityCombatEvents.AFTER_KILLED_OTHER_ENTITY) { afterKilledOtherEntities ->
-            { world, entity, target, damageSource ->
-                afterKilledOtherEntities.forEach { e -> e.afterKilledOtherEntity(world, entity, target, damageSource) }
-            }
-        }
+        data class AfterKilledOtherEntityArg(
+            val world: ServerLevel,
+            val entity: Entity,
+            val killedEntity: LivingEntity,
+            val source: net.minecraft.world.damagesource.DamageSource
+        )
+
+        val onAfterKilledOtherEntity = Event.createReloadable(ServerEntityCombatEvents.AFTER_KILLED_OTHER_ENTITY,
+            { c -> ServerEntityCombatEvents.AfterKilledOtherEntity {a, b, c1, d -> c(AfterKilledOtherEntityArg(a, b, c1, d))} },
+            unit<AfterKilledOtherEntityArg>()
+        )
     }
 
     /**
      * Server entity world change events (after entity/player change world).
      */
     object ServerEntityLevelChange {
-        val onAfterEntityChangeLevel = Event.createReloadable(ServerEntityLevelChangeEvents.AFTER_ENTITY_CHANGE_LEVEL) { afterEntityChangeWorlds ->
-            { entity, newEntity, oldWorld, newWorld ->
-                afterEntityChangeWorlds.forEach { e -> e.afterChangeLevel(entity, newEntity, oldWorld, newWorld) }
-            }
-        }
+        data class AfterEntityChangeLevelArg(
+            val originalEntity: Entity,
+            val destinationEntity: Entity,
+            val originalLevel: ServerLevel,
+            val destinationLevel: ServerLevel
+        )
 
-        val onAfterPlayerChangeLevel = Event.createReloadable(ServerEntityLevelChangeEvents.AFTER_PLAYER_CHANGE_LEVEL) { afterPlayerChangeWorlds ->
-            { player, oldWorld, newWorld ->
-                afterPlayerChangeWorlds.forEach { e -> e.afterChangeLevel(player, oldWorld, newWorld) }
-            }
-        }
+        val onAfterEntityChangeLevel = Event.createReloadable(ServerEntityLevelChangeEvents.AFTER_ENTITY_CHANGE_LEVEL,
+            { c -> ServerEntityLevelChangeEvents.AfterEntityChange {a, b, c1, d -> c(AfterEntityChangeLevelArg(a, b, c1, d))} },
+            unit<AfterEntityChangeLevelArg>()
+        )
+
+        data class AfterPlayerChangeLevelArg(
+            val player: net.minecraft.server.level.ServerPlayer,
+            val originalLevel: ServerLevel,
+            val destinationLevel: ServerLevel
+        )
+
+        val onAfterPlayerChangeLevel = Event.createReloadable(ServerEntityLevelChangeEvents.AFTER_PLAYER_CHANGE_LEVEL,
+             { c -> ServerEntityLevelChangeEvents.AfterPlayerChange {a, b, c1 -> c(AfterPlayerChangeLevelArg(a, b, c1))} },
+             unit<AfterPlayerChangeLevelArg>()
+        )
     }
 
     /**
      * Mob effect events on the server (allow add / before/after add / allow early remove / before/after remove).
      */
     object ServerMobEffect {
-        val onAllowAdd = Event.createReloadable(ServerMobEffectEvents.ALLOW_ADD) { allowAddEvents ->
-            { effectInstance, entity, ctx ->
-                allowAddEvents.all { it.allowAdd(effectInstance, entity, ctx) }
-            }
-        }
+        data class AllowMobEffectArg(
+            val effectInstance: MobEffectInstance,
+            val entity: Entity,
+            val context: EffectEventContext
+        )
 
-        val onBeforeAdd = Event.createReloadable(ServerMobEffectEvents.BEFORE_ADD) { beforeAddEvents ->
-            { effectInstance, entity, ctx ->
-                beforeAddEvents.forEach { it.beforeAdd(effectInstance, entity, ctx) }
-            }
-        }
+        val onAllowAdd = Event.createReloadable(ServerMobEffectEvents.ALLOW_ADD,
+            { c -> ServerMobEffectEvents.AllowAdd { a, b, c1 -> c(AllowMobEffectArg(a, b, c1)) } },
+            all<AllowMobEffectArg>()
+        )
 
-        val onAfterAdd = Event.createReloadable(ServerMobEffectEvents.AFTER_ADD) { afterAddEvents ->
-            { effectInstance, entity, ctx ->
-                afterAddEvents.forEach { it.afterAdd(effectInstance, entity, ctx) }
-            }
-        }
+        data class MobEffectArg(
+            val effectInstance: MobEffectInstance,
+            val entity: Entity,
+            val context: EffectEventContext
+        )
 
-        val onAllowEarlyRemove = Event.createReloadable(ServerMobEffectEvents.ALLOW_EARLY_REMOVE) { allowEarlyRemoveEvents ->
-            { effectInstance, entity, ctx ->
-                allowEarlyRemoveEvents.all { it.allowEarlyRemove(effectInstance, entity, ctx) }
-            }
-        }
+        val onBeforeAdd = Event.createReloadable(ServerMobEffectEvents.BEFORE_ADD,
+            { c -> ServerMobEffectEvents.BeforeAdd {a, b, c1 -> c(MobEffectArg(a, b, c1))} },
+            unit<MobEffectArg>()
+        )
 
-        val onBeforeRemove = Event.createReloadable(ServerMobEffectEvents.BEFORE_REMOVE) { beforeRemoveEvents ->
-            { effectInstance, entity, ctx ->
-                beforeRemoveEvents.forEach { it.beforeRemove(effectInstance, entity, ctx) }
-            }
-        }
+        val onAfterAdd = Event.createReloadable(ServerMobEffectEvents.AFTER_ADD,
+             { c -> ServerMobEffectEvents.AfterAdd {a, b, c1 -> c(MobEffectArg(a, b, c1))} },
+             unit<MobEffectArg>()
+        )
 
-        val onAfterRemove = Event.createReloadable(ServerMobEffectEvents.AFTER_REMOVE) { afterRemoveEvents ->
-            { effectInstance, entity, ctx ->
-                afterRemoveEvents.forEach { it.afterRemove(effectInstance, entity, ctx) }
-            }
-        }
+        val onAllowEarlyRemove = Event.createReloadable(ServerMobEffectEvents.ALLOW_EARLY_REMOVE,
+            { c -> ServerMobEffectEvents.AllowEarlyRemove { a, b, c1 -> c(AllowMobEffectArg(a, b, c1)) } },
+            all<AllowMobEffectArg>()
+        )
+
+        val onBeforeRemove = Event.createReloadable(ServerMobEffectEvents.BEFORE_REMOVE,
+            { c -> ServerMobEffectEvents.BeforeRemove {a, b, c1 -> c(MobEffectArg(a, b, c1))} },
+            unit<MobEffectArg>()
+        )
+
+        val onAfterRemove = Event.createReloadable(ServerMobEffectEvents.AFTER_REMOVE,
+             { c -> ServerMobEffectEvents.AfterRemove {a, b, c1 -> c(MobEffectArg(a, b, c1))} },
+             unit<MobEffectArg>()
+        )
     }
 
     /**
      * Player block break lifecycle events (before/after/canceled).
      */
     object PlayerBlockBreak {
-        val onBefore = Event.createReloadable(PlayerBlockBreakEvents.BEFORE) { befores ->
-            { world, player, pos, state, blockEntity ->
-                befores.all { it.beforeBlockBreak(world, player, pos, state, blockEntity) }
-            }
-        }
+        data class BlockBreakArg(
+            val world: net.minecraft.world.level.Level,
+            val player: net.minecraft.world.entity.player.Player,
+            val pos: net.minecraft.core.BlockPos,
+            val state: net.minecraft.world.level.block.state.BlockState,
+            val blockEntity: net.minecraft.world.level.block.entity.BlockEntity?
+        )
 
-        val onAfter = Event.createReloadable(PlayerBlockBreakEvents.AFTER) { afters ->
-            { world, player, pos, state, blockEntity ->
-                afters.forEach { it.afterBlockBreak(world, player, pos, state, blockEntity) }
-            }
-        }
+        val onBefore = Event.createReloadable(PlayerBlockBreakEvents.BEFORE,
+            { c -> PlayerBlockBreakEvents.Before {a, b, c1, d, e -> c(BlockBreakArg(a, b, c1, d, e))} },
+            all<BlockBreakArg>()
+        )
 
-        val onCanceled = Event.createReloadable(PlayerBlockBreakEvents.CANCELED) { canceleds ->
-            { world, player, pos, state, blockEntity ->
-                canceleds.forEach { it.onBlockBreakCanceled(world, player, pos, state, blockEntity) }
-            }
-        }
+        val onAfter = Event.createReloadable(PlayerBlockBreakEvents.AFTER,
+            { c -> PlayerBlockBreakEvents.After {a, b, c1, d, e -> c(BlockBreakArg(a, b, c1, d, e))} },
+            unit<BlockBreakArg>()
+        )
+
+        val onCanceled = Event.createReloadable(PlayerBlockBreakEvents.CANCELED,
+             { c -> PlayerBlockBreakEvents.Canceled {a, b, c1, d, e -> c(BlockBreakArg(a, b, c1, d, e))} },
+             unit<BlockBreakArg>()
+        )
     }
 
     /**
      * Player pick-item events (from block / from entity).
      */
     object PlayerPickItem {
-        val onPickFromBlock = Event.createReloadable(PlayerPickItemEvents.BLOCK) { listeners ->
-            { player, pos, state, includeData ->
-                listeners.firstNotNullOfOrNull { it.onPickItemFromBlock(player, pos, state, includeData) }
-            }
-        }
+        data class PickFromBlockArg(
+            val player: net.minecraft.server.level.ServerPlayer,
+            val pos: BlockPos,
+            val state: BlockState,
+            val includeData: Boolean
+        )
 
-        val onPickFromEntity = Event.createReloadable(PlayerPickItemEvents.ENTITY) { listeners ->
-            { player, entity, includeData ->
-                listeners.firstNotNullOfOrNull { it.onPickItemFromEntity(player, entity, includeData) }
-            }
-        }
+        val onPickFromBlock = Event.createReloadable(PlayerPickItemEvents.BLOCK,
+            { c -> PlayerPickItemEvents.PickItemFromBlock { a, b, c1, d -> c(PickFromBlockArg(a, b, c1, d)) } },
+            firstNotNullOfOrNull<PickFromBlockArg, ItemStack>()
+        )
+
+        data class PickFromEntityArg(
+            val player: net.minecraft.server.level.ServerPlayer,
+            val entity: Entity,
+            val includeData: Boolean
+        )
+
+        val onPickFromEntity = Event.createReloadable(PlayerPickItemEvents.ENTITY,
+             { c -> PlayerPickItemEvents.PickItemFromEntity { a, b, c1 -> c(PickFromEntityArg(a, b, c1)) } },
+             firstNotNullOfOrNull<PickFromEntityArg, ItemStack>()
+        )
     }
 
     /**
      * Default item component modification events.
      */
     object DefaultItemComponent {
-        val onModify = Event.createReloadable(DefaultItemComponentEvents.MODIFY) { modifiers ->
-            { context ->
-                modifiers.forEach { it.modify(context) }
-            }
-        }
+        data class ModifyContextArg(val context: DefaultItemComponentEvents.ModifyContext)
+
+        val onModify = Event.createReloadable(DefaultItemComponentEvents.MODIFY,
+            { c -> DefaultItemComponentEvents.ModifyCallback {c(ModifyContextArg(it))} },
+            unit<ModifyContextArg>()
+        )
     }
 
     /**
      * Enchantment related events (allow enchanting with TriState semantics, modify).
      */
     object Enchantment {
-        val onAllowEnchanting = Event.createReloadable(EnchantmentEvents.ALLOW_ENCHANTING) { allowEnchantings ->
-            { enchantment, target, context ->
-                var result = TriState.DEFAULT
-                for (listener in allowEnchantings) {
-                    val r = listener.allowEnchanting(enchantment, target, context)
-                    if (r != TriState.DEFAULT) {
-                        result = r
-                        break
-                    }
-                }
-                result
-            }
-        }
+        data class AllowEnchantingArg(
+            val enchantment: Holder<net.minecraft.world.item.enchantment.Enchantment>,
+            val target: ItemStack,
+            val context: EnchantingContext
+        )
 
-        val onModify = Event.createReloadable(EnchantmentEvents.MODIFY) { modifiers ->
-            { key, builder, source ->
-                modifiers.forEach { it.modify(key, builder, source) }
-            }
-        }
+        val onAllowEnchanting = Event.createReloadable(EnchantmentEvents.ALLOW_ENCHANTING,
+            { c -> EnchantmentEvents.AllowEnchanting { a, b, c1 -> c(AllowEnchantingArg(a, b, c1)) } },
+            triState<AllowEnchantingArg>()
+        )
+
+        data class ModifyEnchantmentArg(
+            val key: ResourceKey<net.minecraft.world.item.enchantment.Enchantment>,
+            val builder: Builder,
+            val enchantments: EnchantmentSource
+        )
+
+        val onModify = Event.createReloadable(EnchantmentEvents.MODIFY,
+            { c -> EnchantmentEvents.Modify {a, b, c1 -> c(ModifyEnchantmentArg(a, b, c1))} },
+            unit<ModifyEnchantmentArg>()
+        )
     }
 
     /**
      * Server-side message events (chat/game/command allow and handlers).
      */
     object ServerMessage {
-        val onAllowChatMessage = Event.createReloadable(ServerMessageEvents.ALLOW_CHAT_MESSAGE) { handlers ->
-            { message, sender, params ->
-                handlers.all { it.allowChatMessage(message, sender, params) }
-            }
-        }
+        data class AllowChatMessageArg(
+            val message: PlayerChatMessage,
+            val sender: net.minecraft.server.level.ServerPlayer,
+            val params: Bound
+        )
 
-        val onAllowGameMessage = Event.createReloadable(ServerMessageEvents.ALLOW_GAME_MESSAGE) { handlers ->
-            { server, message, overlay ->
-                handlers.all { it.allowGameMessage(server, message, overlay) }
-            }
-        }
+        val onAllowChatMessage = Event.createReloadable(ServerMessageEvents.ALLOW_CHAT_MESSAGE,
+            { c -> ServerMessageEvents.AllowChatMessage { a, b, c1 -> c(AllowChatMessageArg(a, b, c1)) } },
+            all<AllowChatMessageArg>()
+        )
 
-        val onAllowCommandMessage = Event.createReloadable(ServerMessageEvents.ALLOW_COMMAND_MESSAGE) { handlers ->
-            { message, source, params ->
-                handlers.all { it.allowCommandMessage(message, source, params) }
-            }
-        }
+        data class AllowGameMessageArg(
+            val server: MinecraftServer,
+            val message: Component,
+            val overlay: Boolean
+        )
 
-        val onChatMessage = Event.createReloadable(ServerMessageEvents.CHAT_MESSAGE) { handlers ->
-            { message, sender, params ->
-                handlers.forEach { it.onChatMessage(message, sender, params) }
-            }
-        }
+        val onAllowGameMessage = Event.createReloadable(ServerMessageEvents.ALLOW_GAME_MESSAGE,
+            { c -> ServerMessageEvents.AllowGameMessage { a, b, c1 -> c(AllowGameMessageArg(a, b, c1)) } },
+            all<AllowGameMessageArg>()
+        )
 
-        val onGameMessage = Event.createReloadable(ServerMessageEvents.GAME_MESSAGE) { handlers ->
-            { server, message, overlay ->
-                handlers.forEach { it.onGameMessage(server, message, overlay) }
-            }
-        }
+        data class AllowCommandMessageArg(
+            val message: PlayerChatMessage,
+            val source: CommandSourceStack,
+            val params: Bound
+        )
 
-        val onCommandMessage = Event.createReloadable(ServerMessageEvents.COMMAND_MESSAGE) { handlers ->
-            { message, source, params ->
-                handlers.forEach { it.onCommandMessage(message, source, params) }
-            }
-        }
+        val onAllowCommandMessage = Event.createReloadable(ServerMessageEvents.ALLOW_COMMAND_MESSAGE,
+            { c -> ServerMessageEvents.AllowCommandMessage { a, b, c1 -> c(AllowCommandMessageArg(a, b, c1)) } },
+            all<AllowCommandMessageArg>()
+        )
+
+        data class ChatMessageArg(
+            val message: PlayerChatMessage,
+            val sender: net.minecraft.server.level.ServerPlayer,
+            val params: Bound
+        )
+
+        val onChatMessage = Event.createReloadable(ServerMessageEvents.CHAT_MESSAGE,
+            { c -> ServerMessageEvents.ChatMessage {a, b, c1 -> c(ChatMessageArg(a, b, c1))} },
+            unit<ChatMessageArg>()
+        )
+
+        data class GameMessageArg(
+            val server: MinecraftServer,
+            val message: Component,
+            val overlay: Boolean
+        )
+
+        val onGameMessage = Event.createReloadable(ServerMessageEvents.GAME_MESSAGE,
+             { c -> ServerMessageEvents.GameMessage {a, b, c1 -> c(GameMessageArg(a, b, c1))} },
+             unit<GameMessageArg>()
+        )
+
+        data class CommandMessageArg(
+            val message: PlayerChatMessage,
+            val source: CommandSourceStack,
+            val params: Bound
+        )
+
+        val onCommandMessage = Event.createReloadable(ServerMessageEvents.COMMAND_MESSAGE,
+             { c -> ServerMessageEvents.CommandMessage {a, b, c1 -> c(CommandMessageArg(a, b, c1))} },
+             unit<CommandMessageArg>()
+        )
     }
 }
