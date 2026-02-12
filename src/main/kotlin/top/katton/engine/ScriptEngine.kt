@@ -1,7 +1,5 @@
 package top.katton.engine
 
-import org.jetbrains.kotlin.mainKts.Import
-import java.io.File
 import kotlin.script.experimental.api.*
 import kotlin.script.experimental.host.toScriptSource
 import kotlin.script.experimental.jvm.dependenciesFromCurrentContext

@@ -36,18 +36,14 @@ loom {
 }
 
 dependencies {
-    include(implementation('org.jetbrains.kotlin:kotlin-script-runtime'))
-    include(implementation('org.jetbrains.kotlin:kotlin-reflect'))
-    include(implementation('org.jetbrains.kotlin:kotlin-scripting-common'))
-    include(implementation('org.jetbrains.kotlin:kotlin-scripting-jvm'))
-    include(implementation('org.jetbrains.kotlin:kotlin-scripting-jvm-host'))
-    include(implementation('org.jetbrains.kotlin:kotlin-scripting-compiler-embeddable'))
-    include(implementation('org.jetbrains.kotlin:kotlin-scripting-compiler-impl-embeddable'))
-    include(implementation('org.jetbrains.kotlin:kotlin-compiler-embeddable'))
-    include(implementation('org.jetbrains.kotlin:kotlin-main-kts'))
-    include(implementation('org.jetbrains.kotlin:kotlin-scripting-dependencies'))
-    include(implementation('org.jetbrains.kotlin:kotlin-scripting-dependencies-maven'))
-	include(implementation('org.jetbrains.kotlin:kotlin-metadata-jvm'))
+	include(implementation('org.jetbrains.kotlin:kotlin-script-runtime'))
+	include(implementation('org.jetbrains.kotlin:kotlin-reflect'))
+	include(implementation('org.jetbrains.kotlin:kotlin-scripting-common'))
+	include(implementation('org.jetbrains.kotlin:kotlin-scripting-jvm'))
+	include(implementation('org.jetbrains.kotlin:kotlin-scripting-jvm-host'))
+	include(implementation('org.jetbrains.kotlin:kotlin-scripting-compiler-embeddable'))
+	include(implementation('org.jetbrains.kotlin:kotlin-scripting-compiler-impl-embeddable'))
+	include(implementation('org.jetbrains.kotlin:kotlin-compiler-embeddable'))
 	include(implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm:1.8.0"))
 	include(implementation("org.jetbrains.kotlinx:kotlinx-coroutines-jdk8:1.8.0"))
 
