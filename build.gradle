@@ -34,22 +34,22 @@ loom {
 	accessWidenerPath = file("src/main/resources/katton.accesswidener")
 
 }
-//
-//sourceSets {
-//    test {
-//        java.srcDirs += ['Example/datapacks']
-//        kotlin.srcDirs += ['Example/datapacks']
-//        resources.srcDirs += ['Example/datapacks']
-//    }
-//}
 
 dependencies {
-	implementation 'org.jetbrains.kotlin:kotlin-scripting-common'
-	implementation 'org.jetbrains.kotlin:kotlin-scripting-jvm'
-	implementation 'org.jetbrains.kotlin:kotlin-scripting-jvm-host'
-	implementation 'org.jetbrains.kotlin:kotlin-scripting-dependencies'
-	implementation 'org.jetbrains.kotlin:kotlin-scripting-dependencies-maven'
-    compileOnly 'org.jetbrains.kotlin:kotlin-main-kts'
+    include(implementation('org.jetbrains.kotlin:kotlin-script-runtime'))
+    include(implementation('org.jetbrains.kotlin:kotlin-reflect'))
+    include(implementation('org.jetbrains.kotlin:kotlin-scripting-common'))
+    include(implementation('org.jetbrains.kotlin:kotlin-scripting-jvm'))
+    include(implementation('org.jetbrains.kotlin:kotlin-scripting-jvm-host'))
+    include(implementation('org.jetbrains.kotlin:kotlin-scripting-compiler-embeddable'))
+    include(implementation('org.jetbrains.kotlin:kotlin-scripting-compiler-impl-embeddable'))
+    include(implementation('org.jetbrains.kotlin:kotlin-compiler-embeddable'))
+    include(implementation('org.jetbrains.kotlin:kotlin-main-kts'))
+    include(implementation('org.jetbrains.kotlin:kotlin-scripting-dependencies'))
+    include(implementation('org.jetbrains.kotlin:kotlin-scripting-dependencies-maven'))
+	include(implementation('org.jetbrains.kotlin:kotlin-metadata-jvm'))
+	include(implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm:1.8.0"))
+	include(implementation("org.jetbrains.kotlinx:kotlinx-coroutines-jdk8:1.8.0"))
 
 	// To change the versions see the gradle.properties file
 	minecraft "com.mojang:minecraft:${project.minecraft_version}"
@@ -57,7 +57,6 @@ dependencies {
 
 	// Fabric API. This is technically optional, but you probably want it anyway.
 	implementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
-	implementation "net.fabricmc:fabric-language-kotlin:${project.fabric_kotlin_version}"
 }
 
 processResources {

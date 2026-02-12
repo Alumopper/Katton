@@ -32,25 +32,24 @@ class ScriptEngine {
         jvm {
             dependenciesFromCurrentContext(wholeClasspath = true)
         }
-        defaultImports(Import::class)
-        refineConfiguration {
-            onAnnotations(Import::class) { context: ScriptConfigurationRefinementContext ->
-                val annotations = context.collectedData?.get(ScriptCollectedData.foundAnnotations)
-                    ?.filter { it.annotationClass == Import::class }
-                    ?: return@onAnnotations context.compilationConfiguration.asSuccess()
-
-                val sources = annotations.flatMap { (it as Import).paths.asList() }
-                    .mapNotNull { path ->
-                        File(path).takeIf { it.exists() }?.toScriptSource()
-                }
-
-                ScriptCompilationConfiguration(context.compilationConfiguration) {
-                    if (sources.isNotEmpty()) {
-                        importScripts.append(sources)
-                    }
-                }.asSuccess()
-            }
-        }
+//        refineConfiguration {
+//            onAnnotations(Import::class) { context: ScriptConfigurationRefinementContext ->
+//                val annotations = context.collectedData?.get(ScriptCollectedData.foundAnnotations)
+//                    ?.filter { it.annotationClass == Import::class }
+//                    ?: return@onAnnotations context.compilationConfiguration.asSuccess()
+//
+//                val sources = annotations.flatMap { (it as Import).paths.asList() }
+//                    .mapNotNull { path ->
+//                        File(path).takeIf { it.exists() }?.toScriptSource()
+//                }
+//
+//                ScriptCompilationConfiguration(context.compilationConfiguration) {
+//                    if (sources.isNotEmpty()) {
+//                        importScripts.append(sources)
+//                    }
+//                }.asSuccess()
+//            }
+//        }
     }
 
     // Evaluation configuration: enable sharing of script instances if needed.

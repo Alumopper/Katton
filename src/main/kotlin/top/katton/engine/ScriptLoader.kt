@@ -4,6 +4,9 @@ import com.google.common.collect.ImmutableMap
 import com.google.common.collect.Maps
 import com.mojang.datafixers.util.Pair
 import com.mojang.logging.LogUtils
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.asCoroutineDispatcher
+import kotlinx.coroutines.future.future
 import kotlinx.coroutines.runBlocking
 import net.minecraft.core.Registry
 import net.minecraft.core.registries.Registries
@@ -77,13 +80,46 @@ class ScriptLoader : PreparableReloadListener{
 
     private fun readScript(resource: Resource): String {
         try {
-            return resource.openAsReader().use {
-                it.readLines().filter { line -> !line.startsWith("@file:") }
-                    .joinToString("\n")
+            return resource.openAsReader().use { reader ->
+                val lines = reader.readLines()
+                stripTopLevelFileAnnotations(lines).joinToString("\n")
             }
         } catch(e: Exception) {
             throw CompletionException(e)
         }
+    }
+
+    private fun stripTopLevelFileAnnotations(lines: List<String>): List<String> {
+        if (lines.isEmpty()) return lines
+
+        val result = mutableListOf<String>()
+        var index = 0
+
+        while (index < lines.size) {
+            val rawLine = lines[index]
+            val trimmed = rawLine.trimStart()
+
+            if (trimmed.isEmpty()) {
+                index++
+                continue
+            }
+
+            if (!trimmed.startsWith("@file:")) {
+                result.addAll(lines.subList(index, lines.size))
+                return result
+            }
+
+            var depth = trimmed.count { it == '(' } - trimmed.count { it == ')' }
+            index++
+            while (depth > 0 && index < lines.size) {
+                val line = lines[index]
+                depth += line.count { it == '(' }
+                depth -= line.count { it == ')' }
+                index++
+            }
+        }
+
+        return result
     }
 
     private fun processScriptId(rawId: Identifier): Identifier {
@@ -117,15 +153,15 @@ class ScriptLoader : PreparableReloadListener{
                     val id1 = entry.key
                     val rawId = lister.fileToId(id1)
                     val id2 = idProcessor(rawId)
-                    map2[id2] = CompletableFuture.supplyAsync({
+                    val scope = CoroutineScope(executor.asCoroutineDispatcher())
+
+                    map2[id2] = scope.future {
                         val script = readScript(entry.value)
                         LOGGER.info("Loading script $id2")
-                        val result = runBlocking {
-                            engine.compile(id2.toString(), script)
-                        }.valueOrThrow()
+                        val result = engine.compile(id2.toString(), script).valueOrThrow()
                         LOGGER.info("Loaded script $id2")
                         result
-                    }, executor)
+                    }
                 }
                 val completableFutures = map2.values.toTypedArray()
                 CompletableFuture.allOf(*completableFutures)
