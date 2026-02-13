@@ -72,9 +72,9 @@ object Katton : ModInitializer {
 			//clear event registrations
 			Event.fabricEventRegistry.values.forEach { it.forEach { e -> e.clear() } }
 			//if reload success, invoke main scripts in every namespace
-			scriptLoader.mainScript.values.forEach {
+			scriptLoader.mainScript.forEach { (id, script) ->
 				runBlocking {
-					scriptLoader.engine.execute(it)
+					scriptLoader.engine.execute(script, id.toString())
 				}
 			}
 		}

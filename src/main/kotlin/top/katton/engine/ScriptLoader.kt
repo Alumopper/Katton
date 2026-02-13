@@ -22,6 +22,8 @@ import java.util.concurrent.CompletableFuture
 import java.util.concurrent.CompletionException
 import java.util.concurrent.Executor
 import kotlin.script.experimental.api.CompiledScript
+import kotlin.script.experimental.api.ResultWithDiagnostics
+import kotlin.script.experimental.api.ScriptDiagnostic
 import kotlin.script.experimental.api.valueOrThrow
 
 class ScriptLoader : PreparableReloadListener{
@@ -31,6 +33,8 @@ class ScriptLoader : PreparableReloadListener{
         {id, bl -> getScript(id)}, Registries.tagsDirPath(TYPE_KEY)
     )
     var tags: Map<Identifier, List<CompiledScript>> = mapOf()
+    @Volatile
+    private var latestResourceManager: ResourceManager? = null
 
     fun getScript(identifier: Identifier): Optional<out CompiledScript?> {
         return Optional.ofNullable(scripts[identifier])
@@ -46,6 +50,7 @@ class ScriptLoader : PreparableReloadListener{
     ): CompletableFuture<Void> {
         INSTANCE = this
         val manager = sharedState.resourceManager()
+        latestResourceManager = manager
         val tagProcessor = CompletableFuture.supplyAsync(
     { this.tagsLoader.load(manager) }, executor
         )
@@ -92,7 +97,7 @@ class ScriptLoader : PreparableReloadListener{
     private fun stripTopLevelFileAnnotations(lines: List<String>): List<String> {
         if (lines.isEmpty()) return lines
 
-        val result = mutableListOf<String>()
+        val result = lines.toMutableList()
         var index = 0
 
         while (index < lines.size) {
@@ -105,16 +110,17 @@ class ScriptLoader : PreparableReloadListener{
             }
 
             if (!trimmed.startsWith("@file:")) {
-                result.addAll(lines.subList(index, lines.size))
-                return result
+                break
             }
 
             var depth = trimmed.count { it == '(' } - trimmed.count { it == ')' }
+            result[index] = ""
             index++
             while (depth > 0 && index < lines.size) {
                 val line = lines[index]
                 depth += line.count { it == '(' }
                 depth -= line.count { it == ')' }
+                result[index] = ""
                 index++
             }
         }
@@ -158,7 +164,13 @@ class ScriptLoader : PreparableReloadListener{
                     map2[id2] = scope.future {
                         val script = readScript(entry.value)
                         LOGGER.info("Loading script $id2")
-                        val result = engine.compile(id2.toString(), script).valueOrThrow()
+                        val debugSourceName = "${id1.namespace}/${id1.path}"
+                        val result = engine.compile(
+                            id2.toString(),
+                            script,
+                            debugSourceName,
+                            DEBUG_FORCE_RECOMPILE_ON_RELOAD
+                        ).valueOrThrow()
                         LOGGER.info("Loaded script $id2")
                         result
                     }
@@ -169,9 +181,41 @@ class ScriptLoader : PreparableReloadListener{
             }
     }
 
+    suspend fun compileScriptNow(identifier: Identifier, debugSession: Boolean = false): ResultWithDiagnostics<CompiledScript> {
+        val manager = latestResourceManager ?: return ResultWithDiagnostics.Failure(
+            listOf(ScriptDiagnostic(-1, "Resource manager is not ready. Run /reload once before debug compile."))
+        )
+
+        val ktsId = Identifier.fromNamespaceAndPath(identifier.namespace, "${Registries.elementsDirPath(TYPE_KEY)}/${identifier.path}.kts")
+        val ktId = Identifier.fromNamespaceAndPath(identifier.namespace, "${Registries.elementsDirPath(TYPE_KEY)}/${identifier.path}.kt")
+
+        val ktsResource = manager.getResource(ktsId).orElse(null)
+        val ktResource = manager.getResource(ktId).orElse(null)
+        val resource = ktsResource ?: ktResource
+        val matchedResourceId = if (ktsResource != null) ktsId else if (ktResource != null) ktId else null
+
+        if (resource == null || matchedResourceId == null) {
+            return ResultWithDiagnostics.Failure(
+                listOf(ScriptDiagnostic(-1, "Script not found: $identifier (.kts/.kt)"))
+            )
+        }
+
+        val source = readScript(resource)
+        val sourceName = "${matchedResourceId.namespace}/${matchedResourceId.path}"
+        val compileName = if (debugSession) "$identifier#debug" else identifier.toString()
+
+        return engine.compile(
+            compileName,
+            source,
+            sourceName,
+            forceRecompile = debugSession
+        )
+    }
+
     companion object {
         var INSTANCE: ScriptLoader? = null
         private val LOGGER = LogUtils.getLogger()
+        private val DEBUG_FORCE_RECOMPILE_ON_RELOAD = java.lang.Boolean.getBoolean("katton.debug")
         val TYPE_KEY = ResourceKey.createRegistryKey<Registry<CompiledScript>>(
             Identifier.withDefaultNamespace("scripts")
         )

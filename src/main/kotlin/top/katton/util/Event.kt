@@ -3,35 +3,75 @@ package top.katton.util
 typealias FabricEvent<T> = net.fabricmc.fabric.api.event.Event<T>
 
 abstract class Event<T> {
-    protected val handlers = mutableListOf<T>()
+    private data class HandlerEntry<T>(
+        val owner: String?,
+        val handler: T
+    )
+
+    protected val handlers = mutableListOf<HandlerEntry<T>>()
 
     fun register(handler: T) {
-        handlers.add(handler)
+        handlers.add(HandlerEntry(currentScriptOwner.get(), handler))
     }
 
     operator fun plusAssign(handler: T) {
-        handlers.add(handler)
+        handlers.add(HandlerEntry(currentScriptOwner.get(), handler))
     }
 
     operator fun minusAssign(handler: T) {
-        handlers.remove(handler)
+        handlers.removeIf { it.handler == handler }
     }
 
     fun remove(handler: T) {
-        handlers.remove(handler)
+        handlers.removeIf { it.handler == handler }
     }
 
     fun clear() {
         handlers.clear()
     }
 
+    fun clearByOwner(owner: String) {
+        handlers.removeIf { it.owner == owner }
+    }
+
+    protected fun handlerSnapshot(): List<T> {
+        return handlers.map { it.handler }
+    }
+
     abstract fun invoker(): T
 
     companion object {
+        private val currentScriptOwner = ThreadLocal<String?>()
+
+        fun <R> withScriptOwner(owner: String?, action: () -> R): R {
+            if (owner == null) return action()
+            val previous = currentScriptOwner.get()
+            currentScriptOwner.set(owner)
+            return try {
+                action()
+            } finally {
+                if (previous == null) {
+                    currentScriptOwner.remove()
+                } else {
+                    currentScriptOwner.set(previous)
+                }
+            }
+        }
+
+        fun clearHandlersByOwner(owner: String) {
+            fabricEventRegistry.values.forEach { eventList ->
+                eventList.forEach { event ->
+                    event.clearByOwner(owner)
+                }
+            }
+        }
+
+        fun currentScriptOwner(): String? = currentScriptOwner.get()
+
         fun <T : Any, U: Any> createReloadable(event: FabricEvent<U>, adapter: (T) -> U, callback: (List<T>) -> T): Event<T> {
             val e = object : Event<T>() {
                 override fun invoker(): T {
-                    return callback(handlers)
+                    return callback(handlerSnapshot())
                 }
             }
 

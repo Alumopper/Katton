@@ -59,3 +59,35 @@ You can modify scripts and apply changes instantly using the `/reload` command, 
 When using an IDE like IntelliJ IDEA, you may encounter unresolved references for Minecraft and Fabric API classes because the IDE is unaware of the game's runtime environment. To resolve this and enable autocomplete, you may set up a basic Gradle project.
 
 You can find an example katton project with the necessary dependencies and configurations in the [Katton-Example](https://github.com/Alumopper/Katton-Example)。
+
+### Script Debugging (Remote)
+
+Katton supports debugging datapack Kotlin scripts (`.kts`) through JVM remote debugging.
+
+1. Start Minecraft (or dedicated server) with a debug agent, for example:
+
+    ```text
+    -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005
+    ```
+
+2. In IntelliJ IDEA, create an **Attach to remote JVM** configuration and connect to the same host/port.
+3. Set breakpoints in the actual datapack script file (for example `data/<namespace>/scripts/*.kts`).
+4. Trigger script execution with `/script <namespace:script_name>` (or `/reload` then execute again).
+
+For active breakpoint debugging, you can also execute scripts with:
+
+`/script debug <namespace:script_name>`
+
+This debug path compiles on-demand with cache bypass, so breakpoints can be applied without making meaningless source edits.
+
+If you want `/reload` to always force recompilation while debugging, add JVM option:
+
+`-Dkatton.debug=true`
+
+> [!NOTE]
+>
+> - Attach success does not guarantee script breakpoint hit; source mapping must match the runtime-compiled script source name.
+> - Katton now preserves line numbers when processing top-level `@file:` annotations (annotation lines are blanked instead of removed), so breakpoints are less likely to shift.
+> - Use `/script debug <id>` for iterative debugging when you do not want to run full `/reload`.
+> - When the same script is executed again, Katton replaces event handlers previously registered by that script owner, preventing duplicate registrations during reload/debug iterations.
+> - If breakpoints still do not hit, restart the target JVM process and re-attach (to avoid stale classes from previous runs).
