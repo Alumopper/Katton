@@ -11,6 +11,7 @@ import net.minecraft.network.chat.Component
 import net.minecraft.resources.Identifier
 import top.katton.Katton
 import top.katton.engine.ScriptLoader
+import kotlin.script.experimental.api.valueOrThrow
 import kotlin.script.experimental.jvm.util.isError
 
 object ScriptCommand {
@@ -43,13 +44,10 @@ object ScriptCommand {
                         }
                     )
                 )
-                    })
         )
     }
 
     fun executeScript(source: CommandSourceStack, identifier: Identifier, loader: ScriptLoader): Int {
-        val server = source.server
-
         //找脚本
         val script = loader.getScript(identifier)
         if (script.isEmpty) {

@@ -3,7 +3,7 @@ package top.katton.util
 typealias FabricEvent<T> = net.fabricmc.fabric.api.event.Event<T>
 
 abstract class Event<T> {
-    private data class HandlerEntry<T>(
+    data class HandlerEntry<T>(
         val owner: String?,
         val handler: T
     )
