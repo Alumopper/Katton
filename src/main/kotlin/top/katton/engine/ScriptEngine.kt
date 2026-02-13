@@ -6,6 +6,7 @@ import kotlin.script.experimental.jvm.dependenciesFromCurrentContext
 import kotlin.script.experimental.jvm.jvm
 import kotlin.script.experimental.jvmhost.BasicJvmScriptingHost
 import kotlin.script.experimental.jvmhost.JvmScriptCompiler
+import top.katton.util.Event
 
 /**
  * ScriptEngine compiles and executes Kotlin script sources.
@@ -65,22 +66,31 @@ class ScriptEngine {
      * @param sourceCode The Kotlin script source text.
      * @return ResultWithDiagnostics wrapping the compiled script or diagnostics on failure.
      */
-    suspend fun compile(name: String, sourceCode: String): ResultWithDiagnostics<CompiledScript>{
+    suspend fun compile(
+        name: String,
+        sourceCode: String,
+        sourceName: String = name,
+        forceRecompile: Boolean = false
+    ): ResultWithDiagnostics<CompiledScript>{
         // Calculate the hash of the source to detect changes.
         val sourceHash = sourceCode.hashCode()
-        
-        // Check cache: only reuse compiled script when both name and source hash match.
-        compiledCache[name]?.let { (cachedHash, compiled) ->
-            if (cachedHash == sourceHash) {
-                return ResultWithDiagnostics.Success(compiled)
+
+        if (!forceRecompile) {
+            // Check cache: only reuse compiled script when both name and source hash match.
+            compiledCache[name]?.let { (cachedHash, compiled) ->
+                if (cachedHash == sourceHash) {
+                    return ResultWithDiagnostics.Success(compiled)
+                }
             }
         }
 
-        val source = sourceCode.toScriptSource(name)
+        val source = sourceCode.toScriptSource(sourceName)
 
         return compiler(source, baseConfig).onSuccess { compiled ->
             // Save compiled script together with its source hash for future reuse.
-            compiledCache[name] = sourceHash to compiled
+            if (!forceRecompile) {
+                compiledCache[name] = sourceHash to compiled
+            }
             ResultWithDiagnostics.Success(compiled)
         }
     }
@@ -114,8 +124,13 @@ class ScriptEngine {
      * @return ResultWithDiagnostics containing EvaluationResult or diagnostics on failure.
      */
     suspend fun execute(
-        compiled: CompiledScript
+        compiled: CompiledScript,
+        scriptOwner: String? = null
     ): ResultWithDiagnostics<EvaluationResult> {
+        if (scriptOwner != null) {
+            Event.clearHandlersByOwner(scriptOwner)
+        }
+
         // Use cached class to avoid repeated getClass() calls for the same compiled script.
         val scriptClass = classCache.getOrPut(compiled) {
             // Load the class using the evaluation configuration; return any failure immediately.
@@ -129,15 +144,17 @@ class ScriptEngine {
             // Try to find a Kotlin constructor (may have parameter metadata).
             val ctor = scriptClass.constructors.firstOrNull()
             
-            val instance = if (ctor != null) {
-                // Prefer calling the Kotlin constructor without parameters.
-                ctor.call()
-            } else {
-                // Fallback to Java reflection: get the first Java constructor and call it.
-                // This handles environments where Kotlin reflection metadata is not available.
-                val javaCtor = scriptClass.java.constructors.firstOrNull()
-                    ?: throw IllegalStateException("No constructor found for script class ${scriptClass.simpleName}")
-                javaCtor.newInstance()
+            val instance = Event.withScriptOwner(scriptOwner) {
+                if (ctor != null) {
+                    // Prefer calling the Kotlin constructor without parameters.
+                    ctor.call()
+                } else {
+                    // Fallback to Java reflection: get the first Java constructor and call it.
+                    // This handles environments where Kotlin reflection metadata is not available.
+                    val javaCtor = scriptClass.java.constructors.firstOrNull()
+                        ?: throw IllegalStateException("No constructor found for script class ${scriptClass.simpleName}")
+                    javaCtor.newInstance()
+                }
             }
 
             // Wrap the created instance as the script evaluation result.
