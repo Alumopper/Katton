@@ -10,10 +10,13 @@ import net.minecraft.server.MinecraftServer
 import net.minecraft.server.level.ServerLevel
 import net.minecraft.server.level.ServerPlayer
 import net.minecraft.server.players.PlayerList
+import net.minecraft.world.Container
 import net.minecraft.world.Difficulty
 import net.minecraft.world.entity.Entity
 import net.minecraft.world.entity.EntityType
+import net.minecraft.world.entity.EquipmentSlot
 import net.minecraft.world.entity.LivingEntity
+import net.minecraft.world.entity.SlotAccess
 import net.minecraft.world.entity.ai.attributes.Attribute
 import net.minecraft.world.entity.ai.attributes.AttributeModifier
 import net.minecraft.world.entity.player.Inventory
@@ -30,6 +33,7 @@ import net.minecraft.world.scores.Objective
 import net.minecraft.world.scores.ScoreHolder
 import net.minecraft.world.scores.Scoreboard
 import java.util.UUID
+import java.util.function.IntFunction
 
 @Suppress("unused")
 object KattonMC {
@@ -221,8 +225,71 @@ object KattonMC {
         this.add(itemStack)
     }
 
+    operator fun Container.get(slot: KattonItemCollection.KattonItemSlot): SlotAccess? =
+        getSlot(slot.index)
+    operator fun Container.get(slot: List<KattonItemCollection.KattonItemSlot>): List<SlotAccess?> =
+        slot.map { this[it] }
+    class KattonItemCollection(){
+
+        open class KattonItemSlot(
+            val index: Int
+        )
+        interface KattonItemSlotGroup{
+            val any: List<KattonItemSlot>
+        }
+        open class KattonItemSlotList(
+            val offset: Int,
+            size: Int
+        ): Iterable<KattonItemSlot>, KattonItemSlotGroup {
+            private val delegate: MutableList<KattonItemSlot> = mutableListOf()
+            override val any: List<KattonItemSlot>
+                get() = delegate
+
+            init {
+                repeat(size) { i ->
+                    delegate.add(KattonItemSlot(offset + i))
+                }
+            }
+
+            operator fun get(index: Int): KattonItemSlot = delegate[index % delegate.size]
+
+            override fun iterator(): MutableIterator<KattonItemSlot> = delegate.iterator()
+
+        }
+        object Contents: KattonItemSlot(0)
+        object Container: KattonItemSlotList(0, 54)
+        object Hotbar: KattonItemSlotList(0, 9)
+        object Inventory: KattonItemSlotList(9, 27)
+        object EnderChest: KattonItemSlotList(200, 27)
+        object MobInventory: KattonItemSlotList(300, 8)
+        object Horse: KattonItemSlotList(500, 15)
+        
+        object Weapon: KattonItemSlotGroup {
+            object MainHand: KattonItemSlot(EquipmentSlot.MAINHAND.getIndex(98))
+            object OffHand: KattonItemSlot(EquipmentSlot.OFFHAND.getIndex(98))
+            override val any: List<KattonItemSlot> = listOf(MainHand, OffHand)
+        }
+
+        object Armor: KattonItemSlotGroup {
+            object Head: KattonItemSlot(EquipmentSlot.HEAD.getIndex(100))
+            object Chest: KattonItemSlot(EquipmentSlot.CHEST.getIndex(100))
+            object Legs: KattonItemSlot(EquipmentSlot.LEGS.getIndex(100))
+            object Feet: KattonItemSlot(EquipmentSlot.FEET.getIndex(100))
+            object Body: KattonItemSlot(EquipmentSlot.BODY.getIndex(105))
+            override val any: List<KattonItemSlot> = listOf(Head, Chest, Legs, Feet, Body)
+        }
+
+        object Saddle: KattonItemSlot(EquipmentSlot.SADDLE.getIndex(106))
+        object HorseChest: KattonItemSlot(499)
+        object PlayerCursor: KattonItemSlot(499)
+        object PlayerCrafting: KattonItemSlotList(500, 4)
+
+
+    }
+
+    fun Player.addItem(item: Item, amount: Int) = giveItem(this, ItemStack(item, amount))
+    // 已经提供了 addItem(itemStack: ItemStack)
     fun Player.hasItem(item: Item) = hasItem(this, item)
-    // TODO: 可能有问题，应该要找所有的物品才对
     fun Player.removeItem(item: Item, amount: Int) = removeItem(this, item, amount)
 
     class KattonLevelBlockCollection(

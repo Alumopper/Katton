@@ -552,6 +552,11 @@ fun giveItem(player: Player, itemStack: ItemStack): Boolean {
     return player.inventory.add(itemStack)
 }
 
+
+fun hasItem(player: Player, item: Item): Boolean {
+    return player.inventory.hasAnyOf(setOf(item))
+}
+
 /**
  * Find the slot index of an item in player's inventory.
  *
@@ -559,7 +564,7 @@ fun giveItem(player: Player, itemStack: ItemStack): Boolean {
  * @param item item type to find
  * @return slot index or -1 if not found
  */
-fun hasItem(player: Player, item: Item): Int {
+fun findItem(player: Player, item: Item): Int {
     return player.inventory.findSlotMatchingItem(ItemStack(item))
 }
 
