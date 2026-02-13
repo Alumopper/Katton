@@ -2,9 +2,6 @@
 	"required": true,
 	"package": "top.katton.mixin",
 	"compatibilityLevel": "JAVA_21",
-	"mixins": [
-		"ExampleMixin"
-	],
 	"injectors": {
 		"defaultRequire": 1
 	},
