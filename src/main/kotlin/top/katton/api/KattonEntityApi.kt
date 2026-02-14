@@ -3,12 +3,14 @@
 package top.katton.api
 
 import net.minecraft.commands.arguments.EntityAnchorArgument
+import net.minecraft.commands.arguments.selector.EntitySelector
 import net.minecraft.core.BlockPos
 import net.minecraft.core.Holder
 import net.minecraft.core.registries.Registries
 import net.minecraft.nbt.CompoundTag
 import net.minecraft.network.chat.*
 import net.minecraft.resources.ResourceKey
+import net.minecraft.server.MinecraftServer
 import net.minecraft.server.commands.*
 import net.minecraft.server.level.ServerLevel
 import net.minecraft.server.level.ServerPlayer
@@ -22,11 +24,82 @@ import net.minecraft.world.entity.*
 import net.minecraft.world.entity.ai.attributes.Attribute
 import net.minecraft.world.entity.ai.attributes.AttributeModifier
 import net.minecraft.world.level.Level
+import net.minecraft.world.level.entity.EntityTypeTest
+import net.minecraft.world.phys.AABB
 import net.minecraft.world.phys.Vec2
 import net.minecraft.world.phys.Vec3
 import net.minecraft.world.scores.*
 import java.util.*
 
+var Entity.nbt: CompoundTag
+    get() = getEntityNbt(this)
+    set(value) {
+        setEntityNbt(this, value)
+    }
+
+class KattonServerEntityCollection(
+    private val server: MinecraftServer
+) {
+    val all
+        get() = server.allLevels.flatMap { it.allEntities }
+
+    operator fun get(level: ServerLevel): KattonLevelEntityCollection {
+        return KattonLevelEntityCollection(level)
+    }
+
+    operator fun get(uuid: UUID): Entity? {
+        return server.allLevels.map { it.getEntity(uuid) }.firstOrNull()
+    }
+}
+
+class KattonLevelEntityCollection(
+    val level: ServerLevel
+) : Iterable<Entity> by level.allEntities {
+    operator fun <T : Entity> get(
+        entityTypeTest: EntityTypeTest<Entity, T>,
+        predicate: (T) -> Boolean = { true }
+    ): List<T> = level.getEntities(entityTypeTest, predicate)
+
+    operator fun <T : Entity> get(
+        entityTypeTest: EntityTypeTest<Entity, T>,
+        aabb: AABB,
+        predicate: (T) -> Boolean = { true }
+    ): List<T> = level.getEntities(entityTypeTest, aabb, predicate)
+
+    operator fun get(selector: EntitySelector): List<Entity> {
+        return findEntities(level, selector)
+    }
+
+    operator fun get(uuid: UUID): Entity? {
+        return level.getEntity(uuid)
+    }
+}
+
+class KattonEntityAttributeValueMap(
+    val entity: LivingEntity
+) {
+    fun contains(holder: Holder<Attribute>): Boolean {
+        return entity.getAttribute(holder) != null
+    }
+
+    operator fun get(holder: Holder<Attribute>): Double? {
+        return entity.getAttributeValue(holder)
+    }
+
+    fun set(holder: Holder<Attribute>, value: Double, vararg modifiers: AttributeModifier) {
+        entity.getAttribute(holder)?.baseValue?.let {
+            it != value
+        } ?: false
+        modifiers.forEach {
+            entity.getAttribute(holder)?.addTransientModifier(it)
+        }
+    }
+}
+
+val LivingEntity.attributeValues
+    get() = KattonEntityAttributeValueMap(this)
+
+fun Entity.damage(amount: Float) = damage(this, amount)
 
 /**
  * Get an attribute value from a LivingEntity.

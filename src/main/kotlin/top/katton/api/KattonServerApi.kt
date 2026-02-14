@@ -15,8 +15,31 @@ import net.minecraft.world.entity.Entity
 import net.minecraft.world.entity.player.Player
 import net.minecraft.world.level.GameType
 import net.minecraft.world.level.gamerules.GameRule
+import net.minecraft.world.level.storage.CommandStorage
+import net.minecraft.world.scores.Scoreboard
 import java.util.*
 
+
+
+val players: KattonPlayerList
+    get() = KattonPlayerList(requireServer().playerList)
+
+val entities: KattonServerEntityCollection
+    get() = KattonServerEntityCollection(requireServer())
+
+val storage: CommandStorage
+    get() = requireServer().commandStorage
+
+val scoreboard: Scoreboard
+    get() = requireServer().scoreboard
+
+var difficulty: Difficulty
+    get() = requireServer().overworld().difficulty
+    set(value) {
+        setDifficulty(difficulty, true)
+    }
+
+fun execute(command: String) = executeCommandAsServer(command)
 
 /**
  * Execute a command as the provided command source.

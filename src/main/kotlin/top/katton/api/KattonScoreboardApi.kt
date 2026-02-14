@@ -9,13 +9,29 @@ import net.minecraft.world.entity.Entity
 import net.minecraft.world.scores.*
 import net.minecraft.world.scores.criteria.ObjectiveCriteria
 
+operator fun Scoreboard.get(target: ScoreHolder, objective: Objective): Int? =
+    scoreboard.getPlayerScoreInfo(target, objective)?.value()
 
-/**
- * Internal helper to get the server scoreboard.
- *
- * @return server Scoreboard instance
- */
-private fun scoreboard(): Scoreboard = requireServer().scoreboard
+operator fun Scoreboard.set(target: ScoreHolder, objective: Objective, value: Int) =
+    scoreboard.getOrCreatePlayerScore(target, objective).set(value)
+
+fun fake(name: String): ScoreHolder = ScoreHolder.forNameOnly(name)
+
+class KattonScoreHolderScoreCollection(
+    val scoreboard: Scoreboard,
+    val scoreHolder: ScoreHolder
+) {
+    operator fun get(objective: Objective): Int? {
+        return scoreboard.getPlayerScoreInfo(scoreHolder, objective)?.value()
+    }
+
+    operator fun set(objective: Objective, value: Int) {
+        scoreboard.getOrCreatePlayerScore(scoreHolder, objective).set(value)
+    }
+}
+
+val ScoreHolder.scores: KattonScoreHolderScoreCollection
+    get() = KattonScoreHolderScoreCollection(scoreboard, this)
 
 
 /**
@@ -24,7 +40,7 @@ private fun scoreboard(): Scoreboard = requireServer().scoreboard
  * @param name objective name
  * @return Objective or null if not found
  */
-fun getObjective(name: String): Objective? = scoreboard().getObjective(name)
+fun getObjective(name: String): Objective? = scoreboard.getObjective(name)
 
 
 /**
@@ -46,7 +62,7 @@ fun getOrCreateObjective(
     displayAutoUpdate: Boolean = false,
     numberFormat: NumberFormat? = null
 ): Objective {
-    val board = scoreboard()
+    val board = scoreboard
     val existed = board.getObjective(name)
     if (existed != null) return existed
     return board.addObjective(name, criteria, displayName, renderType, displayAutoUpdate, numberFormat)
@@ -81,7 +97,7 @@ fun setScore(target: Entity, objective: Objective, value: Int) = setScore(target
  * @param value score value
  */
 fun setScore(target: ScoreHolder, objective: Objective, value: Int) {
-    val score = scoreboard().getOrCreatePlayerScore(target, objective)
+    val score = scoreboard.getOrCreatePlayerScore(target, objective)
     score.set(value)
 }
 
@@ -114,7 +130,7 @@ fun addScore(target: Entity, objective: Objective, delta: Int) = addScore(target
  * @param delta amount to add
  */
 fun addScore(target: ScoreHolder, objective: Objective, delta: Int) {
-    val score = scoreboard().getOrCreatePlayerScore(target, objective)
+    val score = scoreboard.getOrCreatePlayerScore(target, objective)
     score.add(delta)
 }
 
@@ -147,7 +163,7 @@ fun getScore(target: Entity, objective: Objective): Int? = getScore(target as Sc
  * @return score value or null if not present
  */
 fun getScore(target: ScoreHolder, objective: Objective): Int? {
-    val readOnlyScoreInfo = scoreboard().getPlayerScoreInfo(target, objective)
+    val readOnlyScoreInfo = scoreboard.getPlayerScoreInfo(target, objective)
     return readOnlyScoreInfo?.value()
 }
 
@@ -177,7 +193,7 @@ fun resetScore(target: Entity, objective: Objective) = resetScore(target as Scor
  * @param objective objective to reset
  */
 fun resetScore(target: ScoreHolder, objective: Objective) {
-    scoreboard().resetSinglePlayerScore(target, objective)
+    scoreboard.resetSinglePlayerScore(target, objective)
 }
 
 

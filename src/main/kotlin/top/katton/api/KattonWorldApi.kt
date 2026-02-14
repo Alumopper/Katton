@@ -7,11 +7,13 @@ import net.minecraft.core.BlockPos
 import net.minecraft.core.Holder
 import net.minecraft.core.HolderSet
 import net.minecraft.core.registries.Registries
-import net.minecraft.network.chat.*
+import net.minecraft.network.chat.Component
 import net.minecraft.network.protocol.game.ClientboundSoundPacket
 import net.minecraft.resources.Identifier
 import net.minecraft.resources.ResourceKey
-import net.minecraft.server.commands.*
+import net.minecraft.server.MinecraftServer
+import net.minecraft.server.commands.FillBiomeCommand
+import net.minecraft.server.commands.PlaceCommand
 import net.minecraft.server.level.ServerLevel
 import net.minecraft.server.level.ServerPlayer
 import net.minecraft.sounds.SoundEvent
@@ -32,6 +34,60 @@ import top.katton.util.Result
 import kotlin.jvm.optionals.getOrDefault
 import kotlin.math.sqrt
 
+class KattonLevelMap(
+    private val server: MinecraftServer
+) : Map<ResourceKey<Level>, ServerLevel> {
+    data class LevelEntry(
+        override val key: ResourceKey<Level>,
+        override val value: ServerLevel
+    ) : Map.Entry<ResourceKey<Level>, ServerLevel>
+
+    override val size: Int
+        get() = server.levelKeys().size
+    override val keys: Set<ResourceKey<Level>>
+        get() = server.levelKeys()
+    override val values: Collection<ServerLevel>
+        get() = server.allLevels.toList()
+    override val entries: Set<Map.Entry<ResourceKey<Level>, ServerLevel>>
+        get() = server.levelKeys().map { LevelEntry(it, server.getLevel(it)!!) }.toSet()
+
+    override fun isEmpty(): Boolean = server.levelKeys().isEmpty()
+
+    override fun containsKey(key: ResourceKey<Level>): Boolean = server.levelKeys().contains(key)
+
+    override fun containsValue(value: ServerLevel): Boolean = values.contains(value)
+
+    override operator fun get(key: ResourceKey<Level>): ServerLevel? {
+        return server.getLevel(key)
+    }
+
+    val overworld: ServerLevel
+        get() = get(Level.OVERWORLD) ?: error("Overworld not found")
+    val nether: ServerLevel
+        get() = get(Level.NETHER) ?: error("Nether not found")
+    val end: ServerLevel
+        get() = get(Level.END) ?: error("End not found")
+}
+
+val levels: KattonLevelMap
+    get() = KattonLevelMap(requireServer())
+
+
+
+val ServerLevel.players: KattonLevelPlayerCollection
+    get() = KattonLevelPlayerCollection(this)
+
+val ServerLevel.blockEntities: KattonLevelBlockEntityCollection
+    get() = KattonLevelBlockEntityCollection(this)
+
+val ServerLevel.entities: KattonLevelEntityCollection
+    get() = KattonLevelEntityCollection(this)
+
+val Level.blocks: KattonLevelBlockCollection
+    get() = KattonLevelBlockCollection(this)
+
+val Level.blockStates: KattonLevelBlockStateCollection
+    get() = KattonLevelBlockStateCollection(this)
 
 /**
  * Set a block at position to a specific BlockState.

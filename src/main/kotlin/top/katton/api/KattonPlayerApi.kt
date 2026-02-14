@@ -7,28 +7,43 @@ import net.minecraft.core.Holder
 import net.minecraft.server.level.ServerLevel
 import net.minecraft.server.level.ServerPlayer
 import net.minecraft.server.level.ServerPlayer.RespawnConfig
+import net.minecraft.server.players.PlayerList
 import net.minecraft.util.Mth
-import net.minecraft.world.Container
 import net.minecraft.world.entity.*
-import net.minecraft.world.entity.item.ItemEntity
 import net.minecraft.world.entity.player.Player
 import net.minecraft.world.item.Item
 import net.minecraft.world.item.ItemStack
-import net.minecraft.world.item.crafting.RecipeHolder
 import net.minecraft.world.item.enchantment.Enchantment
-import net.minecraft.world.level.Level
 import net.minecraft.world.level.storage.LevelData
 import net.minecraft.world.level.storage.LevelData.RespawnData
-import net.minecraft.world.level.storage.loot.LootContext
-import net.minecraft.world.level.storage.loot.LootParams
-import net.minecraft.world.level.storage.loot.LootTable
-import net.minecraft.world.level.storage.loot.functions.LootItemFunction
-import net.minecraft.world.level.storage.loot.parameters.LootContextParamSets
-import net.minecraft.world.level.storage.loot.parameters.LootContextParams
 import net.minecraft.world.phys.Vec2
-import net.minecraft.world.phys.Vec3
 import java.util.*
-import kotlin.math.min
+
+class KattonPlayerList(
+    val playerList: PlayerList
+) : List<ServerPlayer> by playerList.players {
+    operator fun get(name: String): ServerPlayer? {
+        return playerList.getPlayer(name)
+    }
+
+    operator fun get(uuid: UUID): ServerPlayer? {
+        return playerList.getPlayer(uuid)
+    }
+}
+
+
+class KattonLevelPlayerCollection(
+    val level: ServerLevel
+) : List<ServerPlayer> by level.players {
+    operator fun get(uuid: UUID): Player? {
+        return level.getPlayerByUUID(uuid)
+    }
+}
+fun Player.addItem(item: Item, amount: Int) = giveItem(this, ItemStack(item, amount))
+
+// 已经提供了 addItem(itemStack: ItemStack)
+fun Player.hasItem(item: Item) = hasItem(this, item)
+fun Player.removeItem(item: Item, amount: Int) = removeItem(this, item, amount)
 
 
 /**

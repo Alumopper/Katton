@@ -3,6 +3,8 @@
 package top.katton.api
 
 import net.minecraft.core.BlockPos
+import net.minecraft.core.component.DataComponents
+import net.minecraft.nbt.CompoundTag
 import net.minecraft.server.level.ServerPlayer
 import net.minecraft.world.Container
 import net.minecraft.world.entity.Entity
@@ -13,8 +15,16 @@ import net.minecraft.world.level.storage.loot.functions.LootItemFunction
 import net.minecraft.world.level.storage.loot.parameters.LootContextParamSets
 import net.minecraft.world.level.storage.loot.parameters.LootContextParams
 import net.minecraft.world.phys.Vec3
-import java.util.Optional
+import java.util.*
 
+var ItemStack.nbt: CompoundTag
+    get() = components[DataComponents.CUSTOM_DATA]?.copyTag() ?: CompoundTag()
+    set(value) {
+        components[DataComponents.CUSTOM_DATA]?.update {
+            it.clear()
+            it.merge(value)
+        }
+    }
 
 /**
  * Apply a LootItemFunction modifier to a block container slot.
