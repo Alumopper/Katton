@@ -109,19 +109,30 @@ publishing {
 	}
 }
 
-def datapacksDir = layout.projectDirectory.dir('Example/datapacks')
-def targetDatapacksDir = layout.projectDirectory.dir('run/saves/test/datapacks')
+def datapackName = 'qwq'
+def worldName = 'test'
+def datapacksDir = layout.projectDirectory.dir("Katton-Example/${datapackName}")
+def targetDatapacksDir = layout.projectDirectory.dir("run/saves/${worldName}/datapacks/${datapackName}")
 
-// 任务：将 Example/datapacks 复制并合并到 run/saves/test/datapacks
-// Example/datapacks 优先级更高，会覆盖目标目录中的同名文件
+
+sourceSets {
+	test {
+		java.srcDirs += ["Katton-Example/${datapackName}"]
+		kotlin.srcDirs += ["Katton-Example/${datapackName}"]
+	}
+}
+
+
+// 任务：将 Katton-Example/${datapackName} 复制并合并到 run/saves/${worldName}/datapacks/${datapackName}
+// Katton-Example/${datapackName} 优先级更高，会覆盖目标目录中的同名文件
 tasks.register('copyDatapacks', Copy) {
     group = 'Katton'
-    description = 'Copy and merge datapacks from Example/datapacks to run/saves/新的世界/datapacks'
+    description = "Copy and merge datapacks from Katton-Example/${datapackName} to run/saves/${worldName}/datapacks/${datapackName}"
 
     from datapacksDir
     into targetDatapacksDir
 
-    // 如果文件冲突，使用 Example/datapacks 的文件（覆盖目标文件）
+    // 如果文件冲突，使用 Katton-Example/${datapackName} 的文件（覆盖目标文件）
     duplicatesStrategy = DuplicatesStrategy.INCLUDE
     // 显示复制的文件
     eachFile { details ->

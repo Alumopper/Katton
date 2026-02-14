@@ -3,8 +3,26 @@ package top.katton.api
 import net.minecraft.commands.arguments.selector.EntitySelector
 import net.minecraft.core.BlockPos
 import net.minecraft.core.Holder
+import net.minecraft.core.component.DataComponents
+import net.minecraft.nbt.ByteArrayTag
+import net.minecraft.nbt.ByteTag
+import net.minecraft.nbt.CollectionTag
 import net.minecraft.nbt.CompoundTag
-import net.minecraft.resources.Identifier
+import net.minecraft.nbt.DoubleTag
+import net.minecraft.nbt.FloatTag
+import net.minecraft.nbt.IntArrayTag
+import net.minecraft.nbt.IntTag
+import net.minecraft.nbt.ListTag
+import net.minecraft.nbt.LongArrayTag
+import net.minecraft.nbt.LongTag
+import net.minecraft.nbt.NbtOps
+import net.minecraft.nbt.NumericTag
+import net.minecraft.nbt.StringTag
+import net.minecraft.nbt.Tag
+import net.minecraft.nbt.TagParser
+import net.minecraft.nbt.TagType
+import net.minecraft.network.chat.Component
+import net.minecraft.network.chat.MutableComponent
 import net.minecraft.resources.ResourceKey
 import net.minecraft.server.MinecraftServer
 import net.minecraft.server.level.ServerLevel
@@ -13,10 +31,10 @@ import net.minecraft.server.players.PlayerList
 import net.minecraft.world.Container
 import net.minecraft.world.Difficulty
 import net.minecraft.world.entity.Entity
-import net.minecraft.world.entity.EntityType
 import net.minecraft.world.entity.EquipmentSlot
 import net.minecraft.world.entity.LivingEntity
 import net.minecraft.world.entity.SlotAccess
+import net.minecraft.world.entity.SlotProvider
 import net.minecraft.world.entity.ai.attributes.Attribute
 import net.minecraft.world.entity.ai.attributes.AttributeModifier
 import net.minecraft.world.entity.player.Inventory
@@ -28,12 +46,14 @@ import net.minecraft.world.level.block.Block
 import net.minecraft.world.level.block.entity.BlockEntity
 import net.minecraft.world.level.block.state.BlockState
 import net.minecraft.world.level.entity.EntityTypeTest
+import net.minecraft.world.level.storage.CommandStorage
 import net.minecraft.world.phys.AABB
 import net.minecraft.world.scores.Objective
 import net.minecraft.world.scores.ScoreHolder
 import net.minecraft.world.scores.Scoreboard
 import java.util.UUID
-import java.util.function.IntFunction
+import kotlin.jvm.optionals.getOrNull
+import kotlin.streams.toList
 
 @Suppress("unused")
 object KattonMC {
@@ -43,7 +63,7 @@ object KattonMC {
     fun execute(command: String) = executeCommandAsServer(command)
     class KattonPlayerList(
         val playerList: PlayerList
-    ): List<ServerPlayer> by playerList.players {
+    ) : List<ServerPlayer> by playerList.players {
         operator fun get(name: String): ServerPlayer? {
             return playerList.getPlayer(name)
         }
@@ -52,16 +72,18 @@ object KattonMC {
             return playerList.getPlayer(uuid)
         }
     }
+
     val players: KattonPlayerList
         get() = KattonPlayerList(server.playerList)
 
     class KattonLevelMap(
         private val server: MinecraftServer
-    ): Map<ResourceKey<Level>, ServerLevel> {
+    ) : Map<ResourceKey<Level>, ServerLevel> {
         data class LevelEntry(
             override val key: ResourceKey<Level>,
             override val value: ServerLevel
         ) : Map.Entry<ResourceKey<Level>, ServerLevel>
+
         override val size: Int
             get() = server.levelKeys().size
         override val keys: Set<ResourceKey<Level>>
@@ -80,6 +102,7 @@ object KattonMC {
         override operator fun get(key: ResourceKey<Level>): ServerLevel? {
             return server.getLevel(key)
         }
+
         val overworld: ServerLevel
             get() = get(Level.OVERWORLD) ?: error("Overworld not found")
         val nether: ServerLevel
@@ -87,12 +110,13 @@ object KattonMC {
         val end: ServerLevel
             get() = get(Level.END) ?: error("End not found")
     }
+
     val levels: KattonLevelMap
         get() = KattonLevelMap(server)
 
     class KattonLevelEntityCollection(
         val level: ServerLevel
-    ): Iterable<Entity> by level.allEntities {
+    ) : Iterable<Entity> by level.allEntities {
         operator fun <T : Entity> get(
             entityTypeTest: EntityTypeTest<Entity, T>,
             predicate: (T) -> Boolean = { true }
@@ -107,17 +131,20 @@ object KattonMC {
         operator fun get(selector: EntitySelector): List<Entity> {
             return findEntities(level, selector)
         }
+
         operator fun get(uuid: UUID): Entity? {
             return level.getEntity(uuid)
         }
     }
+
     class KattonLevelPlayerCollection(
         val level: ServerLevel
-    ): List<ServerPlayer> by level.players {
+    ) : List<ServerPlayer> by level.players {
         operator fun get(uuid: UUID): Player? {
             return level.getPlayerByUUID(uuid)
         }
     }
+
     val ServerLevel.players: KattonLevelPlayerCollection
         get() = KattonLevelPlayerCollection(this)
 
@@ -126,11 +153,11 @@ object KattonMC {
 
     class KattonServerEntityCollection(
         private val server: MinecraftServer
-    ){
+    ) {
         val all
             get() = server.allLevels.flatMap { it.allEntities }
 
-        operator fun get(level: ServerLevel):KattonLevelEntityCollection {
+        operator fun get(level: ServerLevel): KattonLevelEntityCollection {
             return KattonLevelEntityCollection(level)
         }
 
@@ -138,6 +165,7 @@ object KattonMC {
             return server.allLevels.map { it.getEntity(uuid) }.firstOrNull()
         }
     }
+
     val entities: KattonServerEntityCollection
         get() = KattonServerEntityCollection(server)
 
@@ -152,38 +180,155 @@ object KattonMC {
         set(value) {
             setBlockNbt(this, value)
         }
+
     class KattonLevelBlockEntityCollection(
         val level: Level
     ) {
         operator fun get(blockPos: BlockPos): BlockEntity? {
             return level.getBlockEntity(blockPos)
         }
+
         operator fun set(blockPos: BlockPos, blockEntity: BlockEntity) {
             if (blockEntity.blockPos == blockPos) {
                 level.setBlockEntity(blockEntity)
             }
         }
+
         fun set(blockEntity: BlockEntity) {
             level.setBlockEntity(blockEntity)
         }
     }
+
     val ServerLevel.blockEntities: KattonLevelBlockEntityCollection
         get() = KattonLevelBlockEntityCollection(this)
 
-    val storage
+    val storage: CommandStorage
         get() = server.commandStorage
 
-    val scoreboard
+    fun <T : Number> numericTagOf(value: T) {
+        when (value) {
+            is Byte -> ByteTag.valueOf(value)
+            is Int -> IntTag.valueOf(value)
+            is Long -> LongTag.valueOf(value)
+            is Float -> FloatTag.valueOf(value)
+            is Double -> DoubleTag.valueOf(value)
+            else -> error("Unsupported number type: ${value.javaClass.simpleName}")
+        }
+    }
+
+    operator fun <T : Tag> Tag?.invoke(tagType: TagType<T>): T? {
+        if (this == null) return null
+        if (this.type == tagType) return this as T
+        if (tagType == StringTag.TYPE) {
+            return StringTag.valueOf(this.toString()) as T
+        }
+        if (this is NumericTag) {
+            return when (tagType) {
+                ByteTag.TYPE -> this.asByte().map { ByteTag.valueOf(it) }.getOrNull()
+                IntTag.TYPE -> this.asInt().map { IntTag.valueOf(it) }.getOrNull()
+                LongTag.TYPE -> this.asLong().map { LongTag.valueOf(it) }.getOrNull()
+                FloatTag.TYPE -> this.asFloat().map { FloatTag.valueOf(it) }.getOrNull()
+                DoubleTag.TYPE -> this.asDouble().map { DoubleTag.valueOf(it) }.getOrNull()
+                else -> null
+            } as? T
+        }
+        if (this is StringTag) {
+            val value = this.asString().getOrNull() ?: return null
+            val tag = TagParser.create(NbtOps.INSTANCE).parseFully(value)
+            return tag.invoke(tagType)
+        }
+        if (this is CollectionTag) {
+            return when (tagType) {
+                ListTag.TYPE -> {
+                    val list = ListTag()
+                    for (element in this) {
+                        list.add(element)
+                    }
+                    list
+                }
+
+                ByteArrayTag.TYPE -> ByteArrayTag(ByteArray(this.size()) { this[it].asByte().getOrNull() ?: 0 })
+
+                IntArrayTag.TYPE -> IntArrayTag(IntArray(this.size()) { this[it].asInt().getOrNull() ?: 0 })
+
+                LongArrayTag.TYPE -> LongArrayTag(LongArray(this.size()) { this[it].asLong().getOrNull() ?: 0 })
+
+                else -> null
+            } as? T
+        }
+        if (this.type != tagType) return null
+        return this as? T
+    }
+
+    operator fun <V> Tag?.invoke(default: V): V {
+        if (this == null) return default
+        if (default is String) {
+            return this.toString() as V
+        }
+        if (this is NumericTag) {
+            return when (default) {
+                is Boolean -> this.asBoolean().orElse(default)
+                is Byte -> this.asByte().orElse(default)
+                is Short -> this.asShort().orElse(default)
+                is Int -> this.asInt().orElse(default)
+                is Long -> this.asLong().orElse(default)
+                is Float -> this.asFloat().orElse(default)
+                is Double -> this.asDouble().orElse(default)
+                else -> default
+            } as V
+        }
+        if (this is StringTag) {
+            val value = this.asString().getOrNull() ?: return default
+            val tag = TagParser.create(NbtOps.INSTANCE).parseFully(value)
+            return tag.invoke(default)
+        }
+        if (this is CollectionTag) {
+            return when (default) {
+                is List<*> -> {
+                    val list = ArrayList<Any>()
+                    for (element in this) {
+                        list.add(element)
+                    }
+                    list
+                }
+                is ByteArray -> ByteArray(this.size()) { this[it].asByte().getOrNull() ?: 0 }
+                is IntArray -> IntArray(this.size()) { this[it].asInt().getOrNull() ?: 0 }
+                is LongArray -> LongArray(this.size()) { this[it].asLong().getOrNull() ?: 0 }
+                else -> default
+            } as V
+        }
+        return default
+    }
+
+
+    fun ByteTag?.toBoolean(): Boolean = this?.asBoolean()?.getOrNull() ?: false
+
+    fun CompoundTag.clear() {
+        val keySet = keySet()
+        for (key in keySet) {
+            remove(key)
+        }
+    }
+
+    var ItemStack.nbt: CompoundTag
+        get() = components[DataComponents.CUSTOM_DATA]?.copyTag() ?: CompoundTag()
+        set(value) {
+            components[DataComponents.CUSTOM_DATA]?.update {
+                it.clear()
+                it.merge(value)
+            }
+        }
+
+    val scoreboard: Scoreboard
         get() = server.scoreboard
 
+    operator fun Scoreboard.get(target: ScoreHolder, objective: Objective): Int? =
+        scoreboard.getPlayerScoreInfo(target, objective)?.value()
 
-    operator fun Scoreboard.get(target: ScoreHolder, objective: Objective): Int?
-        = scoreboard.getPlayerScoreInfo(target, objective)?.value()
+    operator fun Scoreboard.set(target: ScoreHolder, objective: Objective, value: Int) =
+        scoreboard.getOrCreatePlayerScore(target, objective).set(value)
 
-    operator fun Scoreboard.set(target: ScoreHolder, objective: Objective, value: Int)
-        = scoreboard.getOrCreatePlayerScore(target, objective).set(value)
-
-    fun fake(name: String) = ScoreHolder.forNameOnly(name)
+    fun fake(name: String): ScoreHolder = ScoreHolder.forNameOnly(name)
 
     class KattonScoreHolderScoreCollection(
         val scoreboard: Scoreboard,
@@ -192,21 +337,26 @@ object KattonMC {
         operator fun get(objective: Objective): Int? {
             return scoreboard.getPlayerScoreInfo(scoreHolder, objective)?.value()
         }
+
         operator fun set(objective: Objective, value: Int) {
             scoreboard.getOrCreatePlayerScore(scoreHolder, objective).set(value)
         }
     }
+
     val ScoreHolder.scores: KattonScoreHolderScoreCollection
         get() = KattonScoreHolderScoreCollection(scoreboard, this)
+
     class KattonEntityAttributeValueMap(
         val entity: LivingEntity
     ) {
         fun contains(holder: Holder<Attribute>): Boolean {
             return entity.getAttribute(holder) != null
         }
+
         operator fun get(holder: Holder<Attribute>): Double? {
             return entity.getAttributeValue(holder)
         }
+
         fun set(holder: Holder<Attribute>, value: Double, vararg modifiers: AttributeModifier) {
             entity.getAttribute(holder)?.baseValue?.let {
                 it != value
@@ -216,8 +366,10 @@ object KattonMC {
             }
         }
     }
+
     val LivingEntity.attributeValues
         get() = KattonEntityAttributeValueMap(this)
+
     operator fun Inventory.get(slot: Int): ItemStack = this.getItem(slot)
     operator fun Inventory.set(slot: Int, itemStack: ItemStack) = this.setItem(slot, itemStack)
     operator fun Inventory.minusAssign(itemStack: ItemStack) = this.removeItem(itemStack)
@@ -225,22 +377,34 @@ object KattonMC {
         this.add(itemStack)
     }
 
-    operator fun Container.get(slot: KattonItemCollection.KattonItemSlot): SlotAccess? =
-        getSlot(slot.index)
-    operator fun Container.get(slot: List<KattonItemCollection.KattonItemSlot>): List<SlotAccess?> =
-        slot.map { this[it] }
-    class KattonItemCollection(){
+    operator fun SlotProvider.get(slot: KattonItemCollection.KattonItemSlot): ItemStack? =
+        getSlot(slot.index)?.get()
+    operator fun SlotProvider.set(slot: KattonItemCollection.KattonItemSlot, itemStack: ItemStack) {
+        getSlot(slot.index)?.set(itemStack)
+    }
+    operator fun Container.get(slots: List<KattonItemCollection.KattonItemSlot>): List<ItemStack?> =
+        slots.map { this[it] }
+
+    val Container.slots: KattonItemCollection
+        get() = KattonItemCollection(this)
+
+    class KattonItemCollection(val container: net.minecraft.world.Container) {
+
+        operator fun get(slot: KattonItemSlot): SlotAccess? = container.getSlot(slot.index)
+        operator fun get(slots: List<KattonItemSlot>): List<SlotAccess?> = slots.map { this[it] }
 
         open class KattonItemSlot(
             val index: Int
         )
-        interface KattonItemSlotGroup{
+
+        interface KattonItemSlotGroup {
             val any: List<KattonItemSlot>
         }
+
         open class KattonItemSlotList(
             val offset: Int,
             size: Int
-        ): Iterable<KattonItemSlot>, KattonItemSlotGroup {
+        ) : Iterable<KattonItemSlot>, KattonItemSlotGroup {
             private val delegate: MutableList<KattonItemSlot> = mutableListOf()
             override val any: List<KattonItemSlot>
                 get() = delegate
@@ -256,38 +420,42 @@ object KattonMC {
             override fun iterator(): MutableIterator<KattonItemSlot> = delegate.iterator()
 
         }
-        object Contents: KattonItemSlot(0)
-        object Container: KattonItemSlotList(0, 54)
-        object Hotbar: KattonItemSlotList(0, 9)
-        object Inventory: KattonItemSlotList(9, 27)
-        object EnderChest: KattonItemSlotList(200, 27)
-        object MobInventory: KattonItemSlotList(300, 8)
-        object Horse: KattonItemSlotList(500, 15)
-        
-        object Weapon: KattonItemSlotGroup {
-            object MainHand: KattonItemSlot(EquipmentSlot.MAINHAND.getIndex(98))
-            object OffHand: KattonItemSlot(EquipmentSlot.OFFHAND.getIndex(98))
+
+        object Contents : KattonItemSlot(0)
+        object Container : KattonItemSlotList(0, 54)
+        object Hotbar : KattonItemSlotList(0, 9)
+        object Inventory : KattonItemSlotList(9, 27)
+        object EnderChest : KattonItemSlotList(200, 27)
+        object MobInventory : KattonItemSlotList(300, 8)
+        object Horse : KattonItemSlotList(500, 15)
+
+        object Weapon : KattonItemSlotGroup {
+            object MainHand : KattonItemSlot(EquipmentSlot.MAINHAND.getIndex(98))
+            object OffHand : KattonItemSlot(EquipmentSlot.OFFHAND.getIndex(98))
+
             override val any: List<KattonItemSlot> = listOf(MainHand, OffHand)
         }
 
-        object Armor: KattonItemSlotGroup {
-            object Head: KattonItemSlot(EquipmentSlot.HEAD.getIndex(100))
-            object Chest: KattonItemSlot(EquipmentSlot.CHEST.getIndex(100))
-            object Legs: KattonItemSlot(EquipmentSlot.LEGS.getIndex(100))
-            object Feet: KattonItemSlot(EquipmentSlot.FEET.getIndex(100))
-            object Body: KattonItemSlot(EquipmentSlot.BODY.getIndex(105))
+        object Armor : KattonItemSlotGroup {
+            object Head : KattonItemSlot(EquipmentSlot.HEAD.getIndex(100))
+            object Chest : KattonItemSlot(EquipmentSlot.CHEST.getIndex(100))
+            object Legs : KattonItemSlot(EquipmentSlot.LEGS.getIndex(100))
+            object Feet : KattonItemSlot(EquipmentSlot.FEET.getIndex(100))
+            object Body : KattonItemSlot(EquipmentSlot.BODY.getIndex(105))
+
             override val any: List<KattonItemSlot> = listOf(Head, Chest, Legs, Feet, Body)
         }
 
-        object Saddle: KattonItemSlot(EquipmentSlot.SADDLE.getIndex(106))
-        object HorseChest: KattonItemSlot(499)
-        object PlayerCursor: KattonItemSlot(499)
-        object PlayerCrafting: KattonItemSlotList(500, 4)
+        object Saddle : KattonItemSlot(EquipmentSlot.SADDLE.getIndex(106))
+        object HorseChest : KattonItemSlot(499)
+        object PlayerCursor : KattonItemSlot(499)
+        object PlayerCrafting : KattonItemSlotList(500, 4)
 
 
     }
 
     fun Player.addItem(item: Item, amount: Int) = giveItem(this, ItemStack(item, amount))
+
     // 已经提供了 addItem(itemStack: ItemStack)
     fun Player.hasItem(item: Item) = hasItem(this, item)
     fun Player.removeItem(item: Item, amount: Int) = removeItem(this, item, amount)
@@ -298,13 +466,16 @@ object KattonMC {
         operator fun get(blockPos: BlockPos): Block {
             return level.getBlockState(blockPos).block
         }
+
         operator fun set(blockPos: BlockPos, block: Block) {
             setBlock(level, blockPos, block)
         }
+
         operator fun set(start: BlockPos, end: BlockPos, block: Block) {
             fill(level, start, end, block)
         }
     }
+
     val Level.blocks: KattonLevelBlockCollection
         get() = KattonLevelBlockCollection(this)
 
@@ -314,21 +485,37 @@ object KattonMC {
         operator fun get(blockPos: BlockPos): BlockState {
             return level.getBlockState(blockPos)
         }
+
         operator fun set(blockPos: BlockPos, blockState: BlockState) {
             setBlock(level, blockPos, blockState)
         }
+
         operator fun set(start: BlockPos, end: BlockPos, blockState: BlockState) {
             fill(level, start, end, blockState)
         }
     }
+
     val Level.blockStates: KattonLevelBlockStateCollection
         get() = KattonLevelBlockStateCollection(this)
 
     fun Entity.damage(amount: Float) = damage(this, amount)
+
     //TODO
     var difficulty: Difficulty
         get() = server.overworld().difficulty
         set(value) {
             setDifficulty(difficulty, true)
         }
+
+    operator fun Component?.plus(component: Component?): Component {
+        return Component.empty().append(this ?: Component.empty()).append(component ?: Component.empty())
+    }
+
+    operator fun String?.plus(component: Component?): Component {
+        return Component.literal(this ?: "").append(component ?: Component.empty())
+    }
+
+    operator fun Component?.plus(string: String?): Component {
+        return Component.literal(string ?: "").append(this ?: Component.empty())
+    }
 }

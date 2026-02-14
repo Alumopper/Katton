@@ -1184,7 +1184,7 @@ fun dropBlockLoot(pos: BlockPos, tool: ItemStack): List<ItemStack> {
  */
 fun dropKillLoot(entity: Entity, killer: Entity?): List<ItemStack> {
     if(entity.lootTable.isEmpty){
-        LOGGER.warn("Entity ${entity.displayName.string} has no loot table")
+        LOGGER.warn("Entity ${entity.displayName?.string} has no loot table")
         return emptyList()
     }
     val lootTableKey = entity.lootTable.get()
@@ -1344,6 +1344,78 @@ fun dropTo(level: Level, pos: Vec3, itemStacks: List<ItemStack>) {
  */
 fun tell(player: ServerPlayer, message: String) {
     player.sendSystemMessage(Component.literal(message))
+}
+/**
+ * Send a system message to a player.
+ *
+ * @param player target ServerPlayer
+ * @param message message component
+ */
+fun tell(player: ServerPlayer, message: Component) {
+    player.sendSystemMessage(message)
+}
+
+/**
+ * Send a system message to a player.
+ *
+ * @param player target ServerPlayer
+ * @param message message object, converted to string
+ */
+fun tell(player: ServerPlayer, message: Any) {
+    if (message is Component) {
+        tell(player, message)
+        return
+    }
+    tell(player, message.toString())
+}
+
+
+
+/**
+ * Send a system message to multiple players.
+ *
+ * @param players target ServerPlayer collection
+ * @param message plain string message
+ */
+fun tell(players: Collection<ServerPlayer>, message: String) {
+    players.forEach { tell(it, message) }
+}
+
+/**
+ * Send a system message to multiple players.
+ *
+ * @param players target ServerPlayer collection
+ * @param message message component
+ */
+fun tell(players: Collection<ServerPlayer>, message: Component) {
+    players.forEach { tell(it, message) }
+}
+
+/**
+ * Send a system message to multiple players.
+ *
+ * @param players target ServerPlayer collection
+ * @param message message object, converted to string
+ */
+fun tell(players: Collection<ServerPlayer>, message: Any) {
+    if (message is Component) {
+        tell(players, message)
+        return
+    }
+    players.forEach { tell(it, message) }
+}
+
+/**
+ * Send a system message to all players.
+ *
+ * @param message message object, converted to string
+ */
+fun tell(message: Any) {
+    if (message is Component) {
+        tell(requireServer().playerList.players, message)
+        return
+    }
+    requireServer().playerList.players.forEach { tell(it, message) }
 }
 
 /**
