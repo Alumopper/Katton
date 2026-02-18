@@ -152,16 +152,6 @@ fun setDifficulty(difficulty: Difficulty, ignoreLock: Boolean = true) {
     requireServer().setDifficulty(difficulty, ignoreLock)
 }
 
-
-/**
- * Get current overworld difficulty.
- *
- * @return current Difficulty
- */
-fun getDifficulty(): Difficulty {
-    return requireServer().overworld().difficulty
-}
-
 // ==================== Effect ====================
 
 

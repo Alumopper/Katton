@@ -5,6 +5,7 @@ import java.io.Serializable
 /**
  * A Result type that holds either a value of type [T] or an error message [String].
  */
+@Suppress("unused")
 @JvmInline
 value class Result<out T> @PublishedApi internal constructor(
     @PublishedApi internal val value: Any?
@@ -100,7 +101,9 @@ value class Result<out T> @PublishedApi internal constructor(
     }
 
     companion object {
-        fun <T> success(value: T): Result<T> = Result(value)
+        fun <T> success(value: T?): Result<T> = Result(value)
+
+        fun success(): Result<Unit> = Result(Unit)
 
         fun failure(message: String): Result<Nothing> = Result(Failure(message))
 

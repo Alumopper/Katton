@@ -41,6 +41,7 @@ fun <T : Number> numericTagOf(value: T) {
     }
 }
 
+@Suppress("UNCHECKED_CAST")
 operator fun <T : Tag> Tag?.invoke(tagType: TagType<T>): T? {
     if (this == null) return null
     if (this.type == tagType) return this as T
@@ -85,6 +86,7 @@ operator fun <T : Tag> Tag?.invoke(tagType: TagType<T>): T? {
     return this as? T
 }
 
+@Suppress("UNCHECKED_CAST")
 operator fun <V> Tag?.invoke(default: V): V {
     if (this == null) return default
     if (default is String) {

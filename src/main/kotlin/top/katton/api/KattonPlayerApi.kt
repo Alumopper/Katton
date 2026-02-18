@@ -41,11 +41,6 @@ class KattonLevelPlayerCollection(
 }
 fun Player.addItem(item: Item, amount: Int) = giveItem(this, ItemStack(item, amount))
 
-// 已经提供了 addItem(itemStack: ItemStack)
-fun Player.hasItem(item: Item) = hasItem(this, item)
-fun Player.removeItem(item: Item, amount: Int) = removeItem(this, item, amount)
-
-
 /**
  * Clear a player's inventory.
  *

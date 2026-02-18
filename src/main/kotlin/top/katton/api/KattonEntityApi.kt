@@ -99,8 +99,6 @@ class KattonEntityAttributeValueMap(
 val LivingEntity.attributeValues
     get() = KattonEntityAttributeValueMap(this)
 
-fun Entity.damage(amount: Float) = damage(this, amount)
-
 /**
  * Get an attribute value from a LivingEntity.
  *
