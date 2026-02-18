@@ -2,14 +2,11 @@ package top.katton;
 
 import kotlin.Unit;
 import kotlin.coroutines.EmptyCoroutineContext;
-import kotlin.script.experimental.api.CompiledScript;
-import kotlin.script.experimental.api.ResultWithDiagnostics;
 import kotlinx.coroutines.BuildersKt;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.resource.v1.ResourceLoader;
-import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.packs.PackType;
@@ -19,11 +16,6 @@ import top.katton.command.ScriptCommand;
 import top.katton.engine.ScriptEngine;
 import top.katton.engine.ScriptLoader;
 import top.katton.util.Event;
-
-import java.io.File;
-
-import static java.nio.file.Files.readString;
-import static kotlin.script.experimental.api.ErrorHandlingKt.valueOrThrow;
 
 public class Katton implements ModInitializer {
     private static final Logger logger = LoggerFactory.getLogger("katton");

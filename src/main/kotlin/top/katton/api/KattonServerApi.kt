@@ -91,14 +91,14 @@ fun findEntity(uuid: UUID): Entity?{
  * @param player the ServerPlayer to ban
  */
 fun ban(player: ServerPlayer) {
-    val userBanList = requireServer().playerList.bans;
+    val userBanList = requireServer().playerList.bans
     val nameAndId = player.nameAndId()
     if (!userBanList.isBanned(nameAndId)) {
         val userBanListEntry = UserBanListEntry(
             nameAndId, null, "server", null, null
         )
-        userBanList.add(userBanListEntry);
-        player.connection.disconnect(Component.translatable("multiplayer.disconnect.banned"));
+        userBanList.add(userBanListEntry)
+        player.connection.disconnect(Component.translatable("multiplayer.disconnect.banned"))
     }
 }
 
@@ -109,14 +109,14 @@ fun ban(player: ServerPlayer) {
  * @param ip IP address string to ban
  */
 fun banIp(ip: String) {
-    val ipBanList = requireServer().playerList.ipBans;
+    val ipBanList = requireServer().playerList.ipBans
     if (!ipBanList.isBanned(ip)) {
-        val list = requireServer().playerList.getPlayersWithAddress(ip);
+        val list = requireServer().playerList.getPlayersWithAddress(ip)
         val ipBanListEntry =
             IpBanListEntry(ip, null, "server", null, null)
         ipBanList.add(ipBanListEntry)
         for (serverPlayer in list) {
-            serverPlayer.connection.disconnect(Component.translatable("multiplayer.disconnect.ip_banned"));
+            serverPlayer.connection.disconnect(Component.translatable("multiplayer.disconnect.ip_banned"))
         }
     }
 }

@@ -1,8 +1,5 @@
 package top.katton.engine
 
-import net.minecraft.resources.Identifier
-import top.katton.Katton
-import kotlin.script.experimental.api.CompiledScript
 import kotlin.script.experimental.api.SourceCode
 import kotlin.script.experimental.jvm.impl.KJvmCompiledScript
 
@@ -55,12 +52,3 @@ data class KattonScript(
     val filePath: String = ""
 )
 
-internal class NamedStringSourceCode(
-    private val code: String,
-    private val scriptName: String,
-    private val scriptLocationId: String
-) : SourceCode {
-    override val text: String get() = code
-    override val name: String? get() = scriptName
-    override val locationId: String? get() = scriptLocationId
-}

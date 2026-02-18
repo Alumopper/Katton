@@ -14,7 +14,6 @@ import net.minecraft.world.entity.player.Player
 import net.minecraft.world.item.Item
 import net.minecraft.world.item.ItemStack
 import net.minecraft.world.item.enchantment.Enchantment
-import net.minecraft.world.level.storage.LevelData
 import net.minecraft.world.level.storage.LevelData.RespawnData
 import net.minecraft.world.phys.Vec2
 import java.util.*
@@ -232,7 +231,7 @@ fun spawnPoint(player: MutableCollection<ServerPlayer>, level: ServerLevel, pos:
 
     for (serverPlayer in player) {
         serverPlayer.setRespawnPosition(
-            RespawnConfig(LevelData.RespawnData.of(resourceKey, pos, f, g), true),
+            RespawnConfig(RespawnData.of(resourceKey, pos, f, g), true),
             false
         )
     }

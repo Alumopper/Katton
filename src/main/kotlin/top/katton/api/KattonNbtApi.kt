@@ -4,30 +4,13 @@ package top.katton.api
 
 import net.minecraft.advancements.criterion.NbtPredicate
 import net.minecraft.core.BlockPos
-import net.minecraft.nbt.ByteArrayTag
-import net.minecraft.nbt.ByteTag
-import net.minecraft.nbt.CollectionTag
-import net.minecraft.nbt.CompoundTag
-import net.minecraft.nbt.DoubleTag
-import net.minecraft.nbt.FloatTag
-import net.minecraft.nbt.IntArrayTag
-import net.minecraft.nbt.IntTag
-import net.minecraft.nbt.ListTag
-import net.minecraft.nbt.LongArrayTag
-import net.minecraft.nbt.LongTag
-import net.minecraft.nbt.NbtOps
-import net.minecraft.nbt.NumericTag
-import net.minecraft.nbt.StringTag
-import net.minecraft.nbt.Tag
-import net.minecraft.nbt.TagParser
-import net.minecraft.nbt.TagType
+import net.minecraft.nbt.*
 import net.minecraft.resources.Identifier
 import net.minecraft.server.commands.data.BlockDataAccessor
 import net.minecraft.server.commands.data.EntityDataAccessor
-import net.minecraft.world.entity.*
+import net.minecraft.world.entity.Entity
 import net.minecraft.world.level.Level
 import net.minecraft.world.level.block.entity.BlockEntity
-import net.minecraft.world.level.storage.CommandStorage
 import kotlin.jvm.optionals.getOrNull
 
 fun <T : Number> numericTagOf(value: T) {
@@ -153,7 +136,7 @@ fun parseNbt(nbt: String): CompoundTag = TagParser.parseCompoundFully(nbt)
  * @return CompoundTag representing the entity's data
  */
 fun getEntityNbt(entity: Entity): CompoundTag {
-    return NbtPredicate.getEntityTagToCompare(entity);
+    return NbtPredicate.getEntityTagToCompare(entity)
 }
 
 

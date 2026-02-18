@@ -7,7 +7,6 @@ import com.mojang.logging.LogUtils
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.future.future
-import kotlinx.coroutines.runBlocking
 import net.minecraft.core.Registry
 import net.minecraft.core.registries.Registries
 import net.minecraft.resources.FileToIdConverter
@@ -20,15 +19,10 @@ import net.minecraft.server.packs.resources.ResourceManager
 import net.minecraft.tags.TagLoader
 import java.util.*
 import java.util.concurrent.CompletableFuture
-import java.util.concurrent.CompletionException
 import java.util.concurrent.Executor
-import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.ConcurrentLinkedQueue
 import kotlin.io.path.absolutePathString
 import kotlin.script.experimental.api.CompiledScript
 import kotlin.script.experimental.api.ResultWithDiagnostics
-import kotlin.script.experimental.api.ScriptDiagnostic
-import kotlin.script.experimental.api.valueOrThrow
 
 object ScriptLoader : PreparableReloadListener {
 
@@ -55,8 +49,6 @@ object ScriptLoader : PreparableReloadListener {
 
     @JvmStatic
     var mainScript: Map<Identifier, KattonScript> = mapOf()
-    private val scriptSourceCache = ConcurrentHashMap<String, kotlin.Pair<String, String>>()
-    private val pendingRelinkScripts = ConcurrentHashMap.newKeySet<String>()
 
     /**
      * Reload scripts and tags. Called when a datapack is reloading

@@ -1,27 +1,19 @@
 package top.katton.engine
 
 import org.jetbrains.kotlin.scripting.compiler.plugin.impl.KJvmCompiledModuleInMemoryImpl
+import org.objectweb.asm.*
+import top.katton.util.Event
+import java.io.File
+import java.util.*
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.ConcurrentLinkedQueue
 import kotlin.script.experimental.api.*
+import kotlin.script.experimental.host.FileScriptSource
 import kotlin.script.experimental.host.toScriptSource
 import kotlin.script.experimental.jvm.dependenciesFromCurrentContext
+import kotlin.script.experimental.jvm.impl.KJvmCompiledScript
 import kotlin.script.experimental.jvm.jvm
 import kotlin.script.experimental.jvmhost.JvmScriptCompiler
-import kotlin.script.experimental.jvm.impl.KJvmCompiledScript
-import top.katton.util.Event
-import java.util.concurrent.ConcurrentHashMap
-import org.objectweb.asm.ClassReader
-import org.objectweb.asm.ClassVisitor
-import org.objectweb.asm.MethodVisitor
-import org.objectweb.asm.FieldVisitor
-import org.objectweb.asm.Opcodes
-import java.io.File
-import java.util.concurrent.ConcurrentLinkedQueue
-import java.util.Collections
-import java.util.UUID
-import kotlin.collections.component1
-import kotlin.collections.component2
-import kotlin.collections.iterator
-import kotlin.script.experimental.host.FileScriptSource
 
 /**
  * ScriptEngine compiles and executes Kotlin script sources.

@@ -9,11 +9,9 @@ import net.minecraft.commands.Commands.literal
 import net.minecraft.commands.arguments.IdentifierArgument
 import net.minecraft.network.chat.Component
 import net.minecraft.resources.Identifier
-import top.katton.Katton
 import top.katton.engine.ScriptEngine
 import top.katton.engine.ScriptLoader
 import kotlin.script.experimental.api.ResultWithDiagnostics
-import kotlin.script.experimental.jvm.util.isError
 
 object ScriptCommand {
     fun register(dispatcher: CommandDispatcher<CommandSourceStack>) {
