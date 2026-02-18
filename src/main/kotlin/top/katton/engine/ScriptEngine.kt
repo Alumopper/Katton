@@ -14,11 +14,14 @@ import org.objectweb.asm.ClassVisitor
 import org.objectweb.asm.MethodVisitor
 import org.objectweb.asm.FieldVisitor
 import org.objectweb.asm.Opcodes
+import java.io.File
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.Collections
+import java.util.UUID
 import kotlin.collections.component1
 import kotlin.collections.component2
 import kotlin.collections.iterator
+import kotlin.script.experimental.host.FileScriptSource
 
 /**
  * ScriptEngine compiles and executes Kotlin script sources.
@@ -32,7 +35,7 @@ object ScriptEngine {
         val name: String,
         val sourceCode: String,
         var imported: Collection<String> = emptySet(),
-        val sourceName: String = name
+        val path: String = ""
     )
 
     private data class ClassImportability(
@@ -88,8 +91,8 @@ object ScriptEngine {
         name: String,
         sourceCode: String,
         imported: Collection<KattonScript> = emptySet(),
-        sourceName: String = name,
-        forceRecompile: Boolean = false
+        forceRecompile: Boolean = false,
+        path: String = ""
     ): ResultWithDiagnostics<KattonScript>{
         // Calculate the hash of the source to detect changes.
         val sourceHash = sourceCode.hashCode()
@@ -109,57 +112,19 @@ object ScriptEngine {
             }
         }
 
-        val source = sourceCode.toScriptSource(sourceName)
+        val source = sourceCode.toScriptSource(name)
         val safeImported = sanitizeImportedScripts(name, imported)
 
-        val normalResult = compileWithConfiguration(
-            source = source,
-            imported = safeImported,
-            compatibilityMode = false
-        )
-
-        val finalResult = when (normalResult) {
-            is ResultWithDiagnostics.Success -> normalResult
-            is ResultWithDiagnostics.Failure -> {
-                val hasTopologicalSortCycle = normalResult.reports.any {
-                    it.message.contains("Cannot compute a topological sort", ignoreCase = true)
-                }
-                if (!hasTopologicalSortCycle) {
-                    normalResult
-                } else {
-                    val retried = compileWithConfiguration(
-                        source = source,
-                        imported = safeImported,
-                        compatibilityMode = true
-                    )
-                    when (retried) {
-                        is ResultWithDiagnostics.Success -> retried
-                        is ResultWithDiagnostics.Failure -> {
-                            val importedNames = if (safeImported.isEmpty()) "<none>" else safeImported.joinToString { it.identifier }
-                            ResultWithDiagnostics.Failure(
-                                retried.reports + ScriptDiagnostic(
-                                    -1,
-                                    message = "Script dependency context for '$name': imported scripts = [$importedNames]",
-                                    severity = ScriptDiagnostic.Severity.ERROR
-                                ) + ScriptDiagnostic(
-                                    -1,
-                                    message = "Katton retry strategy: compatibility compile mode enabled after topological sort cycle.",
-                                    severity = ScriptDiagnostic.Severity.WARNING
-                                )
-                            )
-                        }
-                    }
-                }
-            }
-        }
-
-        return finalResult.onSuccess { compiled ->
+        return compiler(source, ScriptCompilationConfiguration(baseConfig){
+            importScripts(safeImported.map { FileScriptSource(File(it.filePath), it.sourceCode.text) })
+        }).onSuccess { compiled ->
 
             val kattonScript = KattonScript(
                 script = compiled as KJvmCompiledScript,
                 identifier = name,
                 sourceCode = source,
                 dependencies = safeImported.toSet(),
+                filePath = path
             )
 
             // Scan public members from compiled bytes (No class loading)
@@ -170,20 +135,6 @@ object ScriptEngine {
 
             ResultWithDiagnostics.Success(kattonScript)
         }
-    }
-
-    private suspend fun compileWithConfiguration(
-        source: SourceCode,
-        imported: Collection<KattonScript>,
-        compatibilityMode: Boolean
-    ): ResultWithDiagnostics<CompiledScript> {
-        return compiler(source, ScriptCompilationConfiguration(baseConfig) {
-            importScripts(imported.map { it.sourceCode })
-            if (compatibilityMode) {
-                compilerOptions.append("-jvm-target", "21")
-                compilerOptions.append("-Xbackend-threads=1")
-            }
-        })
     }
 
     private fun sanitizeImportedScripts(
@@ -238,8 +189,8 @@ object ScriptEngine {
                     name = request.name,
                     sourceCode = request.sourceCode,
                     imported = resolved,
-                    sourceName = request.sourceName,
-                    forceRecompile = forceRecompile
+                    forceRecompile = forceRecompile,
+                    path = request.path
                 )
                 results[name] = result
                 iterator.remove()

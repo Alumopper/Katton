@@ -13,6 +13,7 @@ import net.minecraft.core.registries.Registries
 import net.minecraft.resources.FileToIdConverter
 import net.minecraft.resources.Identifier
 import net.minecraft.resources.ResourceKey
+import net.minecraft.server.packs.PathPackResources
 import net.minecraft.server.packs.resources.PreparableReloadListener
 import net.minecraft.server.packs.resources.Resource
 import net.minecraft.server.packs.resources.ResourceManager
@@ -23,6 +24,7 @@ import java.util.concurrent.CompletionException
 import java.util.concurrent.Executor
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentLinkedQueue
+import kotlin.io.path.absolutePathString
 import kotlin.script.experimental.api.CompiledScript
 import kotlin.script.experimental.api.ResultWithDiagnostics
 import kotlin.script.experimental.api.ScriptDiagnostic
@@ -154,21 +156,20 @@ object ScriptLoader : PreparableReloadListener {
             .thenCompose { map ->
                 val scope = CoroutineScope(executor.asCoroutineDispatcher())
                 scope.future {
-                    val sources = map.mapValues { readScript(it.value) }
+                    val sources = map.mapValues { readScript(it.value) to getResourceAbsolutePath(it.value, it.key) }
                     val requests = mutableListOf<ScriptEngine.CompileRequest>()
                     val pathByName = HashMap<String, Identifier>()
 
                     sources.forEach { (pathId, contentAndImports) ->
                         val rawId = lister.fileToId(pathId)
                         val compileName = rawId.toString()
-                        val debugSourceName = "${pathId.namespace}/${pathId.path}"
                         LOGGER.info("Queueing script {} for dependency-aware compile", rawId)
                         requests.add(
                             ScriptEngine.CompileRequest(
                                 name = compileName,
-                                sourceCode = contentAndImports.first,
-                                imported = contentAndImports.second,
-                                sourceName = debugSourceName
+                                sourceCode = contentAndImports.first.first,
+                                imported = contentAndImports.first.second,
+                                path = contentAndImports.second
                             )
                         )
                         pathByName[compileName] = rawId
@@ -197,7 +198,6 @@ object ScriptLoader : PreparableReloadListener {
                                     IllegalStateException("Failed to compile script $id\n$message")
                                 )
                                 futureMap[id] = future
-                                LOGGER.error("Failed to compile script {}\n{}", id, message)
                             }
                         }
                     }
@@ -219,5 +219,10 @@ object ScriptLoader : PreparableReloadListener {
             return identifier
         }
         return null
+    }
+
+    private fun getResourceAbsolutePath(resource: Resource, identifier: Identifier): String {
+        val rootPath = (resource.source() as PathPackResources).root
+        return rootPath.resolve("data").resolve(identifier.namespace).resolve(identifier.path).absolutePathString()
     }
 }

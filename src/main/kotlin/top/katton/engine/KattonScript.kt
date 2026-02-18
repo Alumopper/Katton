@@ -47,5 +47,20 @@ data class KattonScript(
     /**
      * The internal name of the script main class. Normally xxx_kt.
      */
-    var scriptMainClassInternalName: String = ""
+    var scriptMainClassInternalName: String = "",
+
+    /**
+     * The file path of the script, used for script import
+     */
+    val filePath: String = ""
 )
+
+internal class NamedStringSourceCode(
+    private val code: String,
+    private val scriptName: String,
+    private val scriptLocationId: String
+) : SourceCode {
+    override val text: String get() = code
+    override val name: String? get() = scriptName
+    override val locationId: String? get() = scriptLocationId
+}
