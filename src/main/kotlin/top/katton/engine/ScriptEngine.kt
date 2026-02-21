@@ -1,14 +1,12 @@
 package top.katton.engine
 
+import kotlinx.coroutines.runBlocking
 import org.jetbrains.kotlin.scripting.compiler.plugin.impl.KJvmCompiledModuleInMemoryImpl
 import org.objectweb.asm.*
+import top.katton.api.LOGGER
 import top.katton.util.Event
 import java.io.File
-import java.util.*
-import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.ConcurrentLinkedQueue
 import kotlin.script.experimental.api.*
-import kotlin.script.experimental.host.FileScriptSource
 import kotlin.script.experimental.host.toScriptSource
 import kotlin.script.experimental.jvm.dependenciesFromCurrentContext
 import kotlin.script.experimental.jvm.impl.KJvmCompiledScript
@@ -23,38 +21,7 @@ import kotlin.script.experimental.jvmhost.JvmScriptCompiler
  */
 object ScriptEngine {
 
-    data class CompileRequest(
-        val name: String,
-        val sourceCode: String,
-        var imported: Collection<String> = emptySet(),
-        val path: String = ""
-    )
-
-    private data class ClassImportability(
-        val isObjectClass: Boolean,
-        val isCompanionClass: Boolean
-    )
-
     private val compiler = JvmScriptCompiler()
-
-    // Cache mapping script name -> (sourceHash, CompiledScript)
-    // The hash ensures we only reuse the compiled artifact when the source is unchanged.
-    private val compiledCache = ConcurrentHashMap<String, Pair<Int, KattonScript>>()
-
-    private val dependencyCache = ConcurrentHashMap<String, ConcurrentLinkedQueue<KattonScript>>()
-
-    val scriptPackages: MutableSet<String> = Collections.newSetFromMap(ConcurrentHashMap())
-
-    fun resetDependencyIndex() {
-        dependencyCache.clear()
-        scriptPackages.clear()
-    }
-
-    fun resetAllCachesForReload() {
-        resetDependencyIndex()
-        compiledCache.clear()
-        classCache.clear()
-    }
 
     // Base compilation configuration for all scripts.
     // Includes classpath dependencies and default imports commonly used by scripts.
@@ -69,397 +36,136 @@ object ScriptEngine {
         enableScriptsInstancesSharing()
     }
 
-    /**
-     * Compile the provided script source into a CompiledScript.
-     *
-     * This method uses an internal cache keyed by name + source hash to avoid
-     * recompilation when the same source is passed again.
-     *
-     * @param name A stable name or id for the script (used as cache key and source name).
-     * @param sourceCode The Kotlin script source text.
-     * @return ResultWithDiagnostics wrapping the compiled script or diagnostics on failure.
-     */
-    suspend fun compile(
-        name: String,
-        sourceCode: String,
-        imported: Collection<KattonScript> = emptySet(),
-        forceRecompile: Boolean = false,
-        path: String = ""
-    ): ResultWithDiagnostics<KattonScript>{
-        // Calculate the hash of the source to detect changes.
-        val sourceHash = sourceCode.hashCode()
-
-        if (!forceRecompile) {
-            // Check cache: only reuse compiled script when both name and source hash match.
-            compiledCache[name]?.let { (cachedHash, compiled) ->
-                if (cachedHash == sourceHash) {
-                    //add dependencies to the cache
-                    for (exported in compiled.exported){
-                        dependencyCache.computeIfAbsent(exported){
-                            ConcurrentLinkedQueue()
-                        }.add(compiled)
-                    }
-                    return ResultWithDiagnostics.Success(compiled)
-                }
-            }
-        }
-
-        val source = sourceCode.toScriptSource(name)
-        val safeImported = sanitizeImportedScripts(name, imported)
-
-        return compiler(source, ScriptCompilationConfiguration(baseConfig){
-            importScripts(safeImported.map { FileScriptSource(File(it.filePath), it.sourceCode.text) })
-        }).onSuccess { compiled ->
-
-            val kattonScript = KattonScript(
-                script = compiled as KJvmCompiledScript,
-                identifier = name,
-                sourceCode = source,
-                dependencies = safeImported.toSet(),
-                filePath = path
-            )
-
-            // Scan public members from compiled bytes (No class loading)
-            processExportedMembers(kattonScript)
-
-            // Save compiled script together with its source hash for future reuse.
-            compiledCache[name] = sourceHash to kattonScript
-
-            ResultWithDiagnostics.Success(kattonScript)
-        }
-    }
-
-    private fun sanitizeImportedScripts(
-        targetScriptName: String,
-        imported: Collection<KattonScript>
-    ): List<KattonScript> {
-        if (imported.isEmpty()) return emptyList()
-
-        val uniqueImports = imported.distinctBy { it.identifier }
-        return uniqueImports.filterNot { dependency ->
-            dependency.identifier == targetScriptName || dependency.dependsOn(targetScriptName)
-        }
-    }
-
-    private fun KattonScript.dependsOn(targetScriptName: String): Boolean {
-        val visited = HashSet<String>()
-        fun dfs(script: KattonScript): Boolean {
-            if (!visited.add(script.identifier)) return false
-            if (script.identifier == targetScriptName) return true
-            return script.dependencies.any { dfs(it) }
-        }
-        return dfs(this)
-    }
-
-    suspend fun compileBatch(
-        requests: Collection<CompileRequest>,
-        forceRecompile: Boolean = false
-    ): Map<String, ResultWithDiagnostics<KattonScript>> {
-        if (requests.isEmpty()) return emptyMap()
-
-        val pending = LinkedHashMap<String, CompileRequest>()
-        requests.forEach {
-            pending[it.name] = it
-            it.imported = it.imported.filter(::isScriptImport)
-        }
-
-        val results = LinkedHashMap<String, ResultWithDiagnostics<KattonScript>>()
-        var forcedRelease = false
-
-        while (pending.isNotEmpty()) {
-            var progress = false
-            val iterator = pending.entries.iterator()
-
-            while (iterator.hasNext()) {
-                val (name, request) = iterator.next()
-                val resolved = resolvedScriptImports(request.imported)
-                if (resolved.size != request.imported.size && !forcedRelease) {
-                    continue
-                }
-
-                val result = compile(
-                    name = request.name,
-                    sourceCode = request.sourceCode,
-                    imported = resolved,
-                    forceRecompile = forceRecompile,
-                    path = request.path
-                )
-                results[name] = result
-                iterator.remove()
-                progress = true
-            }
-
-            if (!progress) {
-                // No dependency can be resolved anymore: treat unresolved imports as non-script dependencies.
-                forcedRelease = true
-            }
-        }
-
-        return results
-    }
-
-    private fun isScriptImport(identifier: String): Boolean {
-        return scriptPackages.any { pkg -> identifier.startsWith("$pkg.") }
-    }
-
-    private fun resolvedScriptImports(imported: Collection<String>): Collection<KattonScript> {
-        if (imported.isEmpty()) return emptySet()
-        return imported
-            .flatMap { dependencyCache[it] ?: emptyList() }
-    }
-
-    private fun addExport(identifier: String, script: KattonScript) {
-        script.exported.add(identifier)
-        val providers = dependencyCache.computeIfAbsent(identifier){
-            ConcurrentLinkedQueue()
-        }
-        providers.add(script)
-    }
-
-    private fun processExportedMembers(script: KattonScript) {
-        // Get compiled bytes
-        val outputFiles =
-            (script.script.getCompiledModule() as? KJvmCompiledModuleInMemoryImpl)?.compilerOutputFiles ?: emptyMap()
-
-        // the package of the script
-        // empty if the script is in the default package
-        val scriptInfo = getScriptInfo(outputFiles)
-        script.scriptPackage = scriptInfo.scriptPackage
-        script.scriptMainClassInternalName = scriptInfo.scriptMainClassInternalName
-
-        // ignore if the script is in default package
-        if (scriptInfo.scriptPackage == null) {
-            return
-        }
-
-        outputFiles.forEach { (path, bytes) ->
-            if (path.endsWith(".class")) {
-                processClassByte(bytes, script)
-            }
-        }
-    }
-
-    private fun processClassByte(
-        bytes: ByteArray,
-        script: KattonScript
-    ) {
-        val reader = ClassReader(bytes)
-        val internalName = reader.className
-        val isScriptMain = internalName == script.scriptMainClassInternalName
-        val importability = getClassImportability(reader)
-
-        // Process class defined inside script.
-        // For example, we need to transform MainClass$Test into package.Test
-        if (!isScriptMain && script.scriptMainClassInternalName.isNotEmpty()
-            && internalName.startsWith(script.scriptMainClassInternalName)
-        ) {
-            //Get the name relative to the main class, such as $Test or $Test$Sub
-            val relativeName = internalName.removePrefix(script.scriptMainClassInternalName)
-            // remove the first $ and replace the rest $ with . to get the simple name
-            // $Test -> Test
-            // $Test$QwQ -> Test.QwQ
-            val simpleName = relativeName.substring(1).replace('$', '.')
-
-            // Filter out anonymous classes which start with a digit
-            if (simpleName.isNotEmpty() && !simpleName[0].isDigit()) {
-                val fqn = "${script.scriptPackage}.$simpleName"
-
-                // Only consider public classes as exports
-                if ((reader.access and Opcodes.ACC_PUBLIC) != 0) {
-                    addExport(fqn, script)
-                }
-            }
-        }
-
-        if(!(importability.isObjectClass || importability.isCompanionClass || isScriptMain)) return
-
-        // Process public members of all class.
-        val visitor = object : ClassVisitor(Opcodes.ASM9) {
-            override fun visitMethod(
-                access: Int,
-                methodName: String,
-                descriptor: String,
-                signature: String?,
-                exceptions: Array<out String>?
-            ): MethodVisitor? {
-                if ((access and Opcodes.ACC_PUBLIC) != 0 &&
-                    (access and Opcodes.ACC_SYNTHETIC) == 0 &&
-                    !methodName.startsWith("<") && !methodName.contains("$")
-                ) {
-                    if (methodName != "main") {
-                        val fqn = "${script.scriptPackage}.$methodName"
-                        addExport(fqn, script)
-                    }
-                }
-                return null
-            }
-
-            override fun visitField(
-                access: Int,
-                fieldName: String,
-                descriptor: String,
-                signature: String?,
-                value: Any?
-            ): FieldVisitor? {
-                if ((access and Opcodes.ACC_PUBLIC) != 0 &&
-                    (access and Opcodes.ACC_SYNTHETIC) == 0 &&
-                    !fieldName.contains("$") &&
-                    fieldName != "INSTANCE" &&
-                    fieldName != "Companion"
-                ) {
-                    val fqn = "${script.scriptPackage}.$fieldName"
-                    addExport(fqn, script)
-                }
-                return null
-            }
-        }
-        reader.accept(
-            visitor,
-            ClassReader.SKIP_CODE or ClassReader.SKIP_DEBUG or ClassReader.SKIP_FRAMES
-        )
-    }
-
-    private data class ScriptInfo(val scriptPackage: String?, val scriptMainClassInternalName: String)
-
-    private fun getScriptInfo(outputFiles: Map<String, ByteArray>): ScriptInfo {
-
-        var scriptMainClassInternalName = ""
-        var scriptPackage: String? = null
-
-        //find the main class of the scripts (not containing $ and end with .class)
-        for ((path, bytes) in outputFiles) {
-            if (path.endsWith(".class") && !path.contains("$")) {
-                val reader = ClassReader(bytes)
-                val className = reader.className // the main class of the scripts
-                scriptMainClassInternalName = className
-                val lastSlash = className.lastIndexOf('/')
-                scriptPackage = if (lastSlash != -1) {
-                    className.substring(0, lastSlash).replace('/', '.')
-                }else{
-                    null
-                }
-                break
-            }
-        }
-
-        return ScriptInfo(scriptPackage, scriptMainClassInternalName)
-    }
-
-    private fun getClassImportability(reader: ClassReader): ClassImportability {
-        var hasInstanceField = false
-
-        reader.accept(object : ClassVisitor(Opcodes.ASM9) {
-            override fun visitField(
-                access: Int,
-                name: String,
-                descriptor: String,
-                signature: String?,
-                value: Any?
-            ): FieldVisitor? {
-                if (name == "INSTANCE" &&
-                    (access and Opcodes.ACC_STATIC) != 0 &&
-                    (access and Opcodes.ACC_FINAL) != 0
-                ) {
-                    hasInstanceField = true
-                }
-                return null
-            }
-        }, ClassReader.SKIP_CODE or ClassReader.SKIP_DEBUG or ClassReader.SKIP_FRAMES)
-
-        return ClassImportability(
-            isObjectClass = hasInstanceField,
-            isCompanionClass = reader.className.endsWith("\$Companion")
-        )
-    }
-
-    /**
-     * Updates the cache by removing scripts that are no longer present in the provided set.
-     * This ensures deleted scripts are removed from memory.
-     *
-     * @param validScriptNames The set of script names that are currently valid/loaded.
-     */
-    fun updateCache(validScriptNames: Set<String>) {
-        val keysToRemove = compiledCache.keys.filter { it !in validScriptNames }
-        keysToRemove.forEach { name ->
-            compiledCache.remove(name)?.let { (_, compiledScript) ->
-                classCache.remove(compiledScript)
-            }
-        }
-    }
-
-    // Cache mapping CompiledScript -> loaded KClass to avoid repeated getClass operations.
-    private val classCache = ConcurrentHashMap<KattonScript, kotlin.reflect.KClass<*>>()
-
-    /**
-     * Execute a compiled script and return its evaluation result.
-     *
-     * The engine will load the script's class (cached when possible) and attempt to
-     * instantiate it. Instantiation prefers a no-arg Kotlin constructor, falling back
-     * to Java reflection when necessary.
-     *
-     * @param script The compiled script to execute.
-     * @return ResultWithDiagnostics containing EvaluationResult or diagnostics on failure.
-     */
     @JvmStatic
-    suspend fun execute(
-        script: KattonScript,
-        scriptOwner: String? = null
-    ): ResultWithDiagnostics<EvaluationResult> {
+    fun compileAndExecuteAll(scriptPath: Collection<String>){
+        val dummyScript = "".toScriptSource()
+        LOGGER.info("Compiling and executing ${scriptPath.size} scripts")
+        runBlocking {
+            val compileResult = compiler(dummyScript, ScriptCompilationConfiguration(baseConfig) {
+                importScripts(scriptPath.map { File(it).toScriptSource() })
+            })
+            logCompileResult(compileResult)
+
+            when (compileResult) {
+                is ResultWithDiagnostics.Success -> {
+                    val executionResult = execute(compileResult.value, null)
+                    logExecutionResult(executionResult)
+                }
+
+                is ResultWithDiagnostics.Failure -> {
+                    return@runBlocking
+                }
+            }
+        }
+    }
+
+    private fun logCompileResult(compileResult: ResultWithDiagnostics<CompiledScript>) {
+        val compileReports = compileResult.reports.filter { it.severity >= ScriptDiagnostic.Severity.INFO }
+        if (compileReports.isNotEmpty()) {
+            LOGGER.info(compileReports.joinToString("\n"))
+        }
+
+        when (compileResult) {
+            is ResultWithDiagnostics.Success -> {
+                LOGGER.info("Compile succeeded, start executing scripts")
+            }
+
+            is ResultWithDiagnostics.Failure -> {
+                LOGGER.error("Compile failed: ${compileResult.reports.joinToString("\n")}")
+            }
+        }
+    }
+
+    private fun logExecutionResult(executionResult: ResultWithDiagnostics<EvaluationResult>) {
+        when (executionResult) {
+            is ResultWithDiagnostics.Success -> {
+                val summary = (executionResult.value.returnValue as? ResultValue.Value)
+                    ?.value as? Map<*, *>
+
+                if (summary != null) {
+                    val successCount = summary["successCount"]
+                    val failureCount = summary["failureCount"]
+                    val totalAttempted = summary["totalAttempted"]
+                    val errorMessages = summary["errorMessages"] as? List<*>
+
+                    LOGGER.info(
+                        "Execution finished: total=$totalAttempted, success=$successCount, failure=$failureCount"
+                    )
+
+                    if (!errorMessages.isNullOrEmpty()) {
+                        LOGGER.warn("Execution errors:\n${errorMessages.joinToString("\n")}")
+                    }
+                } else {
+                    LOGGER.info("Execution finished, but no execution summary was returned")
+                }
+            }
+
+            is ResultWithDiagnostics.Failure -> {
+                LOGGER.error("Execution failed: ${executionResult.reports.joinToString("\n")}")
+            }
+        }
+    }
+
+    private suspend fun execute(
+        script: CompiledScript,
+        scriptOwner: String?
+    ): ResultWithDiagnostics<EvaluationResult>{
         if (scriptOwner != null) {
             Event.clearHandlersByOwner(scriptOwner)
         }
 
-        // Use cached class to avoid repeated getClass() calls for the same compiled script.
-        val scriptClass = classCache.getOrPut(script) {
-            // Load the class using the evaluation configuration; return any failure immediately.
-            when (val res = script.script.getClass(evaluationConfig)) {
-                is ResultWithDiagnostics.Success -> res.value
-                is ResultWithDiagnostics.Failure -> return res
+        //create class instance to trigger static initializer and register events
+        val module = (script as KJvmCompiledScript).getCompiledModule() as KJvmCompiledModuleInMemoryImpl
+        val outputFiles = module.compilerOutputFiles
+
+        val rootClass = when (val res = script.getClass(evaluationConfig)) {
+            is ResultWithDiagnostics.Success -> res.value
+            is ResultWithDiagnostics.Failure -> return res
+        }
+
+        val loader = rootClass.java.classLoader
+        val rootName = rootClass.qualifiedName
+        var successCount = 0
+        var failureCount = 0
+        val errorMessages = mutableListOf<String>()
+
+        for ((path, bytes) in outputFiles) {
+            if (!path.endsWith(".class") || path.contains("$")) continue
+
+            val internalName = ClassReader(bytes).className
+            val fqcn = internalName.replace('/', '.')
+            if (fqcn == rootName) continue // 跳过空白入口脚本
+
+            runCatching {
+                Class.forName(fqcn, true, loader)
+            }.onSuccess {
+                successCount++
+            }.onFailure {
+                failureCount++
+                errorMessages += "$fqcn: ${it.message ?: "Unknown error"}"
+                LOGGER.warn("Failed to instantiate script class: $fqcn", it)
             }
         }
 
-        return try {
-            // Try to find a Kotlin constructor (may have parameter metadata).
-            val ctor = scriptClass.constructors.firstOrNull()
-            
-            val instance = Event.withScriptOwner(scriptOwner) {
-                if (ctor != null) {
-                    // Prefer calling the Kotlin constructor without parameters.
-                    ctor.call()
-                } else {
-                    // Fallback to Java reflection: get the first Java constructor and call it.
-                    // This handles environments where Kotlin reflection metadata is not available.
-                    val javaCtor = scriptClass.java.constructors.firstOrNull()
-                        ?: throw IllegalStateException("No constructor found for script class ${scriptClass.simpleName}")
-                    javaCtor.newInstance()
-                }
-            }
+        val executionSummary = mapOf(
+            "successCount" to successCount,
+            "failureCount" to failureCount,
+            "totalAttempted" to (successCount + failureCount),
+            "errorMessages" to errorMessages
+        )
 
-            // Wrap the created instance as the script evaluation result.
-            ResultWithDiagnostics.Success(
-                EvaluationResult(
-                    returnValue = ResultValue.Value(
-                        name = "scriptResult",
-                        value = instance, 
-                        type = "Any",
-                        scriptClass = scriptClass,
-                        scriptInstance = instance
-                    ),
-                    configuration = evaluationConfig
-                )
+        return ResultWithDiagnostics.Success(
+            EvaluationResult(
+                returnValue = ResultValue.Value(
+                    name = "executionSummary",
+                    value = executionSummary,
+                    type = "Map<String, Any>",
+                    scriptClass = rootClass,
+                    scriptInstance = executionSummary
+                ),
+                configuration = evaluationConfig
             )
-        } catch (e: Throwable) {
-            // Convert exception into a ScriptDiagnostic to return as failure diagnostics.
-            ResultWithDiagnostics.Failure(
-               listOf(
-                   ScriptDiagnostic(
-                       -1,
-                       message =  e.message ?: "Execution Error",
-                       exception = e
-                   )
-               )
-            )
-        }
+        )
     }
 
 }

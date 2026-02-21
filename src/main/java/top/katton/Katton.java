@@ -1,8 +1,5 @@
 package top.katton;
 
-import kotlin.Unit;
-import kotlin.coroutines.EmptyCoroutineContext;
-import kotlinx.coroutines.BuildersKt;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
@@ -27,50 +24,16 @@ public class Katton implements ModInitializer {
 
     @Override
     public void onInitialize() {
-//        File gameDir = FabricLoader.getInstance().getGameDir().toFile();
-//        File ktScriptsDir = new File(gameDir, "ktscripts");
-//        if (ktScriptsDir.exists() && ktScriptsDir.isDirectory()) {
-//            File[] subFolders = ktScriptsDir.listFiles();
-//            if (subFolders != null) {
-//                for (File subFolder : subFolders) {
-//                    if (subFolder.isDirectory()) {
-//                        File serversDir = new File(subFolder, "servers");
-//                        if (serversDir.exists() && serversDir.isDirectory()) {
-//                            File[] scriptFiles = serversDir.listFiles((_, name) -> name.endsWith(".kts"));
-//                            if (scriptFiles != null) {
-//                                for (File scriptFile : scriptFiles) {
-//                                    try {
-//                                        BuildersKt.runBlocking(EmptyCoroutineContext.INSTANCE, (_, continuation) -> {
-//                                            try {
-//                                                logger.info("Compiling and executing script: {}", scriptFile.getAbsolutePath());
-//                                                String source = readString(scriptFile.toPath());
-//                                                @SuppressWarnings("unchecked") ResultWithDiagnostics<CompiledScript> compileResult = (ResultWithDiagnostics<CompiledScript>) ScriptEngine.INSTANCE.compile(scriptFile.getAbsolutePath(), source, scriptFile.getAbsolutePath(), false, continuation);
-//                                                assert compileResult != null;
-//                                                var compiled = valueOrThrow(compileResult);
-//                                                ScriptEngine.INSTANCE.execute(compiled, null, continuation);
-//                                            } catch (Exception e) {
-//                                                logger.error("Failed to execute script: {}", scriptFile.getAbsolutePath(), e);
-//                                            }
-//                                            return Unit.INSTANCE;
-//                                        });
-//                                    } catch (InterruptedException e) {
-//                                        throw new RuntimeException(e);
-//                                    }
-//                                }
-//                            }
-//                        }
-//                    }
-//                }
-//            }
-//        }
-
         ResourceLoader.get(PackType.SERVER_DATA).registerReloadListener(
                 Identifier.parse("katton:scripts"), ScriptLoader.INSTANCE
         );
 
         CommandRegistrationCallback.EVENT.register((dispatcher, _, _) -> ScriptCommand.INSTANCE.register(dispatcher));
 
-        ServerLifecycleEvents.SERVER_STARTED.register(serverInstance -> server = serverInstance);
+        ServerLifecycleEvents.SERVER_STARTED.register(serverInstance -> {
+            server = serverInstance;
+            loadScript();
+        });
 
         ServerLifecycleEvents.SERVER_STOPPED.register(_ -> server = null);
 
@@ -78,21 +41,12 @@ public class Katton implements ModInitializer {
             if (!success) {
                 return;
             }
-
-            Event.Companion.getFabricEventRegistry().values().forEach(list -> list.forEach(Event::clear));
-
-            ScriptLoader.getMainScript().forEach((id, script) ->
-                    {
-                        try {
-                            BuildersKt.runBlocking(EmptyCoroutineContext.INSTANCE, (_, continuation) -> {
-                                ScriptEngine.execute(script, id.toString(), continuation);
-                                return Unit.INSTANCE;
-                            });
-                        } catch (InterruptedException e) {
-                            throw new RuntimeException(e);
-                        }
-                    }
-            );
+            loadScript();
         });
+    }
+
+    public void loadScript(){
+        Event.Companion.getFabricEventRegistry().values().forEach(list -> list.forEach(Event::clear));
+        ScriptEngine.compileAndExecuteAll(ScriptLoader.getScripts().values());
     }
 }
