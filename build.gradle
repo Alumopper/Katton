@@ -36,16 +36,19 @@ loom {
 }
 
 dependencies {
-	include(implementation('org.jetbrains.kotlin:kotlin-script-runtime'))
+	include(implementation('org.jetbrains.kotlin:kotlin-compiler-embeddable'))
+	include(implementation('org.jetbrains.kotlin:kotlin-daemon-embeddable'))
 	include(implementation('org.jetbrains.kotlin:kotlin-reflect'))
+	include(implementation('org.jetbrains.kotlin:kotlin-script-runtime'))
 	include(implementation('org.jetbrains.kotlin:kotlin-scripting-common'))
-	include(implementation('org.jetbrains.kotlin:kotlin-scripting-jvm'))
-	include(implementation('org.jetbrains.kotlin:kotlin-scripting-jvm-host'))
 	include(implementation('org.jetbrains.kotlin:kotlin-scripting-compiler-embeddable'))
 	include(implementation('org.jetbrains.kotlin:kotlin-scripting-compiler-impl-embeddable'))
-	include(implementation('org.jetbrains.kotlin:kotlin-compiler-embeddable'))
+	include(implementation('org.jetbrains.kotlin:kotlin-scripting-jvm'))
+	include(implementation('org.jetbrains.kotlin:kotlin-scripting-jvm-host'))
+	include(implementation('org.jetbrains.kotlin:kotlin-stdlib'))
 	include(implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm:1.8.0"))
 	include(implementation("org.jetbrains.kotlinx:kotlinx-coroutines-jdk8:1.8.0"))
+	include(implementation("org.jetbrains:annotations:26.0.2"))
 
 	// To change the versions see the gradle.properties file
 	minecraft "com.mojang:minecraft:${project.minecraft_version}"

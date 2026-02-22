@@ -1,7 +1,6 @@
 package top.katton.engine
 
 import com.google.common.collect.ImmutableMap
-import com.google.common.collect.Maps
 import com.mojang.datafixers.util.Pair
 import com.mojang.logging.LogUtils
 import kotlinx.coroutines.CoroutineScope
@@ -26,21 +25,19 @@ import kotlin.script.experimental.api.CompiledScript
 object ScriptLoader : PreparableReloadListener {
 
     private val LOGGER = LogUtils.getLogger()
-    val TYPE_KEY = ResourceKey.createRegistryKey<Registry<CompiledScript>>(
+    private val TYPE_KEY = ResourceKey.createRegistryKey<Registry<CompiledScript>>(
         Identifier.withDefaultNamespace("scripts")
     )
-    val KTS_LISTER = FileToIdConverter(Registries.elementsDirPath(TYPE_KEY), ".kts")
-    val KT_LISTER = FileToIdConverter(Registries.elementsDirPath(TYPE_KEY), ".kt")
+    private val KT_LISTER = FileToIdConverter(Registries.elementsDirPath(TYPE_KEY), ".kt")
 
     @JvmStatic
     var scripts: Map<Identifier, String> = ImmutableMap.of()
-    val tagsLoader: TagLoader<String> = TagLoader(
+    private val tagsLoader: TagLoader<String> = TagLoader(
         {id, bl -> getScript(id)}, Registries.tagsDirPath(TYPE_KEY)
     )
     var tags: Map<Identifier, List<String>> = mapOf()
     @Volatile
     private var latestResourceManager: ResourceManager? = null
-
 
     fun getScript(identifier: Identifier): Optional<out String?> {
         return Optional.ofNullable(scripts[identifier])
@@ -60,11 +57,9 @@ object ScriptLoader : PreparableReloadListener {
         val tagProcessor = CompletableFuture.supplyAsync({ this.tagsLoader.load(manager) }, executor)
         //Load and compile scripts. Script dependencies are also handled in this step.
         //Although kt files are recommended, we still remain compatible with kts files.
-        val ktsFileProcessor = loadScripts(KTS_LISTER, manager, executor)
-        val ktFileProcessor = loadScripts(KT_LISTER, manager, executor)
+        val ktFileProcessor = loadScripts(manager, executor)
         return tagProcessor
-            .thenCombine(ktsFileProcessor) { a, b -> Pair.of(a, b) }
-            .thenCombine(ktFileProcessor) { a, c -> Pair.of(a.first, mergeScriptMaps(a.second, c)) }
+            .thenCombine(ktFileProcessor) { a, b -> Pair.of(a, b) }
             .thenCompose(preparationBarrier::wait)
             .thenAcceptAsync ({ pair ->
                 this.scripts = pair.second
@@ -72,22 +67,11 @@ object ScriptLoader : PreparableReloadListener {
             }, executor2)
     }
 
-    private fun mergeScriptMaps(
-        map1: Map<Identifier, String>,
-        map2: Map<Identifier, String>
-    ): Map<Identifier, String> {
-        val merged = Maps.newHashMap<Identifier, String>()
-        merged.putAll(map1)
-        merged.putAll(map2)
-        return merged
-    }
-
     private fun loadScripts(
-        lister: FileToIdConverter,
         manager: ResourceManager,
         executor: Executor
     ): CompletableFuture<Map<Identifier, String>> {
-        return CompletableFuture.supplyAsync({ lister.listMatchingResources(manager) }, executor)
+        return CompletableFuture.supplyAsync({ KT_LISTER.listMatchingResources(manager) }, executor)
             .thenCompose { map ->
                 val scope = CoroutineScope(executor.asCoroutineDispatcher())
                 scope.future {
