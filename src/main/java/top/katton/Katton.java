@@ -11,6 +11,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import top.katton.api.EntityEvent;
 import top.katton.command.ScriptCommand;
+import top.katton.registry.ScriptCommandRegistry;
 import top.katton.engine.ScriptEngine;
 import top.katton.engine.ScriptLoader;
 import top.katton.registry.KattonRegistry;
@@ -42,7 +43,8 @@ public class Katton implements ModInitializer {
         ServerLifecycleEvents.SERVER_STARTED.register(serverInstance -> {
             server = serverInstance;
             globalState = LoadState.SERVER_STARTED;
-            loadScript();
+            reloadScripts(serverInstance);
+            ScriptCommand.syncCommandTree(serverInstance);
         });
 
         ServerLifecycleEvents.SERVER_STOPPED.register(_ -> {
@@ -55,11 +57,16 @@ public class Katton implements ModInitializer {
             if (!success) {
                 return;
             }
-            loadScript();
+            reloadScripts(server);
+            ScriptCommand.syncCommandTree(server);
         });
     }
 
-    public void loadScript(){
+    public static void reloadScripts(MinecraftServer server){
+        if (server == null) {
+            return;
+        }
+        ScriptCommandRegistry.INSTANCE.beginReload(server);
         Event.Companion.getFabricEventRegistry().values().forEach(list -> list.forEach(Event::clear));
         ScriptEngine.compileAndExecuteAll(ScriptLoader.getScripts().values());
     }

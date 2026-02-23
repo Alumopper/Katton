@@ -138,7 +138,9 @@ object ScriptEngine {
             if (fqcn == rootName) continue // 跳过空白入口脚本
 
             runCatching {
-                Class.forName(fqcn, true, loader)
+                Event.withScriptOwner(fqcn) {
+                    Class.forName(fqcn, true, loader)
+                }
             }.onSuccess {
                 successCount++
             }.onFailure {
