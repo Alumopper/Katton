@@ -32,6 +32,9 @@ In IDEs such as IntelliJ IDEA, you may see unresolved references for Minecraft/F
 
 ### Script Debugging (Remote)
 
+Katton also supports registering native Minecraft Items from scripts. Important: to avoid registry intrusive-holder errors, construct Item subclasses inside the lambda passed to registerNativeItem rather than at script top-level. See examples below.
+
+
 Katton supports debugging datapack Kotlin scripts through standard JVM remote debugging.
 
 1. Start Minecraft (or the dedicated server) with a debug agent, for example:

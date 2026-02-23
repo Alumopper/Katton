@@ -2,6 +2,9 @@
 	"required": true,
 	"package": "top.katton.mixin",
 	"compatibilityLevel": "JAVA_21",
+	"mixins": [
+		"MappedRegistryAccessor"
+	],
 	"injectors": {
 		"defaultRequire": 1
 	},

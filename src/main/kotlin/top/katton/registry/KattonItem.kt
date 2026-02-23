@@ -33,8 +33,10 @@ class KattonItemProperties(
 ) : Item.Properties(), Identifiable {
 
     init {
-        this.setId(ResourceKey.create(Registries.ITEM, id))
-        this.component(KattonRegistry.COMPONENTS.KATTON_ID, id.toString())
+        // Do not call setId here. Setting the internal Item.Properties id will trigger
+        // intrusive holder creation when Item(properties) is constructed. We keep the
+        // logical identifier in the constructor parameter `id` and apply the actual
+        // resource key during registration time instead.
     }
 
 
@@ -82,7 +84,16 @@ class KattonItemProperties(
         val mapBuilder = DataComponentMap.builder()
         server?.let {
             val initializer = finalizeInitializer(name, model)
-            initializer.run(mapBuilder, it.registryAccess(), this@KattonItemProperties.itemIdOrThrow())
+            // itemIdOrThrow may rely on properties set by Item.Properties.setId.
+            // For dynamically created native items we will call the initializer at registration time
+            // with the actual resource key. Here we only attempt initialization if the properties
+            // already contain a valid id mapping (e.g. global registrations).
+            try {
+                initializer.run(mapBuilder, it.registryAccess(), this@KattonItemProperties.itemIdOrThrow())
+            } catch (_: Throwable) {
+                // ignore during script-time construction; components will be applied when the
+                // item is registered and itemId is available.
+            }
         }
         return mapBuilder.build()
     }
@@ -102,9 +113,11 @@ val ItemStack.kattonItemEntry: KattonRegistry.KattonItemEntry
 
 val ItemStack.kattonAgentItem: KattonItemInterface
     get() = kattonItemEntry.agentItem
+        ?: KattonRegistry.ITEMS.default.agentItem
+        ?: error("Katton default item is missing agentItem")
 
 val ItemStack.kattonActualItem: Item
-    get() = kattonItemEntry.actualItem
+    get() = kattonItemEntry.item
 
 open class KattonItem(
     val properties: KattonItemProperties
@@ -120,7 +133,7 @@ open class KattonItem(
     }
 
     override fun getDefaultInstance(): ItemStack {
-        return ItemStack(KattonRegistry.ITEMS.getOrDefault(id).actualItem, 1).apply {
+        return ItemStack(KattonRegistry.ITEMS.getOrDefault(id).item, 1).apply {
             applyComponents(components())
         }
     }

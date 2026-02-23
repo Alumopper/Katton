@@ -5,9 +5,11 @@ package top.katton.api
 import net.minecraft.core.BlockPos
 import net.minecraft.core.component.DataComponents
 import net.minecraft.nbt.CompoundTag
+import net.minecraft.resources.Identifier
 import net.minecraft.server.level.ServerPlayer
 import net.minecraft.world.Container
 import net.minecraft.world.entity.Entity
+import net.minecraft.world.item.Item
 import net.minecraft.world.item.ItemStack
 import net.minecraft.world.level.storage.loot.LootContext
 import net.minecraft.world.level.storage.loot.LootParams
@@ -15,6 +17,11 @@ import net.minecraft.world.level.storage.loot.functions.LootItemFunction
 import net.minecraft.world.level.storage.loot.parameters.LootContextParamSets
 import net.minecraft.world.level.storage.loot.parameters.LootContextParams
 import net.minecraft.world.phys.Vec3
+import top.katton.registry.KattonItemInterface
+import top.katton.registry.KattonItemProperties
+import top.katton.registry.KattonRegistry
+import top.katton.registry.RegisterMode
+import top.katton.registry.id
 import java.util.*
 
 var ItemStack.nbt: CompoundTag
@@ -161,3 +168,100 @@ fun applyModifier(itemStack: ItemStack, modifier: LootItemFunction): ItemStack {
     modifiedItemStack.limitSize(modifiedItemStack.maxStackSize)
     return modifiedItemStack
 }
+
+fun registerItem(
+    id: Identifier,
+    properties: KattonItemProperties,
+    registerMode: RegisterMode = RegisterMode.AUTO,
+    itemFactory: (KattonItemProperties) -> KattonItemInterface
+): KattonRegistry.KattonItemEntry {
+    require(properties.id == id) {
+        "Item id mismatch: id=$id properties.id=${properties.id}"
+    }
+    return KattonRegistry.ITEMS.new(properties, registerMode, itemFactory)
+}
+
+fun registerItem(
+    id: String,
+    properties: KattonItemProperties,
+    registerMode: RegisterMode = RegisterMode.AUTO,
+    itemFactory: (KattonItemProperties) -> KattonItemInterface
+): KattonRegistry.KattonItemEntry = registerItem(id(id), properties, registerMode, itemFactory)
+
+fun registerItem(
+    id: Identifier,
+    registerMode: RegisterMode = RegisterMode.AUTO,
+    configure: KattonItemProperties.() -> Unit = {},
+    itemFactory: (KattonItemProperties) -> KattonItemInterface
+): KattonRegistry.KattonItemEntry {
+    val properties = KattonItemProperties.components(id).apply(configure)
+    return registerItem(id, properties, registerMode, itemFactory)
+}
+
+fun registerItem(
+    id: String,
+    registerMode: RegisterMode = RegisterMode.AUTO,
+    configure: KattonItemProperties.() -> Unit = {},
+    itemFactory: (KattonItemProperties) -> KattonItemInterface
+): KattonRegistry.KattonItemEntry = registerItem(id(id), registerMode, configure, itemFactory)
+
+fun registerNativeItem(
+    id: Identifier,
+    properties: KattonItemProperties,
+    registerMode: RegisterMode = RegisterMode.AUTO,
+    itemFactory: () -> Item
+): KattonRegistry.KattonItemEntry {
+    require(properties.id == id) {
+        "Item id mismatch: id=$id properties.id=${properties.id}"
+    }
+    // itemFactory is now delayed; KattonRegistry will call it during unfreeze to avoid intrusive-holder errors
+    return KattonRegistry.ITEMS.newNative(properties, registerMode) { properties -> itemFactory() }
+}
+
+fun registerNativeItem(
+    id: String,
+    properties: KattonItemProperties,
+    registerMode: RegisterMode = RegisterMode.AUTO,
+    itemFactory: () -> Item
+): KattonRegistry.KattonItemEntry = registerNativeItem(id(id), properties, registerMode, itemFactory)
+
+fun registerNativeItem(
+    id: Identifier,
+    registerMode: RegisterMode = RegisterMode.AUTO,
+    configure: KattonItemProperties.() -> Unit = {},
+    itemFactory: () -> Item
+): KattonRegistry.KattonItemEntry {
+    val properties = KattonItemProperties.components(id).apply(configure)
+    return registerNativeItem(id, properties, registerMode, itemFactory)
+}
+
+fun registerNativeItem(
+    id: String,
+    registerMode: RegisterMode = RegisterMode.AUTO,
+    configure: KattonItemProperties.() -> Unit = {},
+    itemFactory: () -> Item
+): KattonRegistry.KattonItemEntry = registerNativeItem(id(id), registerMode, configure, itemFactory)
+
+fun registerNativeItem(
+    id: String,
+    properties: KattonItemProperties,
+    registerMode: RegisterMode = RegisterMode.AUTO,
+    itemFactory: (KattonItemProperties) -> Item
+): KattonRegistry.KattonItemEntry = registerNativeItem(id(id), properties, registerMode) { itemFactory(properties) }
+
+fun registerNativeItem(
+    id: Identifier,
+    registerMode: RegisterMode = RegisterMode.AUTO,
+    configure: KattonItemProperties.() -> Unit = {},
+    itemFactory: (KattonItemProperties) -> Item
+): KattonRegistry.KattonItemEntry {
+    val properties = KattonItemProperties.components(id).apply(configure)
+    return registerNativeItem(id, properties, registerMode) { itemFactory(properties) }
+}
+
+fun registerNativeItem(
+    id: String,
+    registerMode: RegisterMode = RegisterMode.AUTO,
+    configure: KattonItemProperties.() -> Unit = {},
+    itemFactory: (KattonItemProperties) -> Item
+): KattonRegistry.KattonItemEntry = registerNativeItem(id(id), registerMode, configure, itemFactory)
