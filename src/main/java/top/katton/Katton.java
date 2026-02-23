@@ -9,35 +9,49 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.packs.PackType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import top.katton.api.EntityEvent;
 import top.katton.command.ScriptCommand;
 import top.katton.engine.ScriptEngine;
 import top.katton.engine.ScriptLoader;
+import top.katton.registry.KattonRegistry;
 import top.katton.util.Event;
 
 public class Katton implements ModInitializer {
-    private static final Logger logger = LoggerFactory.getLogger("katton");
+    public static final String MOD_ID = "katton";
+    private static final Logger logger = LoggerFactory.getLogger(MOD_ID);
 
     /**
      * Current minecraft server instance. Maybe null during client-side execution.
      */
     public static MinecraftServer server = null;
+    public static LoadState globalState = LoadState.INIT;
 
     @Override
     public void onInitialize() {
+        KattonRegistry.ITEMS.INSTANCE.initialize();
+
+        EntityEvent.INSTANCE.initialize();
+
         ResourceLoader.get(PackType.SERVER_DATA).registerReloadListener(
-                Identifier.parse("katton:scripts"), ScriptLoader.INSTANCE
+                Identifier.fromNamespaceAndPath(MOD_ID, "scripts"),
+                ScriptLoader.INSTANCE
         );
 
         CommandRegistrationCallback.EVENT.register((dispatcher, _, _) -> ScriptCommand.INSTANCE.register(dispatcher));
 
         ServerLifecycleEvents.SERVER_STARTED.register(serverInstance -> {
             server = serverInstance;
+            globalState = LoadState.SERVER_STARTED;
             loadScript();
         });
 
-        ServerLifecycleEvents.SERVER_STOPPED.register(_ -> server = null);
+        ServerLifecycleEvents.SERVER_STOPPED.register(_ -> {
+            server = null;
+            globalState = LoadState.SERVER_STOPPED;
+        });
 
         ServerLifecycleEvents.END_DATA_PACK_RELOAD.register((_, _, success) -> {
+            globalState = LoadState.END_DATA_PACK_RELOAD;
             if (!success) {
                 return;
             }

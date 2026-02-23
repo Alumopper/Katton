@@ -8,10 +8,9 @@ import net.minecraft.core.BlockPos
 import net.minecraft.core.Holder
 import net.minecraft.core.registries.Registries
 import net.minecraft.nbt.CompoundTag
-import net.minecraft.network.chat.*
 import net.minecraft.resources.ResourceKey
 import net.minecraft.server.MinecraftServer
-import net.minecraft.server.commands.*
+import net.minecraft.server.commands.SpreadPlayersCommand
 import net.minecraft.server.level.ServerLevel
 import net.minecraft.server.level.ServerPlayer
 import net.minecraft.world.Difficulty
@@ -28,7 +27,7 @@ import net.minecraft.world.level.entity.EntityTypeTest
 import net.minecraft.world.phys.AABB
 import net.minecraft.world.phys.Vec2
 import net.minecraft.world.phys.Vec3
-import net.minecraft.world.scores.*
+import top.katton.util.ContextEvent
 import java.util.*
 
 var Entity.nbt: CompoundTag
@@ -36,6 +35,33 @@ var Entity.nbt: CompoundTag
     set(value) {
         setEntityNbt(this, value)
     }
+
+object EntityEvent {
+    val onTickHandlers = mutableMapOf<Entity, ContextEvent.HandlerEntry<Entity.(Level) -> Unit>>()
+    class EntityOnTickEvent(entity: Entity): ContextEvent<Entity, Entity.(level: Level)-> Unit>(entity, onTickHandlers) {
+        override fun invoker(): Entity.(level: Level) -> Unit {
+            return { level ->
+                handlerSnapshot().forEach { handler ->
+                    handler(this, level)
+                }
+            }
+        }
+    }
+    val Entity.onTick: EntityOnTickEvent
+        get() = EntityOnTickEvent(this)
+
+
+    fun initialize() {
+        // 在实体加载时，如果该实体有注册的 tick 事件，则在世界 tick 时调用
+        KattonEvents.ServerEntity.onEntityLoad += { (entity, world) ->
+            onTickHandlers[entity]?.handler(entity, world)
+        }
+    }
+}
+
+
+
+
 
 class KattonServerEntityCollection(
     private val server: MinecraftServer

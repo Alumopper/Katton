@@ -2,3 +2,4 @@ accessWidener v2 official
 
 accessible method net/minecraft/server/commands/SpreadPlayersCommand spreadPlayers (Lnet/minecraft/commands/CommandSourceStack;Lnet/minecraft/world/phys/Vec2;FFIZLjava/util/Collection;)I
 accessible field net/minecraft/server/packs/PathPackResources root Ljava/nio/file/Path;
+accessible field net/minecraft/world/item/Item$Properties componentInitializer Lnet/minecraft/core/component/DataComponentInitializers$Initializer;

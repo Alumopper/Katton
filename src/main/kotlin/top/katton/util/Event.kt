@@ -2,13 +2,13 @@ package top.katton.util
 
 typealias FabricEvent<T> = net.fabricmc.fabric.api.event.Event<T>
 
-abstract class Event<T> {
+abstract class Event<T>(
+    protected val handlers: MutableList<HandlerEntry<T>> = mutableListOf()
+) {
     data class HandlerEntry<T>(
         val owner: String?,
         val handler: T
     )
-
-    protected val handlers = mutableListOf<HandlerEntry<T>>()
 
     fun register(handler: T) {
         handlers.add(HandlerEntry(currentScriptOwner.get(), handler))
