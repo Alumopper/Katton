@@ -29,6 +29,8 @@ public class Katton implements ModInitializer {
 
     @Override
     public void onInitialize() {
+        // Initialize KattonRegistry first to register custom DataComponentTypes
+        KattonRegistry.INSTANCE.initialize();
         KattonRegistry.ITEMS.INSTANCE.initialize();
 
         EntityEvent.INSTANCE.initialize();

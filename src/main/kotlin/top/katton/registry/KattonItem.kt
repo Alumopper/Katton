@@ -1,6 +1,7 @@
 package top.katton.registry
 
 import net.minecraft.core.BlockPos
+import net.minecraft.core.Holder
 import net.minecraft.core.component.DataComponentInitializers
 import net.minecraft.core.component.DataComponentMap
 import net.minecraft.core.component.DataComponents
@@ -42,7 +43,7 @@ class KattonItemProperties(
 
     private var _name: Component? = null
     var name: Component
-        get() = _name ?: Component.translatable(effectiveDescriptionId())
+        get() = _name ?: Component.translatable("item.${id.namespace}.${id.path}")
         set(value) {
             _name = value
         }
@@ -54,7 +55,7 @@ class KattonItemProperties(
 
     private var _model: Identifier? = null
     var model: Identifier
-        get() = _model ?: effectiveModel()
+        get() = _model ?: id.withPath("item/${id.path}")
         set(value) {
             _model = value
         }
@@ -82,23 +83,35 @@ class KattonItemProperties(
 
     fun buildComponent(): DataComponentMap {
         val mapBuilder = DataComponentMap.builder()
+        
+        // 始终首先设置名称和材质，确保这些基本组件不会丢失
+        val actualName = name
+        val actualModel = model
+        LOGGER.info("Building components for item $id: name=$actualName, model=$actualModel")
+        mapBuilder.set(DataComponents.ITEM_NAME, actualName)
+        mapBuilder.set(DataComponents.ITEM_MODEL, actualModel)
+        
         server?.let {
-            val initializer = finalizeInitializer(name, model)
+            val initializer = finalizeInitializer(actualName, actualModel)
             // itemIdOrThrow may rely on properties set by Item.Properties.setId.
             // For dynamically created native items we will call the initializer at registration time
             // with the actual resource key. Here we only attempt initialization if the properties
             // already contain a valid id mapping (e.g. global registrations).
             try {
-                initializer.run(mapBuilder, it.registryAccess(), this@KattonItemProperties.itemIdOrThrow())
-            } catch (_: Throwable) {
-                // ignore during script-time construction; components will be applied when the
-                // item is registered and itemId is available.
+                val itemId = this@KattonItemProperties.itemIdOrThrow()
+                initializer.run(mapBuilder, it.registryAccess(), itemId)
+            } catch (e: Throwable) {
+                // 忽略异常，名称和材质已经设置
+                LOGGER.warn("buildComponent: initializer.run failed for $id: ${e.message}")
             }
         }
-        return mapBuilder.build()
+        val result = mapBuilder.build()
+        LOGGER.info("Built components for item $id: ${result.keySet()}")
+        return result
     }
 
     companion object {
+        private val LOGGER = com.mojang.logging.LogUtils.getLogger()
         fun components(id: Identifier) = KattonItemProperties(id)
     }
 
@@ -133,8 +146,8 @@ open class KattonItem(
     }
 
     override fun getDefaultInstance(): ItemStack {
-        return ItemStack(KattonRegistry.ITEMS.getOrDefault(id).item, 1).apply {
-            applyComponents(components())
+        return ItemStack(Holder.direct(KattonRegistry.ITEMS.getOrDefault(id).item), 1).apply {
+            try { applyComponents(components()) } catch (_: Throwable) { }
         }
     }
 

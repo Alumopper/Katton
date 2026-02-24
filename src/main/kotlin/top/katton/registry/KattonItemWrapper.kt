@@ -1,6 +1,7 @@
 package top.katton.registry
 
 import net.minecraft.core.BlockPos
+import net.minecraft.core.Holder
 import net.minecraft.core.component.DataComponentMap
 import net.minecraft.network.chat.Component
 import net.minecraft.server.level.ServerLevel
@@ -45,7 +46,7 @@ open class KattonItemWrapper(
     override fun asItem(): Item = wrappedItem
 
     override fun getDefaultInstance(): ItemStack {
-        return ItemStack(wrappedItem, 1).apply {
+        return ItemStack(Holder.direct(wrappedItem), 1).apply {
             applyComponents(components())
         }
     }

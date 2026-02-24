@@ -1,6 +1,7 @@
 package top.katton.registry
 
 import net.minecraft.core.BlockPos
+import net.minecraft.core.Holder
 import net.minecraft.core.component.DataComponentMap
 import net.minecraft.core.component.DataComponents
 import net.minecraft.network.chat.CommonComponents
@@ -231,7 +232,7 @@ interface KattonItemInterface : ItemLike, FeatureElement, Identifiable  {
 
     fun useOnRelease(itemStack: ItemStack): Boolean = false
 
-    fun getDefaultInstance(): ItemStack = ItemStack(asItem())
+    fun getDefaultInstance(): ItemStack = ItemStack(Holder.direct(asItem()), 1).apply { try { applyComponents(components()) } catch (_: Throwable) { } }
 
     fun canFitInsideContainerItems(): Boolean = true
 

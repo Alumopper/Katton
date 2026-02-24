@@ -4,12 +4,16 @@ import com.mojang.logging.LogUtils
 import com.mojang.serialization.Codec
 import net.minecraft.core.MappedRegistry
 import net.minecraft.core.Registry
+import net.minecraft.core.Holder
+import net.minecraft.core.component.DataComponentMap
 import net.minecraft.core.component.DataComponentType
 import net.minecraft.core.registries.BuiltInRegistries
 import net.minecraft.core.registries.Registries
 import net.minecraft.resources.Identifier
 import net.minecraft.resources.ResourceKey
+import net.minecraft.tags.TagKey
 import net.minecraft.world.item.Item
+import net.minecraft.world.item.ItemStack
 import net.minecraft.world.item.Items
 import top.katton.Katton
 import top.katton.Katton.MOD_ID
@@ -60,10 +64,27 @@ object KattonRegistry {
     data class KattonItemEntry(
         override val id: Identifier,
         val item: Item,
-        val agentItem: KattonItemInterface? = null
+        val agentItem: KattonItemInterface? = null,
+        private val properties: KattonItemProperties? = null
     ) : Identifiable {
-        fun getDefaultInstance() = item.defaultInstance.apply {
-            agentItem?.let { applyComponents(it.components()) }
+        fun getDefaultInstance(): ItemStack {
+            // 使用 Holder.direct(item) 构造 ItemStack，避免 "Components not bound yet" 错误
+            // 这个错误发生在 Item 的 Holder 还未绑定 components 时访问 item.defaultInstance
+            return try {
+                val stack = ItemStack(Holder.direct(item), 1)
+                // 优先使用 agentItem 的 components
+                agentItem?.let { stack.apply { applyComponents(it.components()) } }
+                // 如果没有 agentItem 但有 properties，使用 properties 的 components
+                    ?: properties?.let { props ->
+                        stack.apply { 
+                            val components = props.buildComponent()
+                            applyComponents(components)
+                        }
+                    }
+                stack
+            } catch (_: Throwable) {
+                ItemStack(Items.AIR, 1)
+            }
         }
     }
 
@@ -86,6 +107,7 @@ object KattonRegistry {
             managedIds.forEach { remove(it) }
             managedIds.clear()
             idsByOwner.clear()
+            hotReloadableItems.clear()
         }
 
         @Synchronized
@@ -114,19 +136,27 @@ object KattonRegistry {
             }
         }
 
+        // 存储热重载注册的物品
+        private val hotReloadableItems = ConcurrentHashMap<Identifier, Item>()
+        
         private fun ensureGlobalItemRegistered(
             id: Identifier,
-            itemBuilder: () -> Item
+            itemBuilder: () -> Item,
+            properties: KattonItemProperties? = null
         ): Item {
+            // 首先检查全局注册表
             val existing = BuiltInRegistries.ITEM.getOptional(id)
             if (existing.isPresent) {
                 return existing.get()
             }
+            
+            // 检查热重载物品缓存
+            hotReloadableItems[id]?.let { return it }
 
             val itemRegistry = BuiltInRegistries.ITEM as MappedRegistry<Item>
             val accessor = itemRegistry as MappedRegistryAccessor
 
-            // Prepare to allow intrusive holder creation if the registry wasn't created with that support.
+            // 查找 unregisteredIntrusiveHolders 字段
             val fieldNames = listOf("unregisteredIntrusiveHolders", "unregisteredIntrusiveHolder", "unregisteredIntrusive", "intrusiveHolders")
             var unregisteredField: java.lang.reflect.Field? = null
             run {
@@ -138,73 +168,81 @@ object KattonRegistry {
                             f.isAccessible = true
                             unregisteredField = f
                             break
-                        } catch (_: Throwable) {
-                        }
+                        } catch (_: Throwable) {}
                     }
                     if (unregisteredField != null) break
                     cls = cls.superclass
                 }
             }
+            
             val previousUnregistered = try { unregisteredField?.get(itemRegistry) } catch (_: Throwable) { null }
             var injectedUnregistered = false
-            try {
+            
+            // 保存 frozen 状态
+            val savedFrozen = try { accessor.isFrozen() } catch (_: Throwable) { true }
+            
+            return try {
+                // 1. 注入 unregisteredIntrusiveHolders（如果需要）
                 if (previousUnregistered == null && unregisteredField != null) {
                     try {
-                        // create an IdentityHashMap compatible with the registry's expected generic types
                         unregisteredField!!.set(itemRegistry, java.util.IdentityHashMap<Any, Any>())
                         injectedUnregistered = true
-                    } catch (e: Throwable) {
-                        // If injection fails, continue and rely on unfreezing boolean fields below
-                    }
+                    } catch (_: Throwable) {}
                 }
-            } catch (_: Throwable) {
-            }
-
-            // Try to unfreeze registry via accessor first (preferred).
-            try {
-                accessor.setFrozen(false)
-            } catch (_: Throwable) {
-                // ignore if mixin not applied
-            }
-
-            // As a fallback, try to clear any boolean fields that might block intrusive holder creation
-            val registryClass = itemRegistry.javaClass
-            val booleanFields = registryClass.declaredFields.filter { it.type == Boolean::class.javaPrimitiveType }
-            val savedValues = mutableMapOf<java.lang.reflect.Field, Boolean>()
-            booleanFields.forEach { f ->
-                try {
-                    f.isAccessible = true
-                    val name = f.name.lowercase()
-                    if (name.contains("frozen") || name.contains("intrusive") || name.contains("allow") || name.contains("cancreate") || name.contains("enabled")) {
-                        savedValues[f] = f.getBoolean(itemRegistry)
-                        f.setBoolean(itemRegistry, false)
-                    }
-                } catch (_: Throwable) {
-                }
-            }
-
-            return try {
+                
+                // 2. 解冻注册表
+                try { accessor.setFrozen(false) } catch (_: Throwable) {}
+                
+                // 3. 创建物品
                 val item = itemBuilder()
-                val registered = registerGlobalItem(id, item)
+                
+                // 4. 注册到全局注册表
+                val registered = Registry.register(BuiltInRegistries.ITEM, id, item)
+                
+                // 5. 手动绑定 Holder 的 components 和 tags
+                try {
+                    val holderField = Item::class.java.getDeclaredField("builtInRegistryHolder")
+                    holderField.isAccessible = true
+                    val holder = holderField.get(item) as? Holder.Reference<Item>
+                    if (holder != null) {
+                        // 绑定 components
+                        val componentsField = Holder.Reference::class.java.getDeclaredField("components")
+                        componentsField.isAccessible = true
+                        
+                        // 直接使用传入的 properties 构建组件
+                        val itemComponents = if (properties != null) {
+                            val comps = properties.buildComponent()
+                            LOGGER.info("Got components from properties for $id: ${comps.keySet()}")
+                            comps
+                        } else {
+                            LOGGER.warn("No properties provided for $id, using EMPTY components")
+                            DataComponentMap.EMPTY
+                        }
+                        componentsField.set(holder, itemComponents)
+                        LOGGER.info("Set components for $id holder: ${itemComponents.keySet()}")
+                        
+                        // 绑定 tags
+                        val tagsField = Holder.Reference::class.java.getDeclaredField("tags")
+                        tagsField.isAccessible = true
+                        tagsField.set(holder, java.util.Collections.emptySet<TagKey<Item>>())
+                    }
+                } catch (e: Throwable) {
+                    LOGGER.warn("Failed to bind holder for $id: ${e.message}")
+                }
+                
+                // 6. 缓存物品
+                hotReloadableItems[id] = registered
+                LOGGER.info("Registered hot-reloadable item: $id")
                 registered
             } finally {
-                // restore booleans
-                savedValues.forEach { (f, v) ->
-                    try {
-                        f.setBoolean(itemRegistry, v)
-                    } catch (_: Throwable) {
-                    }
+                // 7. 恢复 frozen 状态（不调用 freeze()）
+                if (savedFrozen) {
+                    try { accessor.setFrozen(true) } catch (_: Throwable) {}
                 }
-                // restore unregisteredIntrusiveHolders if we injected one
-                try {
-                    if (injectedUnregistered && unregisteredField != null) {
-                        unregisteredField.set(itemRegistry, previousUnregistered)
-                    }
-                } catch (_: Throwable) {
-                }
-                try {
-                    accessor.setFrozen(true)
-                } catch (_: Throwable) {
+                
+                // 8. 恢复 unregisteredIntrusiveHolders
+                if (injectedUnregistered && unregisteredField != null) {
+                    try { unregisteredField.set(itemRegistry, previousUnregistered) } catch (_: Throwable) {}
                 }
             }
         }
@@ -212,20 +250,21 @@ object KattonRegistry {
         private fun registerItemWithMode(
             id: Identifier,
             registerMode: RegisterMode,
-            itemBuilder: () -> Item
+            itemBuilder: () -> Item,
+            properties: KattonItemProperties? = null
         ): Item = when (registerMode) {
             RegisterMode.GLOBAL -> {
                 registerGlobalItem(id, itemBuilder())
             }
 
             RegisterMode.RELOADABLE -> {
-                ensureGlobalItemRegistered(id, itemBuilder)
+                ensureGlobalItemRegistered(id, itemBuilder, properties)
             }
 
             RegisterMode.AUTO -> {
                 Katton.globalState.let {
                     if (it.after(LoadState.INIT)) {
-                        ensureGlobalItemRegistered(id, itemBuilder)
+                        ensureGlobalItemRegistered(id, itemBuilder, properties)
                     } else {
                         registerGlobalItem(id, itemBuilder())
                     }
@@ -247,7 +286,7 @@ object KattonRegistry {
             val entry = register(
                 KattonItemEntry(
                     id = components.id,
-                    item = registerItemWithMode(components.id, registerMode) { delayedFactory() },
+                    item = registerItemWithMode(components.id, registerMode, { delayedFactory() }, components),
                     agentItem = itemFactory(components)
                 )
             )
@@ -263,7 +302,7 @@ object KattonRegistry {
             // If scripts are executed too early (class init), avoid constructing Item now.
             // Queue registration to be executed later during mod initialization.
             if (!Katton.globalState.after(LoadState.INIT)) {
-                val placeholder = KattonItemEntry(id = components.id, item = Items.AIR, agentItem = null)
+                val placeholder = KattonItemEntry(id = components.id, item = Items.AIR, agentItem = null, properties = components)
                 register(placeholder)
                 markManaged(components.id, registerMode)
                 synchronized(pendingNativeRegistrations) {
@@ -286,8 +325,9 @@ object KattonRegistry {
             val entry = register(
                 KattonItemEntry(
                     id = components.id,
-                    item = registerItemWithMode(components.id, registerMode) { delayedFactory() },
-                    agentItem = null
+                    item = registerItemWithMode(components.id, registerMode, { delayedFactory() }, components),
+                    agentItem = null,
+                    properties = components
                 )
             )
             markManaged(components.id, registerMode)
@@ -305,8 +345,12 @@ object KattonRegistry {
 
 
     object COMPONENTS {
-        val KATTON_ID: DataComponentType<String> by lazy {
-            Registry.register(
+        // Eagerly hold the reference, but registration happens in initialize()
+        lateinit var KATTON_ID: DataComponentType<String>
+
+        fun initialize() {
+            if (::KATTON_ID.isInitialized) return
+            KATTON_ID = Registry.register(
                 BuiltInRegistries.DATA_COMPONENT_TYPE,
                 Identifier.fromNamespaceAndPath(MOD_ID, "id"),
                 DataComponentType.builder<String>().persistent(Codec.STRING).build()
@@ -315,12 +359,7 @@ object KattonRegistry {
     }
 
     fun initialize() {
-        // Ensure components are registered during mod initialization. If registration
-        // fails due to registry being frozen, the lazy will be retried later when needed.
-        try {
-            COMPONENTS.KATTON_ID
-        } catch (_: Throwable) {
-        }
+        COMPONENTS.initialize()
     }
 
 }
