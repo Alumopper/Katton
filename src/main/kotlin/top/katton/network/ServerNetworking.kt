@@ -1,11 +1,11 @@
 package top.katton.network
 
 import net.fabricmc.fabric.api.networking.v1.ServerConfigurationNetworking
-import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking
-import net.minecraft.core.component.DataComponents
-import net.minecraft.server.MinecraftServer
+import net.minecraft.nbt.NbtOps
+import net.minecraft.resources.RegistryOps
 import net.minecraft.server.network.ServerConfigurationPacketListenerImpl
-import net.minecraft.server.network.ServerGamePacketListenerImpl
+import net.minecraft.world.effect.MobEffect
+import top.katton.Katton
 import top.katton.registry.KattonRegistry
 
 /**
@@ -37,27 +37,57 @@ object ServerNetworking {
         val packet = ItemSyncPacket(items)
         ServerConfigurationNetworking.send(handler, packet)
     }
+
+    /**
+     * Sends effect sync packet to a connecting player.
+     */
+    fun sendEffectSyncPacket(handler: ServerConfigurationPacketListenerImpl) {
+        val effects = collectKattonEffects()
+        if (effects.isEmpty()) {
+            return
+        }
+
+        val packet = EffectSyncPacket(effects)
+        ServerConfigurationNetworking.send(handler, packet)
+    }
     
     /**
      * Collects all Katton-managed items for synchronization.
+     * Serializes the full DataComponentMap for each item using RegistryOps.
      * 
      * @return List of item data to sync
      */
     private fun collectKattonItems(): List<ItemSyncPacket.ItemData> {
+        val server = Katton.server ?: return emptyList()
+        val ops = RegistryOps.create(NbtOps.INSTANCE, server.registryAccess())
         val items = mutableListOf<ItemSyncPacket.ItemData>()
         
         for ((id, entry) in KattonRegistry.ITEMS) {
             val item = entry.item
-            items.add(ItemSyncPacket.ItemData(
-                id = id,
-                maxStackSize = item.defaultMaxStackSize,
-                maxDamage = 0, // Damage is handled via components, not needed for basic sync
-                translationKey = item.descriptionId,
-                itemName = item.components().get(DataComponents.ITEM_NAME),
-                itemModel = item.components().get(DataComponents.ITEM_MODEL)
-            ))
+            val components = item.components()
+            items.add(ItemSyncPacket.ItemData.fromComponents(id, components, ops))
         }
         
         return items
+    }
+
+    /**
+     * Collects all Katton-managed effects for synchronization.
+     */
+    private fun collectKattonEffects(): List<EffectSyncPacket.EffectData> {
+        val effects = mutableListOf<EffectSyncPacket.EffectData>()
+
+        for ((id, entry) in KattonRegistry.EFFECTS) {
+            val effect: MobEffect = entry.effect
+            effects.add(
+                EffectSyncPacket.EffectData(
+                    id = id,
+                    category = effect.category,
+                    color = effect.color
+                )
+            )
+        }
+
+        return effects
     }
 }

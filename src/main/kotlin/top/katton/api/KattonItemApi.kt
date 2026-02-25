@@ -17,6 +17,7 @@ import net.minecraft.world.level.storage.loot.functions.LootItemFunction
 import net.minecraft.world.level.storage.loot.parameters.LootContextParamSets
 import net.minecraft.world.level.storage.loot.parameters.LootContextParams
 import net.minecraft.world.phys.Vec3
+import org.jetbrains.annotations.ApiStatus
 import top.katton.registry.KattonItemProperties
 import top.katton.registry.KattonRegistry
 import top.katton.registry.RegisterMode
@@ -201,6 +202,7 @@ fun applyModifier(itemStack: ItemStack, modifier: LootItemFunction): ItemStack {
  * }
  * ```
  */
+@ApiStatus.Experimental
 fun registerNativeItem(
     id: String,
     registerMode: RegisterMode = RegisterMode.AUTO,
@@ -217,6 +219,7 @@ fun registerNativeItem(
  * @param itemFactory Factory function to create the Item instance
  * @return The registered KattonItemEntry
  */
+@ApiStatus.Experimental
 fun registerNativeItem(
     id: Identifier,
     registerMode: RegisterMode = RegisterMode.AUTO,
@@ -236,6 +239,7 @@ fun registerNativeItem(
  * @param itemFactory Factory function to create the Item instance
  * @return The registered KattonItemEntry
  */
+@ApiStatus.Experimental
 fun registerNativeItem(
     id: String,
     properties: KattonItemProperties,

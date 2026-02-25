@@ -11,8 +11,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import top.katton.network.ServerNetworking;
 
 /**
- * Mixin to inject item sync packet sending before Fabric's registry sync.
- * This ensures clients have Katton items registered before the sync check.
+ * Mixin to inject Katton sync packet sending before Fabric's registry sync.
+ * This ensures clients have Katton items/effects registered before the sync check.
  */
 @Mixin(ServerConfigurationPacketListenerImpl.class)
 public abstract class ServerConfigurationPacketListenerImplMixin {
@@ -29,5 +29,7 @@ public abstract class ServerConfigurationPacketListenerImplMixin {
     private void katton$onInit(MinecraftServer server, Connection connection, CommonListenerCookie cookie, CallbackInfo ci) {
         // Send item sync packet to the connecting player
         ServerNetworking.INSTANCE.sendItemSyncPacket((ServerConfigurationPacketListenerImpl) (Object) this);
+        // Send effect sync packet to the connecting player
+        ServerNetworking.INSTANCE.sendEffectSyncPacket((ServerConfigurationPacketListenerImpl) (Object) this);
     }
 }

@@ -57,6 +57,27 @@ object EntityEvent {
             onTickHandlers[entity]?.handler(entity, world)
         }
     }
+
+    /**
+     * Clear all script-owned entity handlers before scripts are reloaded.
+     */
+    fun beginReload() {
+        onTickHandlers.clear()
+    }
+
+    /**
+     * Re-apply handlers for entities that are already loaded.
+     *
+     * This makes behavior changes effective immediately after reload,
+     * without requiring entities to be reloaded from chunks.
+     */
+    fun rebindLoadedEntities(server: MinecraftServer) {
+        server.allLevels.forEach { level ->
+            level.allEntities.forEach { entity ->
+                onTickHandlers[entity]?.handler?.invoke(entity, level)
+            }
+        }
+    }
 }
 
 

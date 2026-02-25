@@ -4,12 +4,12 @@ import net.fabricmc.fabric.api.client.networking.v1.ClientConfigurationNetworkin
 import net.minecraft.core.MappedRegistry
 import net.minecraft.core.Registry
 import net.minecraft.core.component.DataComponentMap
-import net.minecraft.core.component.DataComponentType
-import net.minecraft.core.component.DataComponents
 import net.minecraft.core.registries.BuiltInRegistries
 import net.minecraft.core.registries.Registries
+import net.minecraft.nbt.NbtOps
 import net.minecraft.resources.Identifier
 import net.minecraft.resources.ResourceKey
+import net.minecraft.world.effect.MobEffect
 import net.minecraft.world.item.Item
 import top.katton.mixin.MappedRegistryAccessor
 import java.util.*
@@ -26,13 +26,26 @@ object ClientNetworking {
      * Items are registered before Fabric's registry sync check.
      */
     private val pendingItems: Queue<ItemSyncPacket.ItemData> = ConcurrentLinkedQueue()
+
+    /**
+     * Queue of effects waiting to be registered.
+     */
+    private val pendingEffects: Queue<EffectSyncPacket.EffectData> = ConcurrentLinkedQueue()
     
     /**
      * Stores registered item data for re-applying components after
      * RegistryDataCollector.collectGameRegistries() runs DataComponentInitializers.build(),
      * which overwrites holder.components with values from finalizeInitializer().
+     * 
+     * This map is NOT cleared on disconnect - items persist in the registry across
+     * reconnections, so we need to keep the data to re-apply components each time.
      */
     private val registeredItemData: MutableMap<Identifier, ItemSyncPacket.ItemData> = mutableMapOf()
+
+    /**
+     * Stores registered effect data for reconnection scenarios.
+     */
+    private val registeredEffectData: MutableMap<Identifier, EffectSyncPacket.EffectData> = mutableMapOf()
     
     /**
      * Initializes client networking.
@@ -47,6 +60,14 @@ object ClientNetworking {
                 pendingItems.addAll(packet.items)
             }
         }
+
+        ClientConfigurationNetworking.registerGlobalReceiver(EffectSyncPacket.TYPE) { packet, context ->
+            if (context.client().isLocalServer) return@registerGlobalReceiver
+            context.client().execute {
+                // Queue effects for registration
+                pendingEffects.addAll(packet.effects)
+            }
+        }
     }
     
     /**
@@ -59,17 +80,55 @@ object ClientNetworking {
             registerOrUpdateItemOnClient(itemData)
             itemData = pendingItems.poll()
         }
+
+        var effectData: EffectSyncPacket.EffectData? = pendingEffects.poll()
+        while (effectData != null) {
+            registerOrUpdateEffectOnClient(effectData)
+            effectData = pendingEffects.poll()
+        }
+    }
+
+    /**
+     * Registers or updates an effect on the client.
+     */
+    private fun registerOrUpdateEffectOnClient(effectData: EffectSyncPacket.EffectData) {
+        registeredEffectData[effectData.id] = effectData
+
+        val existingEffect = BuiltInRegistries.MOB_EFFECT.getOptional(effectData.id)
+        if (existingEffect.isPresent) {
+            return
+        }
+
+        registerNewEffect(effectData)
+    }
+
+    /**
+     * Registers a new effect on the client.
+     */
+    private fun registerNewEffect(effectData: EffectSyncPacket.EffectData) {
+        @Suppress("UNCHECKED_CAST")
+        val effectRegistry = BuiltInRegistries.MOB_EFFECT as MappedRegistry<MobEffect>
+        val accessor = effectRegistry as MappedRegistryAccessor
+        val savedFrozen = accessor.isFrozen
+
+        try {
+            accessor.setFrozen(false)
+            val effect = object : MobEffect(effectData.category, effectData.color) {}
+            Registry.register(BuiltInRegistries.MOB_EFFECT, effectData.id, effect)
+        } finally {
+            if (savedFrozen) accessor.setFrozen(true)
+        }
     }
     
     /**
-     * Re-applies custom ITEM_NAME and ITEM_MODEL components to all registered Katton items.
-     *
+     * Re-applies custom components to all registered Katton items.
+     * 
      * This must be called after RegistryDataCollector.collectGameRegistries() completes,
      * because that method calls DataComponentInitializers.build() which runs all registered
      * initializers and overwrites holder.components. The finalizeInitializer() in Item's
      * constructor always sets ITEM_NAME to Component.translatable(descriptionId) and
      * ITEM_MODEL to the default model path, overriding any custom values we set earlier.
-     *
+     * 
      * Called from RegistryDataCollectorMixin.
      */
     fun reapplyCustomComponents() {
@@ -79,49 +138,35 @@ object ClientNetworking {
             
             val holder = item.get().builtInRegistryHolder
             
-            // Re-build the component map, merging with existing components from the initializer
-            val existingComponents = if (holder.areComponentsBound()) {
-                holder.components()
-            } else {
-                DataComponentMap.EMPTY
+            // Decode the full DataComponentMap from NBT
+            val components = itemData.decodeComponents(NbtOps.INSTANCE)
+            if (components != DataComponentMap.EMPTY) {
+                holder.components = components
             }
-            
-            val builder = DataComponentMap.builder()
-            
-            // Copy all existing components first using keySet + get
-            for (componentType in existingComponents.keySet()) {
-                @Suppress("UNCHECKED_CAST")
-                val typedKey = componentType as DataComponentType<Any>
-                val value = existingComponents.get(typedKey)
-                if (value != null) {
-                    builder.set(typedKey, value)
-                }
-            }
-            
-            // Override with our custom values
-            itemData.itemName?.let {
-                builder.set(DataComponents.ITEM_NAME, it)
-            }
-            itemData.itemModel?.let {
-                builder.set(DataComponents.ITEM_MODEL, it)
-            }
-            
-            holder.components = builder.build()
         }
     }
     
     /**
      * Registers or updates an item on the client.
-     *
-     * - If the item already exists (e.g., in local world where server and client share JVM),
-     *   we skip registration to preserve the full Item instance with custom behavior.
+     * 
+     * - If the item already exists (e.g., in local world or from previous connection),
+     *   we still update registeredItemData so reapplyCustomComponents works.
      * - If the item doesn't exist, we register a new item with the received components.
-     *
+     * 
      * @param itemData The item data to register
      */
     private fun registerOrUpdateItemOnClient(itemData: ItemSyncPacket.ItemData) {
+        // Always update the stored data (needed for reconnection scenarios)
+        registeredItemData[itemData.id] = itemData
+        
         val existingItem = BuiltInRegistries.ITEM.getOptional(itemData.id)
         if (existingItem.isPresent) {
+            // Item already exists - just update its components
+            val holder = existingItem.get().builtInRegistryHolder
+            val components = itemData.decodeComponents(NbtOps.INSTANCE)
+            if (components != DataComponentMap.EMPTY) {
+                holder.components = components
+            }
             return
         }
         registerNewItem(itemData)
@@ -129,7 +174,7 @@ object ClientNetworking {
     
     /**
      * Registers a new item on the client.
-     *
+     * 
      * @param itemData The item data to register
      */
     private fun registerNewItem(itemData: ItemSyncPacket.ItemData) {
@@ -152,7 +197,6 @@ object ClientNetworking {
 
             // Create item properties with ResourceKey set
             val props = Item.Properties()
-                .stacksTo(itemData.maxStackSize)
                 .setId(ResourceKey.create(Registries.ITEM, itemData.id))
             
             val item = Item(props)
@@ -160,13 +204,13 @@ object ClientNetworking {
             // Register the item
             Registry.register(BuiltInRegistries.ITEM, itemData.id, item)
 
-            // Set holder components and tags
+            // Set holder components from the full DataComponentMap
             val holder = item.builtInRegistryHolder
-            holder.components = buildComponentMap(itemData)
+            val components = itemData.decodeComponents(NbtOps.INSTANCE)
+            if (components != DataComponentMap.EMPTY) {
+                holder.components = components
+            }
             holder.tags = emptySet()
-            
-            // Store item data for re-applying after DataComponentInitializers.build()
-            registeredItemData[itemData.id] = itemData
             
         } finally {
             // Restore registry state
@@ -176,45 +220,36 @@ object ClientNetworking {
     }
     
     /**
-     * Builds a DataComponentMap from the received item data.
-     *
-     * @param itemData The item data containing components
-     * @return A DataComponentMap with the item's components
-     */
-    private fun buildComponentMap(itemData: ItemSyncPacket.ItemData): DataComponentMap {
-        val builder = DataComponentMap.builder()
-        
-        // Add item name if present - this controls the display name
-        itemData.itemName?.let {
-            builder.set(DataComponents.ITEM_NAME, it)
-        }
-        
-        // Add item model if present - this controls the model/texture
-        itemData.itemModel?.let {
-            builder.set(DataComponents.ITEM_MODEL, it)
-        }
-        
-        return builder.build()
-    }
-    
-    /**
      * Checks if there are pending items to register.
-     *
+     * 
      * @return true if there are pending items
      */
     fun hasPendingItems(): Boolean = pendingItems.isNotEmpty()
+
+    /**
+     * Checks if there are pending effects to register.
+     */
+    fun hasPendingEffects(): Boolean = pendingEffects.isNotEmpty()
     
     /**
      * Checks if there are registered items that need component re-application.
      */
     fun hasRegisteredItems(): Boolean = registeredItemData.isNotEmpty()
+
+    /**
+     * Checks if there are registered effects.
+     */
+    fun hasRegisteredEffects(): Boolean = registeredEffectData.isNotEmpty()
     
     /**
-     * Resets the pending queue and registered items.
+     * Resets the pending queue.
+     * Note: registeredItemData is NOT cleared because items persist in the registry
+     * across reconnections and we need the data for reapplyCustomComponents().
      * Called when disconnecting from server.
      */
     fun reset() {
         pendingItems.clear()
-        registeredItemData.clear()
+        pendingEffects.clear()
+        // Do NOT clear registeredItemData - items stay in registry across reconnections
     }
 }

@@ -9,6 +9,7 @@ import net.minecraft.core.registries.BuiltInRegistries
 import net.minecraft.core.registries.Registries
 import net.minecraft.resources.Identifier
 import net.minecraft.resources.ResourceKey
+import net.minecraft.world.effect.MobEffect
 import net.minecraft.world.item.Item
 import net.minecraft.world.item.Items
 import top.katton.Katton
@@ -81,6 +82,14 @@ object KattonRegistry {
         override val id: Identifier,
         val item: Item,
         private val properties: KattonItemProperties? = null
+    ) : Identifiable
+
+    /**
+     * Represents a registered mob effect entry.
+     */
+    data class KattonMobEffectEntry(
+        override val id: Identifier,
+        val effect: MobEffect
     ) : Identifiable
 
     /**
@@ -269,6 +278,103 @@ object KattonRegistry {
             if (owner != "global" && registerMode != RegisterMode.GLOBAL) {
                 managedIds.add(itemId)
                 idsByOwner.computeIfAbsent(owner) { ConcurrentHashMap.newKeySet() }.add(itemId)
+            }
+        }
+    }
+
+    /**
+     * Registry for Katton mob effects.
+     * Supports global registration and hot-reloadable registration.
+     */
+    object EFFECTS : KattonRegistries<KattonMobEffectEntry>(id(MOD_ID, "effect")) {
+
+        private val managedIds = linkedSetOf<Identifier>()
+        private val idsByOwner = ConcurrentHashMap<String, MutableSet<Identifier>>()
+        private val hotReloadableEffects = ConcurrentHashMap<Identifier, MobEffect>()
+
+        private fun registerGlobalEffect(id: Identifier, effect: MobEffect): MobEffect =
+            Registry.register(BuiltInRegistries.MOB_EFFECT, id, effect)
+
+        private fun currentOwner(): String = Event.currentScriptOwner() ?: "global"
+
+        @Synchronized
+        fun beginReload() {
+            managedIds.forEach { remove(it) }
+            managedIds.clear()
+            idsByOwner.clear()
+            hotReloadableEffects.clear()
+        }
+
+        private fun ensureGlobalEffectRegistered(
+            id: Identifier,
+            effectBuilder: () -> MobEffect
+        ): MobEffect {
+            val existing = BuiltInRegistries.MOB_EFFECT.getOptional(id)
+            if (existing.isPresent) {
+                return existing.get()
+            }
+
+            hotReloadableEffects[id]?.let { return it }
+
+            return registerNewEffect(id, effectBuilder)
+        }
+
+        private fun registerNewEffect(
+            id: Identifier,
+            effectBuilder: () -> MobEffect
+        ): MobEffect {
+            @Suppress("UNCHECKED_CAST")
+            val effectRegistry = BuiltInRegistries.MOB_EFFECT as MappedRegistry<MobEffect>
+            val accessor = effectRegistry as MappedRegistryAccessor
+            val savedFrozen = accessor.isFrozen
+
+            return try {
+                accessor.setFrozen(false)
+                val effect = effectBuilder()
+                val registered = Registry.register(BuiltInRegistries.MOB_EFFECT, id, effect)
+                hotReloadableEffects[id] = registered
+                registered
+            } finally {
+                if (savedFrozen) accessor.setFrozen(true)
+            }
+        }
+
+        private fun registerEffectWithMode(
+            id: Identifier,
+            registerMode: RegisterMode,
+            effectBuilder: () -> MobEffect
+        ): MobEffect = when (registerMode) {
+            RegisterMode.GLOBAL -> registerGlobalEffect(id, effectBuilder())
+            RegisterMode.RELOADABLE -> ensureGlobalEffectRegistered(id, effectBuilder)
+            RegisterMode.AUTO -> {
+                if (Katton.globalState.after(LoadState.INIT)) {
+                    ensureGlobalEffectRegistered(id, effectBuilder)
+                } else {
+                    registerGlobalEffect(id, effectBuilder())
+                }
+            }
+        }
+
+        fun newNative(
+            id: Identifier,
+            registerMode: RegisterMode = RegisterMode.AUTO,
+            effectFactory: () -> MobEffect
+        ): KattonMobEffectEntry {
+            val entry = KattonMobEffectEntry(
+                id = id,
+                effect = registerEffectWithMode(id, registerMode, effectFactory)
+            )
+            @Suppress("DEPRECATION")
+            register(entry)
+            markManaged(id, registerMode)
+            return entry
+        }
+
+        private fun markManaged(effectId: Identifier, registerMode: RegisterMode) {
+            val owner = currentOwner()
+            if (owner != "global" && registerMode != RegisterMode.GLOBAL) {
+                managedIds.add(effectId)
+                idsByOwner.computeIfAbsent(owner) { ConcurrentHashMap.newKeySet() }.add(effectId)
             }
         }
     }
