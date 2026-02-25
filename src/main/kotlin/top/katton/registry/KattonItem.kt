@@ -87,7 +87,6 @@ class KattonItemProperties(
         // 始终首先设置名称和材质，确保这些基本组件不会丢失
         val actualName = name
         val actualModel = model
-        LOGGER.info("Building components for item $id: name=$actualName, model=$actualModel")
         mapBuilder.set(DataComponents.ITEM_NAME, actualName)
         mapBuilder.set(DataComponents.ITEM_MODEL, actualModel)
         
@@ -100,18 +99,14 @@ class KattonItemProperties(
             try {
                 val itemId = this@KattonItemProperties.itemIdOrThrow()
                 initializer.run(mapBuilder, it.registryAccess(), itemId)
-            } catch (e: Throwable) {
+            } catch (_: Throwable) {
                 // 忽略异常，名称和材质已经设置
-                LOGGER.warn("buildComponent: initializer.run failed for $id: ${e.message}")
             }
         }
-        val result = mapBuilder.build()
-        LOGGER.info("Built components for item $id: ${result.keySet()}")
-        return result
+        return mapBuilder.build()
     }
 
     companion object {
-        private val LOGGER = com.mojang.logging.LogUtils.getLogger()
         fun components(id: Identifier) = KattonItemProperties(id)
     }
 

@@ -147,7 +147,29 @@ object KattonRegistry {
             // 首先检查全局注册表
             val existing = BuiltInRegistries.ITEM.getOptional(id)
             if (existing.isPresent) {
-                return existing.get()
+                val item = existing.get()
+                // 物品已存在，更新其 Holder 的 components
+                if (properties != null) {
+                    try {
+                        // 确保 properties 有正确的 id 设置
+                        try {
+                            properties.setId(ResourceKey.create(Registries.ITEM, id))
+                        } catch (_: Throwable) {}
+                        
+                        val holderField = Item::class.java.getDeclaredField("builtInRegistryHolder")
+                        holderField.isAccessible = true
+                        val holder = holderField.get(item) as? Holder.Reference<Item>
+                        if (holder != null) {
+                            val componentsField = Holder.Reference::class.java.getDeclaredField("components")
+                            componentsField.isAccessible = true
+                            val newComponents = properties.buildComponent()
+                            componentsField.set(holder, newComponents)
+                        }
+                    } catch (e: Throwable) {
+                        LOGGER.warn("Failed to update components for existing item $id: ${e.message}")
+                    }
+                }
+                return item
             }
             
             // 检查热重载物品缓存
@@ -211,15 +233,11 @@ object KattonRegistry {
                         
                         // 直接使用传入的 properties 构建组件
                         val itemComponents = if (properties != null) {
-                            val comps = properties.buildComponent()
-                            LOGGER.info("Got components from properties for $id: ${comps.keySet()}")
-                            comps
+                            properties.buildComponent()
                         } else {
-                            LOGGER.warn("No properties provided for $id, using EMPTY components")
                             DataComponentMap.EMPTY
                         }
                         componentsField.set(holder, itemComponents)
-                        LOGGER.info("Set components for $id holder: ${itemComponents.keySet()}")
                         
                         // 绑定 tags
                         val tagsField = Holder.Reference::class.java.getDeclaredField("tags")
@@ -232,7 +250,6 @@ object KattonRegistry {
                 
                 // 6. 缓存物品
                 hotReloadableItems[id] = registered
-                LOGGER.info("Registered hot-reloadable item: $id")
                 registered
             } finally {
                 // 7. 恢复 frozen 状态（不调用 freeze()）
