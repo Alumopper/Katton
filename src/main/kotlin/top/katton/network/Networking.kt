@@ -25,5 +25,8 @@ object Networking {
         if(PayloadTypeRegistryImpl.CLIENTBOUND_CONFIGURATION.get(EffectSyncPacket.TYPE.id) == null){
             PayloadTypeRegistryImpl.CLIENTBOUND_CONFIGURATION.register(EffectSyncPacket.TYPE, EffectSyncPacket.STREAM_CODEC)
         }
+        if(PayloadTypeRegistryImpl.CLIENTBOUND_CONFIGURATION.get(BlockSyncPacket.TYPE.id) == null){
+            PayloadTypeRegistryImpl.CLIENTBOUND_CONFIGURATION.register(BlockSyncPacket.TYPE, BlockSyncPacket.STREAM_CODEC)
+        }
     }
 }

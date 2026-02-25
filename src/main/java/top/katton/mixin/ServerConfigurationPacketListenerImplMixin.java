@@ -12,7 +12,7 @@ import top.katton.network.ServerNetworking;
 
 /**
  * Mixin to inject Katton sync packet sending before Fabric's registry sync.
- * This ensures clients have Katton items/effects registered before the sync check.
+ * This ensures clients have Katton items/effects/blocks registered before the sync check.
  */
 @Mixin(ServerConfigurationPacketListenerImpl.class)
 public abstract class ServerConfigurationPacketListenerImplMixin {
@@ -31,5 +31,7 @@ public abstract class ServerConfigurationPacketListenerImplMixin {
         ServerNetworking.INSTANCE.sendItemSyncPacket((ServerConfigurationPacketListenerImpl) (Object) this);
         // Send effect sync packet to the connecting player
         ServerNetworking.INSTANCE.sendEffectSyncPacket((ServerConfigurationPacketListenerImpl) (Object) this);
+        // Send block sync packet to the connecting player
+        ServerNetworking.INSTANCE.sendBlockSyncPacket((ServerConfigurationPacketListenerImpl) (Object) this);
     }
 }

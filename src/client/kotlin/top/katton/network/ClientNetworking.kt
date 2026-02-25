@@ -11,6 +11,8 @@ import net.minecraft.resources.Identifier
 import net.minecraft.resources.ResourceKey
 import net.minecraft.world.effect.MobEffect
 import net.minecraft.world.item.Item
+import net.minecraft.world.level.block.Block
+import net.minecraft.world.level.block.state.BlockBehaviour
 import top.katton.mixin.MappedRegistryAccessor
 import java.util.*
 import java.util.concurrent.ConcurrentLinkedQueue
@@ -31,6 +33,11 @@ object ClientNetworking {
      * Queue of effects waiting to be registered.
      */
     private val pendingEffects: Queue<EffectSyncPacket.EffectData> = ConcurrentLinkedQueue()
+
+    /**
+     * Queue of blocks waiting to be registered.
+     */
+    private val pendingBlocks: Queue<BlockSyncPacket.BlockData> = ConcurrentLinkedQueue()
     
     /**
      * Stores registered item data for re-applying components after
@@ -46,6 +53,11 @@ object ClientNetworking {
      * Stores registered effect data for reconnection scenarios.
      */
     private val registeredEffectData: MutableMap<Identifier, EffectSyncPacket.EffectData> = mutableMapOf()
+
+    /**
+     * Stores registered block data for reconnection scenarios.
+     */
+    private val registeredBlockData: MutableMap<Identifier, BlockSyncPacket.BlockData> = mutableMapOf()
     
     /**
      * Initializes client networking.
@@ -68,6 +80,14 @@ object ClientNetworking {
                 pendingEffects.addAll(packet.effects)
             }
         }
+
+        ClientConfigurationNetworking.registerGlobalReceiver(BlockSyncPacket.TYPE) { packet, context ->
+            if (context.client().isLocalServer) return@registerGlobalReceiver
+            context.client().execute {
+                // Queue blocks for registration
+                pendingBlocks.addAll(packet.blocks)
+            }
+        }
     }
     
     /**
@@ -85,6 +105,59 @@ object ClientNetworking {
         while (effectData != null) {
             registerOrUpdateEffectOnClient(effectData)
             effectData = pendingEffects.poll()
+        }
+
+        var blockData: BlockSyncPacket.BlockData? = pendingBlocks.poll()
+        while (blockData != null) {
+            registerOrUpdateBlockOnClient(blockData)
+            blockData = pendingBlocks.poll()
+        }
+    }
+
+    /**
+     * Registers or updates a block on the client.
+     */
+    private fun registerOrUpdateBlockOnClient(blockData: BlockSyncPacket.BlockData) {
+        registeredBlockData[blockData.id] = blockData
+
+        val existingBlock = BuiltInRegistries.BLOCK.getOptional(blockData.id)
+        if (existingBlock.isPresent) {
+            return
+        }
+
+        registerNewBlock(blockData)
+    }
+
+    /**
+     * Registers a new block on the client.
+     */
+    private fun registerNewBlock(blockData: BlockSyncPacket.BlockData) {
+        @Suppress("UNCHECKED_CAST")
+        val blockRegistry = BuiltInRegistries.BLOCK as MappedRegistry<Block>
+        val accessor = blockRegistry as MappedRegistryAccessor
+
+        // Inject unregisteredIntrusiveHolders if not present (same as item registration)
+        val previousUnregistered = blockRegistry.unregisteredIntrusiveHolders
+        val injectedUnregistered = previousUnregistered == null
+        if (injectedUnregistered) {
+            blockRegistry.unregisteredIntrusiveHolders = IdentityHashMap()
+        }
+
+        val savedFrozen = accessor.isFrozen
+
+        try {
+            accessor.setFrozen(false)
+            val properties = BlockBehaviour.Properties.of()
+                .setId(ResourceKey.create(Registries.BLOCK, blockData.id))
+                .strength(blockData.destroyTime)
+            if (blockData.requiresCorrectTool) {
+                properties.requiresCorrectToolForDrops()
+            }
+            val block = Block(properties)
+            Registry.register(BuiltInRegistries.BLOCK, blockData.id, block)
+        } finally {
+            if (savedFrozen) accessor.setFrozen(true)
+            if (injectedUnregistered) blockRegistry.unregisteredIntrusiveHolders = previousUnregistered
         }
     }
 
@@ -230,6 +303,11 @@ object ClientNetworking {
      * Checks if there are pending effects to register.
      */
     fun hasPendingEffects(): Boolean = pendingEffects.isNotEmpty()
+
+    /**
+     * Checks if there are pending blocks to register.
+     */
+    fun hasPendingBlocks(): Boolean = pendingBlocks.isNotEmpty()
     
     /**
      * Checks if there are registered items that need component re-application.
@@ -240,6 +318,11 @@ object ClientNetworking {
      * Checks if there are registered effects.
      */
     fun hasRegisteredEffects(): Boolean = registeredEffectData.isNotEmpty()
+
+    /**
+     * Checks if there are registered blocks.
+     */
+    fun hasRegisteredBlocks(): Boolean = registeredBlockData.isNotEmpty()
     
     /**
      * Resets the pending queue.
@@ -250,6 +333,7 @@ object ClientNetworking {
     fun reset() {
         pendingItems.clear()
         pendingEffects.clear()
+        pendingBlocks.clear()
         // Do NOT clear registeredItemData - items stay in registry across reconnections
     }
 }

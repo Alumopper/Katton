@@ -78,6 +78,7 @@ public class Katton implements ModInitializer {
         ScriptCommandRegistry.INSTANCE.beginReload(server);
         KattonRegistry.ITEMS.INSTANCE.beginReload();
         KattonRegistry.EFFECTS.INSTANCE.beginReload();
+        KattonRegistry.BLOCKS.INSTANCE.beginReload();
         EntityEvent.INSTANCE.beginReload();
         Event.Companion.getFabricEventRegistry().values().forEach(list -> list.forEach(Event::clear));
         ScriptEngine.compileAndExecuteAll(ScriptLoader.getScripts().values());

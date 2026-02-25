@@ -5,6 +5,7 @@ import net.minecraft.nbt.NbtOps
 import net.minecraft.resources.RegistryOps
 import net.minecraft.server.network.ServerConfigurationPacketListenerImpl
 import net.minecraft.world.effect.MobEffect
+import net.minecraft.world.level.block.Block
 import top.katton.Katton
 import top.katton.registry.KattonRegistry
 
@@ -50,6 +51,19 @@ object ServerNetworking {
         val packet = EffectSyncPacket(effects)
         ServerConfigurationNetworking.send(handler, packet)
     }
+
+    /**
+     * Sends block sync packet to a connecting player.
+     */
+    fun sendBlockSyncPacket(handler: ServerConfigurationPacketListenerImpl) {
+        val blocks = collectKattonBlocks()
+        if (blocks.isEmpty()) {
+            return
+        }
+
+        val packet = BlockSyncPacket(blocks)
+        ServerConfigurationNetworking.send(handler, packet)
+    }
     
     /**
      * Collects all Katton-managed items for synchronization.
@@ -89,5 +103,26 @@ object ServerNetworking {
         }
 
         return effects
+    }
+
+    /**
+     * Collects all Katton-managed blocks for synchronization.
+     */
+    private fun collectKattonBlocks(): List<BlockSyncPacket.BlockData> {
+        val blocks = mutableListOf<BlockSyncPacket.BlockData>()
+
+        for ((id, entry) in KattonRegistry.BLOCKS) {
+            val block: Block = entry.block
+            val state = block.defaultBlockState()
+            blocks.add(
+                BlockSyncPacket.BlockData(
+                    id = id,
+                    destroyTime = block.defaultDestroyTime(),
+                    requiresCorrectTool = state.requiresCorrectToolForDrops()
+                )
+            )
+        }
+
+        return blocks
     }
 }

@@ -12,9 +12,12 @@ import net.minecraft.resources.ResourceKey
 import net.minecraft.world.effect.MobEffect
 import net.minecraft.world.item.Item
 import net.minecraft.world.item.Items
+import net.minecraft.world.level.block.Block
+import net.minecraft.world.level.block.state.BlockBehaviour
 import top.katton.Katton
 import top.katton.Katton.MOD_ID
 import top.katton.LoadState
+import top.katton.mixin.BlockAccessor
 import top.katton.mixin.MappedRegistryAccessor
 import top.katton.util.Event
 import java.util.*
@@ -90,6 +93,14 @@ object KattonRegistry {
     data class KattonMobEffectEntry(
         override val id: Identifier,
         val effect: MobEffect
+    ) : Identifiable
+
+    /**
+     * Represents a registered block entry.
+     */
+    data class KattonBlockEntry(
+        override val id: Identifier,
+        val block: Block
     ) : Identifiable
 
     /**
@@ -375,6 +386,120 @@ object KattonRegistry {
             if (owner != "global" && registerMode != RegisterMode.GLOBAL) {
                 managedIds.add(effectId)
                 idsByOwner.computeIfAbsent(owner) { ConcurrentHashMap.newKeySet() }.add(effectId)
+            }
+        }
+    }
+
+    /**
+     * Registry for Katton blocks.
+     * Supports global registration and hot-reloadable registration.
+     */
+    object BLOCKS : KattonRegistries<KattonBlockEntry>(id(MOD_ID, "block")) {
+
+        private val managedIds = linkedSetOf<Identifier>()
+        private val idsByOwner = ConcurrentHashMap<String, MutableSet<Identifier>>()
+        private val hotReloadableBlocks = ConcurrentHashMap<Identifier, Block>()
+
+        private fun registerGlobalBlock(id: Identifier, block: Block): Block =
+            Registry.register(BuiltInRegistries.BLOCK, id, block)
+
+        private fun currentOwner(): String = Event.currentScriptOwner() ?: "global"
+
+        @Synchronized
+        fun beginReload() {
+            managedIds.forEach { remove(it) }
+            managedIds.clear()
+            idsByOwner.clear()
+            hotReloadableBlocks.clear()
+        }
+
+        private fun ensureGlobalBlockRegistered(
+            id: Identifier,
+            blockBuilder: (BlockBehaviour.Properties) -> Block
+        ): Block {
+            val existing = BuiltInRegistries.BLOCK.getOptional(id)
+            if (existing.isPresent) {
+                val block = existing.get()
+                (block as BlockAccessor).`katton$getBuiltInRegistryHolder`().tags = emptySet()
+                return block
+            }
+
+            hotReloadableBlocks[id]?.let { return it }
+
+            return registerNewBlock(id, blockBuilder)
+        }
+
+        private fun registerNewBlock(
+            id: Identifier,
+            blockBuilder: (BlockBehaviour.Properties) -> Block
+        ): Block {
+            @Suppress("UNCHECKED_CAST")
+            val blockRegistry = BuiltInRegistries.BLOCK as MappedRegistry<Block>
+            val accessor = blockRegistry as MappedRegistryAccessor
+
+            // Inject unregisteredIntrusiveHolders if not present (same pattern as item registry)
+            val previousUnregistered = blockRegistry.unregisteredIntrusiveHolders
+            val injectedUnregistered = previousUnregistered == null
+            if (injectedUnregistered) {
+                blockRegistry.unregisteredIntrusiveHolders = IdentityHashMap()
+            }
+
+            val savedFrozen = accessor.isFrozen
+
+            return try {
+                accessor.setFrozen(false)
+                val props = BlockBehaviour.Properties.of().setId(ResourceKey.create(Registries.BLOCK, id))
+                val block = blockBuilder(props)
+                val registered = Registry.register(BuiltInRegistries.BLOCK, id, block)
+                (registered as BlockAccessor).`katton$getBuiltInRegistryHolder`().tags = emptySet()
+                hotReloadableBlocks[id] = registered
+                registered
+            } finally {
+                if (savedFrozen) accessor.setFrozen(true)
+                if (injectedUnregistered) blockRegistry.unregisteredIntrusiveHolders = previousUnregistered
+            }
+        }
+
+        private fun registerBlockWithMode(
+            id: Identifier,
+            registerMode: RegisterMode,
+            blockBuilder: (BlockBehaviour.Properties) -> Block
+        ): Block = when (registerMode) {
+            RegisterMode.GLOBAL -> {
+                val props = BlockBehaviour.Properties.of().setId(ResourceKey.create(Registries.BLOCK, id))
+                registerGlobalBlock(id, blockBuilder(props))
+            }
+            RegisterMode.RELOADABLE -> ensureGlobalBlockRegistered(id, blockBuilder)
+            RegisterMode.AUTO -> {
+                if (Katton.globalState.after(LoadState.INIT)) {
+                    ensureGlobalBlockRegistered(id, blockBuilder)
+                } else {
+                    val props = BlockBehaviour.Properties.of().setId(ResourceKey.create(Registries.BLOCK, id))
+                    registerGlobalBlock(id, blockBuilder(props))
+                }
+            }
+        }
+
+        fun newNative(
+            id: Identifier,
+            registerMode: RegisterMode = RegisterMode.AUTO,
+            blockFactory: (BlockBehaviour.Properties) -> Block
+        ): KattonBlockEntry {
+            val entry = KattonBlockEntry(
+                id = id,
+                block = registerBlockWithMode(id, registerMode, blockFactory)
+            )
+            @Suppress("DEPRECATION")
+            register(entry)
+            markManaged(id, registerMode)
+            return entry
+        }
+
+        private fun markManaged(blockId: Identifier, registerMode: RegisterMode) {
+            val owner = currentOwner()
+            if (owner != "global" && registerMode != RegisterMode.GLOBAL) {
+                managedIds.add(blockId)
+                idsByOwner.computeIfAbsent(owner) { ConcurrentHashMap.newKeySet() }.add(blockId)
             }
         }
     }

@@ -3,6 +3,7 @@
 	"package": "top.katton.mixin",
 	"compatibilityLevel": "JAVA_21",
 	"mixins": [
+		"BlockAccessor",
 		"MappedRegistryAccessor",
 		"ServerConfigurationPacketListenerImplMixin"
 	],
