@@ -2,7 +2,6 @@
 
 package top.katton.registry
 
-import com.mojang.brigadier.Command
 import com.mojang.brigadier.arguments.ArgumentType
 import com.mojang.brigadier.builder.LiteralArgumentBuilder
 import com.mojang.brigadier.builder.RequiredArgumentBuilder
@@ -11,7 +10,6 @@ import com.mojang.brigadier.suggestion.SuggestionProvider
 import net.minecraft.commands.CommandSourceStack
 import net.minecraft.commands.Commands
 import top.katton.api.requireServer
-import top.katton.registry.ScriptCommandRegistry
 
 typealias CommandExecutor = (CommandContext<CommandSourceStack>) -> Int
 
@@ -31,8 +29,8 @@ class LiteralCommandDsl internal constructor(
 	}
 
 	fun executes(executor: CommandExecutor) {
-		builder.executes(Command { context -> executor(context) })
-	}
+		builder.executes { context -> executor(context) }
+    }
 
 	fun literal(name: String, block: LiteralCommandDsl.() -> Unit = {}) {
 		val child = Commands.literal(name)
@@ -59,8 +57,8 @@ class ArgumentCommandDsl<T> internal constructor(
 	}
 
 	fun executes(executor: CommandExecutor) {
-		builder.executes(Command { context -> executor(context) })
-	}
+		builder.executes { context -> executor(context) }
+    }
 
 	fun suggests(provider: SuggestionProvider<CommandSourceStack>) {
 		builder.suggests(provider)

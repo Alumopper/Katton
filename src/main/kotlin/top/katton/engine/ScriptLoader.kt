@@ -2,7 +2,6 @@ package top.katton.engine
 
 import com.google.common.collect.ImmutableMap
 import com.mojang.datafixers.util.Pair
-import com.mojang.logging.LogUtils
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.future.future
@@ -24,7 +23,6 @@ import kotlin.script.experimental.api.CompiledScript
 
 object ScriptLoader : PreparableReloadListener {
 
-    private val LOGGER = LogUtils.getLogger()
     private val TYPE_KEY = ResourceKey.createRegistryKey<Registry<CompiledScript>>(
         Identifier.withDefaultNamespace("scripts")
     )

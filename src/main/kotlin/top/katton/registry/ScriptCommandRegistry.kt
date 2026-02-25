@@ -3,7 +3,6 @@ package top.katton.registry
 import com.mojang.brigadier.builder.LiteralArgumentBuilder
 import com.mojang.brigadier.tree.RootCommandNode
 import net.minecraft.commands.CommandSourceStack
-import net.minecraft.network.chat.Component
 import net.minecraft.server.MinecraftServer
 import top.katton.util.Event
 import java.util.concurrent.ConcurrentHashMap
@@ -19,16 +18,6 @@ object ScriptCommandRegistry {
         managedRoots.forEach { removeRootCommand(dispatcherRoot, it) }
         managedRoots.clear()
         rootsByOwner.clear()
-    }
-
-    @Synchronized
-    fun clearByOwner(server: MinecraftServer, owner: String) {
-        val ownedRoots = rootsByOwner.remove(owner) ?: return
-        val dispatcherRoot = server.commands.dispatcher.root
-        ownedRoots.forEach { rootName ->
-            removeRootCommand(dispatcherRoot, rootName)
-            managedRoots.remove(rootName)
-        }
     }
 
     @Synchronized
@@ -56,19 +45,6 @@ object ScriptCommandRegistry {
 
     fun syncTree(server: MinecraftServer) {
         server.playerList.players.forEach(server.commands::sendCommands)
-    }
-
-    @Synchronized
-    fun summaryComponent(): Component {
-        val detail = if (managedRoots.isEmpty()) "none" else managedRoots.joinToString(",")
-        return Component.literal("[katton] script commands managed=${managedRoots.size} roots=$detail")
-    }
-
-    @Synchronized
-    fun ownerSummaryComponent(owner: String): Component {
-        val roots = rootsByOwner[owner].orEmpty()
-        val detail = if (roots.isEmpty()) "none" else roots.joinToString(",")
-        return Component.literal("[katton] owner=$owner roots=${roots.size} => $detail")
     }
 
     private fun removeRootCommand(root: RootCommandNode<CommandSourceStack>, name: String) {
