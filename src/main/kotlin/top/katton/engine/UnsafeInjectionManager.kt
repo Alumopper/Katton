@@ -65,7 +65,61 @@ internal object UnsafeInjectionManager {
             result = 31 * result + (owner?.hashCode() ?: 0)
             return result
         }
+
+        private var enterControl: EnterControl? = null
+        private var exitControl: ExitControl? = null
+
+        internal fun bindEnter(control: EnterControl): UnsafeInvocation {
+            this.enterControl = control
+            return this
+        }
+
+        internal fun bindExit(control: ExitControl): UnsafeInvocation {
+            this.exitControl = control
+            return this
+        }
+
+        /** Mutates target argument at [index] for current invocation. */
+        fun setArgument(index: Int, value: Any?) {
+            arguments[index] = value
+        }
+
+        /** Cancels current method execution. */
+        fun cancel() {
+            val control = enterControl ?: return
+            control.skip = true
+        }
+
+        /** Cancels current method execution and sets replacement return value. */
+        fun cancelWith(returnValue: Any?) {
+            val control = enterControl ?: return
+            control.skip = true
+            control.overrideReturn = true
+            control.returnValue = returnValue
+        }
+
+        /** Overrides method return value in after phase. */
+        fun setReturnValue(returnValue: Any?) {
+            val control = exitControl ?: return
+            control.overrideReturn = true
+            control.returnValue = returnValue
+        }
     }
+
+    internal data class EnterControl(
+        var skip: Boolean = false,
+        var overrideReturn: Boolean = false,
+        var returnValue: Any? = null
+    )
+
+    internal data class ExitControl(
+        var overrideReturn: Boolean = false,
+        var returnValue: Any? = null
+    )
+
+    internal data class EnterState(
+        val returnValue: Any?
+    )
 
     private data class BeforeEntry(
         val id: String,
@@ -77,6 +131,18 @@ internal object UnsafeInjectionManager {
         val id: String,
         val owner: String?,
         val handler: (UnsafeInvocation, Any?, Throwable?) -> Unit
+    )
+
+    private data class ReplaceEntry(
+        val id: String,
+        val owner: String?,
+        val handler: (UnsafeInvocation) -> Any?
+    )
+
+    private data class RedirectEntry(
+        val id: String,
+        val owner: String?,
+        val target: Method
     )
 
     data class UnsafeConstructorInvocation(
@@ -131,6 +197,8 @@ internal object UnsafeInjectionManager {
     enum class Phase {
         BEFORE,
         AFTER,
+        REPLACE,
+        REDIRECT,
         CONSTRUCTOR_BEFORE,
         CONSTRUCTOR_AFTER
     }
@@ -149,6 +217,8 @@ internal object UnsafeInjectionManager {
     private val instrumentedTargets = ConcurrentHashMap.newKeySet<String>()
     private val beforeHandlers = ConcurrentHashMap<String, CopyOnWriteArrayList<BeforeEntry>>()
     private val afterHandlers = ConcurrentHashMap<String, CopyOnWriteArrayList<AfterEntry>>()
+    private val replaceHandlers = ConcurrentHashMap<String, CopyOnWriteArrayList<ReplaceEntry>>()
+    private val redirectHandlers = ConcurrentHashMap<String, CopyOnWriteArrayList<RedirectEntry>>()
     private val constructorBeforeHandlers = ConcurrentHashMap<String, CopyOnWriteArrayList<ConstructorBeforeEntry>>()
     private val constructorAfterHandlers = ConcurrentHashMap<String, CopyOnWriteArrayList<ConstructorAfterEntry>>()
     private val handles = ConcurrentHashMap<String, HandleMeta>()
@@ -202,6 +272,30 @@ internal object UnsafeInjectionManager {
         }
     }
 
+    private fun defaultReturnValue(type: Class<*>): Any? {
+        if (!type.isPrimitive || type == Void.TYPE) return null
+        return when (type) {
+            java.lang.Boolean.TYPE -> false
+            java.lang.Byte.TYPE -> 0.toByte()
+            java.lang.Character.TYPE -> 0.toChar()
+            java.lang.Short.TYPE -> 0.toShort()
+            java.lang.Integer.TYPE -> 0
+            java.lang.Long.TYPE -> 0L
+            java.lang.Float.TYPE -> 0f
+            java.lang.Double.TYPE -> 0.0
+            else -> null
+        }
+    }
+
+    @JvmStatic
+    fun createEnterControl(): EnterControl = EnterControl()
+
+    @JvmStatic
+    fun createExitControl(): ExitControl = ExitControl()
+
+    @JvmStatic
+    fun defaultReturnValueFor(type: Class<*>): Any? = defaultReturnValue(type)
+
     private fun ensureInstrumented(targetClass: Class<*>, method: Method) {
         val key = targetKey(method)
         if (!instrumentedTargets.add(key)) return
@@ -214,7 +308,7 @@ internal object UnsafeInjectionManager {
         ByteBuddy()
             .redefine(targetClass)
             .visit(
-                Advice.to(UniversalMethodAdvice::class.java).on(
+                Advice.to(UnsafeMethodAdvice::class.java).on(
                     ElementMatchers.not(ElementMatchers.isConstructor())
                         .and(ElementMatchers.not(ElementMatchers.isTypeInitializer()))
                 )
@@ -319,6 +413,77 @@ internal object UnsafeInjectionManager {
     }
 
     @JvmStatic
+    fun injectReplace(
+        owner: String?,
+        targetClassName: String,
+        methodName: String,
+        parameterTypeNames: List<String>,
+        handler: (UnsafeInvocation) -> Any?
+    ): InjectionHandle {
+        val targetClass = Class.forName(targetClassName)
+        val parameterTypes = parameterTypeNames.map(::resolveType)
+        val method = findMethod(targetClass, methodName, parameterTypes)
+        return injectReplace(owner, method, handler)
+    }
+
+    @JvmStatic
+    fun injectReplace(
+        owner: String?,
+        method: Method,
+        handler: (UnsafeInvocation) -> Any?
+    ): InjectionHandle {
+        val targetClass = method.declaringClass
+        ensureInstrumented(targetClass, method)
+
+        val key = targetKey(method)
+        val id = UUID.randomUUID().toString()
+        replaceHandlers.computeIfAbsent(key) { CopyOnWriteArrayList() }
+            .add(ReplaceEntry(id, owner, handler))
+        handles[id] = HandleMeta(id, owner, key, Phase.REPLACE)
+
+        return InjectionHandle(id, owner, method.declaringClass.name, method.name, Phase.REPLACE)
+    }
+
+    @JvmStatic
+    fun injectRedirect(
+        owner: String?,
+        sourceClassName: String,
+        sourceMethodName: String,
+        sourceParameterTypeNames: List<String>,
+        targetClassName: String,
+        targetMethodName: String,
+        targetParameterTypeNames: List<String>
+    ): InjectionHandle {
+        val sourceClass = Class.forName(sourceClassName)
+        val sourceParamTypes = sourceParameterTypeNames.map(::resolveType)
+        val sourceMethod = findMethod(sourceClass, sourceMethodName, sourceParamTypes)
+
+        val targetClass = Class.forName(targetClassName)
+        val targetParamTypes = targetParameterTypeNames.map(::resolveType)
+        val targetMethod = findMethod(targetClass, targetMethodName, targetParamTypes)
+
+        return injectRedirect(owner, sourceMethod, targetMethod)
+    }
+
+    @JvmStatic
+    fun injectRedirect(
+        owner: String?,
+        sourceMethod: Method,
+        targetMethod: Method
+    ): InjectionHandle {
+        val targetClass = sourceMethod.declaringClass
+        ensureInstrumented(targetClass, sourceMethod)
+
+        val key = targetKey(sourceMethod)
+        val id = UUID.randomUUID().toString()
+        redirectHandlers.computeIfAbsent(key) { CopyOnWriteArrayList() }
+            .add(RedirectEntry(id, owner, targetMethod.also { it.isAccessible = true }))
+        handles[id] = HandleMeta(id, owner, key, Phase.REDIRECT)
+
+        return InjectionHandle(id, owner, sourceMethod.declaringClass.name, sourceMethod.name, Phase.REDIRECT)
+    }
+
+    @JvmStatic
     fun injectConstructorBefore(
         owner: String?,
         targetClassName: String,
@@ -389,6 +554,8 @@ internal object UnsafeInjectionManager {
         when (meta.phase) {
             Phase.BEFORE -> beforeHandlers[meta.targetKey]?.removeIf { it.id == meta.id }
             Phase.AFTER -> afterHandlers[meta.targetKey]?.removeIf { it.id == meta.id }
+            Phase.REPLACE -> replaceHandlers[meta.targetKey]?.removeIf { it.id == meta.id }
+            Phase.REDIRECT -> redirectHandlers[meta.targetKey]?.removeIf { it.id == meta.id }
             Phase.CONSTRUCTOR_BEFORE -> constructorBeforeHandlers[meta.targetKey]?.removeIf { it.id == meta.id }
             Phase.CONSTRUCTOR_AFTER -> constructorAfterHandlers[meta.targetKey]?.removeIf { it.id == meta.id }
         }
@@ -411,6 +578,8 @@ internal object UnsafeInjectionManager {
         handles.clear()
         beforeHandlers.clear()
         afterHandlers.clear()
+        replaceHandlers.clear()
+        redirectHandlers.clear()
         constructorBeforeHandlers.clear()
         constructorAfterHandlers.clear()
     }
@@ -419,13 +588,42 @@ internal object UnsafeInjectionManager {
     /**
      * Advice enter dispatcher.
      */
-    fun dispatchBefore(method: Method, instance: Any?, args: Array<Any?>) {
+    fun dispatchBefore(method: Method, instance: Any?, args: Array<Any?>, enterControl: EnterControl) {
         val key = targetKey(method)
+
+        val replaceEntry = replaceHandlers[key]?.lastOrNull()
+        if (replaceEntry != null) {
+            runCatching {
+                Event.withScriptOwner(replaceEntry.owner) {
+                    val invocation = UnsafeInvocation(method, instance, args, replaceEntry.owner).bindEnter(enterControl)
+                    val replaced = replaceEntry.handler(invocation)
+                    invocation.cancelWith(replaced)
+                }
+            }.onFailure {
+                logger.error("[Katton Unsafe] replace handler failed at {}", key, it)
+            }
+        }
+
+        val redirectEntry = redirectHandlers[key]?.lastOrNull()
+        if (redirectEntry != null) {
+            runCatching {
+                Event.withScriptOwner(redirectEntry.owner) {
+                    val invocation = UnsafeInvocation(method, instance, args, redirectEntry.owner).bindEnter(enterControl)
+                    val target = redirectEntry.target
+                    val receiver = if (java.lang.reflect.Modifier.isStatic(target.modifiers)) null else instance
+                    val redirected = target.invoke(receiver, *args)
+                    invocation.cancelWith(redirected)
+                }
+            }.onFailure {
+                logger.error("[Katton Unsafe] redirect handler failed at {}", key, it)
+            }
+        }
+
         val entries = beforeHandlers[key] ?: return
         for (entry in entries) {
             runCatching {
                 Event.withScriptOwner(entry.owner) {
-                    entry.handler(UnsafeInvocation(method, instance, args, entry.owner))
+                    entry.handler(UnsafeInvocation(method, instance, args, entry.owner).bindEnter(enterControl))
                 }
             }.onFailure {
                 logger.error("[Katton Unsafe] before handler failed at {}", key, it)
@@ -437,13 +635,24 @@ internal object UnsafeInjectionManager {
     /**
      * Advice exit dispatcher.
      */
-    fun dispatchAfter(method: Method, instance: Any?, args: Array<Any?>, result: Any?, throwable: Throwable?) {
+    fun dispatchAfter(
+        method: Method,
+        instance: Any?,
+        args: Array<Any?>,
+        result: Any?,
+        throwable: Throwable?,
+        exitControl: ExitControl
+    ) {
         val key = targetKey(method)
         val entries = afterHandlers[key] ?: return
         for (entry in entries) {
             runCatching {
                 Event.withScriptOwner(entry.owner) {
-                    entry.handler(UnsafeInvocation(method, instance, args, entry.owner), result, throwable)
+                    entry.handler(
+                        UnsafeInvocation(method, instance, args, entry.owner).bindExit(exitControl),
+                        result,
+                        throwable
+                    )
                 }
             }.onFailure {
                 logger.error("[Katton Unsafe] after handler failed at {}", key, it)
@@ -477,37 +686,6 @@ internal object UnsafeInjectionManager {
                 }
             }.onFailure {
                 logger.error("[Katton Unsafe] constructor after handler failed at {}", key, it)
-            }
-        }
-    }
-
-    /**
-     * Universal Advice bridge:
-     * - enter -> [dispatchBefore]
-     * - exit  -> [dispatchAfter]
-     */
-    class UniversalMethodAdvice {
-        companion object {
-            @JvmStatic
-            @Advice.OnMethodEnter(suppress = Throwable::class)
-            fun onEnter(
-                @Advice.Origin method: Method,
-                @Advice.This(optional = true) instance: Any?,
-                @Advice.AllArguments args: Array<Any?>
-            ) {
-                dispatchBefore(method, instance, args)
-            }
-
-            @JvmStatic
-            @Advice.OnMethodExit(onThrowable = Throwable::class, suppress = Throwable::class)
-            fun onExit(
-                @Advice.Origin method: Method,
-                @Advice.This(optional = true) instance: Any?,
-                @Advice.AllArguments args: Array<Any?>,
-                @Advice.Return(readOnly = true, typing = Assigner.Typing.DYNAMIC) result: Any?,
-                @Advice.Thrown throwable: Throwable?
-            ) {
-                dispatchAfter(method, instance, args, result, throwable)
             }
         }
     }

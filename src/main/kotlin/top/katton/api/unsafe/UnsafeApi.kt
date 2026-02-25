@@ -42,6 +42,26 @@ class UnsafeInvocationContext internal constructor(
 
     /** Bound script owner for this invocation. */
     val owner: String? get() = delegate.owner
+
+    /** Mutates argument at [index] for current invocation. */
+    fun setArgument(index: Int, value: Any?) {
+        delegate.setArgument(index, value)
+    }
+
+    /** Cancels current invocation. Return value becomes type default if not overridden. */
+    fun cancel() {
+        delegate.cancel()
+    }
+
+    /** Cancels current invocation and overrides return value immediately. */
+    fun cancelWith(returnValue: Any?) {
+        delegate.cancelWith(returnValue)
+    }
+
+    /** Overrides return value in after phase. */
+    fun setReturnValue(returnValue: Any?) {
+        delegate.setReturnValue(returnValue)
+    }
 }
 
 /**
@@ -255,6 +275,86 @@ fun injectAfter(
     ) { invocation, result, throwable ->
         handler(UnsafeInvocationContext(invocation), result, throwable)
     }
+    return UnsafeHandle(h.id)
+}
+
+/**
+ * Replaces entire target method body (string-based overload).
+ *
+ * The handler return value becomes the method return value.
+ */
+fun injectReplace(
+    targetClassName: String,
+    methodName: String,
+    parameterTypeNames: List<String> = emptyList(),
+    owner: String? = null,
+    handler: (UnsafeInvocationContext) -> Any?
+): UnsafeHandle {
+    val h = UnsafeInjectionManager.injectReplace(
+        owner = effectiveOwner(owner),
+        targetClassName = targetClassName,
+        methodName = methodName,
+        parameterTypeNames = parameterTypeNames
+    ) { invocation ->
+        handler(UnsafeInvocationContext(invocation))
+    }
+    return UnsafeHandle(h.id)
+}
+
+/**
+ * Replaces entire target method body (Method overload).
+ */
+fun injectReplace(
+    method: Method,
+    owner: String? = null,
+    handler: (UnsafeInvocationContext) -> Any?
+): UnsafeHandle {
+    val h = UnsafeInjectionManager.injectReplace(
+        owner = effectiveOwner(owner),
+        method = method
+    ) { invocation ->
+        handler(UnsafeInvocationContext(invocation))
+    }
+    return UnsafeHandle(h.id)
+}
+
+/**
+ * Redirects a source method to another target method (string-based overload).
+ */
+fun injectRedirect(
+    sourceClassName: String,
+    sourceMethodName: String,
+    sourceParameterTypeNames: List<String> = emptyList(),
+    targetClassName: String,
+    targetMethodName: String,
+    targetParameterTypeNames: List<String> = emptyList(),
+    owner: String? = null
+): UnsafeHandle {
+    val h = UnsafeInjectionManager.injectRedirect(
+        owner = effectiveOwner(owner),
+        sourceClassName = sourceClassName,
+        sourceMethodName = sourceMethodName,
+        sourceParameterTypeNames = sourceParameterTypeNames,
+        targetClassName = targetClassName,
+        targetMethodName = targetMethodName,
+        targetParameterTypeNames = targetParameterTypeNames
+    )
+    return UnsafeHandle(h.id)
+}
+
+/**
+ * Redirects a source method to another target method (Method overload).
+ */
+fun injectRedirect(
+    sourceMethod: Method,
+    targetMethod: Method,
+    owner: String? = null
+): UnsafeHandle {
+    val h = UnsafeInjectionManager.injectRedirect(
+        owner = effectiveOwner(owner),
+        sourceMethod = sourceMethod,
+        targetMethod = targetMethod
+    )
     return UnsafeHandle(h.id)
 }
 

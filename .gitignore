@@ -39,4 +39,5 @@ replay_*.log
 *.hprof
 *.jfr
 
-/Example/lib/
+.kilocode/
+.kotlin/
