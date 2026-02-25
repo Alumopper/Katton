@@ -3,7 +3,8 @@
 	"package": "top.katton.mixin",
 	"compatibilityLevel": "JAVA_21",
 	"mixins": [
-		"MappedRegistryAccessor"
+		"MappedRegistryAccessor",
+		"ServerConfigurationPacketListenerImplMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1

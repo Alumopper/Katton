@@ -1,6 +1,6 @@
 package top.katton.util
 
-object Extension {
+internal object Extension {
 
     /**
      * 遍历列表并执行 [action]，如果执行结果不等于 [passValue]，则立即返回该结果。

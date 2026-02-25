@@ -64,12 +64,41 @@ class KattonItemProperties(
     }
 
     /**
+     * Finalizes the componentInitializer to include custom ITEM_NAME and ITEM_MODEL.
+     *
+     * In MC 26.1+, Item's constructor registers a componentInitializer into
+     * BuiltInRegistries.DATA_COMPONENT_INITIALIZERS via finalizeInitializer().
+     * When DataComponentInitializers.build() runs later (during registry binding),
+     * it uses these initializers to set holder.components. We must ensure the
+     * initializer produces the correct ITEM_NAME and ITEM_MODEL values.
+     *
+     * This method must be called before the Item is constructed.
+     *
+     * @return this for chaining
+     */
+    fun finalizeComponentInitializer(): KattonItemProperties {
+        val capturedName = name
+        val capturedModel = model
+        this.componentInitializer = this.componentInitializer.andThen { components, _, _ ->
+            components
+                .set(DataComponents.ITEM_NAME, capturedName)
+                .set(DataComponents.ITEM_MODEL, capturedModel)
+                .addValidator { map ->
+                    check(
+                        !(map.has(DataComponents.DAMAGE) && map.getOrDefault(DataComponents.MAX_STACK_SIZE, 1) > 1)
+                    ) { "Item cannot have both durability and be stackable" }
+                }
+        }
+        return this
+    }
+
+    /**
      * Builds the data component map for this item.
-     * 
+     *
      * Always sets ITEM_NAME and ITEM_MODEL first, then attempts to add
      * additional components through the initializer. If itemId is not set
      * (e.g., during hot-reload), the basic components are still preserved.
-     * 
+     *
      * @return The built DataComponentMap
      */
     fun buildComponent(): DataComponentMap {
@@ -81,33 +110,13 @@ class KattonItemProperties(
         
         // Try to add additional components via initializer
         server?.let {
-            val initializer = createComponentInitializer(name, model)
             try {
-                initializer.run(mapBuilder, it.registryAccess(), itemIdOrThrow())
+                this.componentInitializer.run(mapBuilder, it.registryAccess(), itemIdOrThrow())
             } catch (_: Throwable) {
                 // itemId not set - basic components already applied
             }
         }
         return mapBuilder.build()
-    }
-
-    /**
-     * Creates a component initializer that sets name, model, and validators.
-     */
-    private fun createComponentInitializer(
-        name: Component,
-        model: Identifier
-    ): DataComponentInitializers.Initializer<Item> {
-        return this.componentInitializer.andThen { components, _, _ ->
-            components
-                .set(DataComponents.ITEM_NAME, name)
-                .set(DataComponents.ITEM_MODEL, model)
-                .addValidator { map ->
-                    check(
-                        !(map.has(DataComponents.DAMAGE) && map.getOrDefault(DataComponents.MAX_STACK_SIZE, 1) > 1)
-                    ) { "Item cannot have both durability and be stackable" }
-                }
-        }
     }
 
     companion object {

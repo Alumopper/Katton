@@ -16,6 +16,8 @@ import top.katton.engine.ScriptEngine;
 import top.katton.engine.ScriptLoader;
 import top.katton.registry.KattonRegistry;
 import top.katton.util.Event;
+import top.katton.network.Networking;
+import top.katton.network.ServerNetworking;
 
 public class Katton implements ModInitializer {
     public static final String MOD_ID = "katton";
@@ -31,6 +33,12 @@ public class Katton implements ModInitializer {
     public void onInitialize() {
         // Initialize KattonRegistry first to register custom DataComponentTypes
         KattonRegistry.INSTANCE.initialize();
+
+        // Initialize networking (payload type registration)
+        Networking.initialize();
+
+        // Initialize server networking for item sync
+        ServerNetworking.INSTANCE.initialize();
 
         EntityEvent.INSTANCE.initialize();
 

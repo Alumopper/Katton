@@ -1,7 +1,11 @@
 {
 	"required": true,
-	"package": "top.katton.mixin.client",
+	"package": "top.katton.mixin",
 	"compatibilityLevel": "JAVA_21",
+	"mixins": [
+		"ClientRegistrySyncHandlerMixin",
+		"RegistryDataCollectorMixin"
+	],
 	"injectors": {
 		"defaultRequire": 1
 	}

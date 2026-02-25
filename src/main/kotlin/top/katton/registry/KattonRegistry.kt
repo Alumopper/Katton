@@ -164,7 +164,7 @@ object KattonRegistry {
                 itemRegistry.unregisteredIntrusiveHolders = IdentityHashMap()
             }
             
-            val savedFrozen = accessor.isFrozen()
+            val savedFrozen = accessor.isFrozen
             
             return try {
                 // Temporarily unfreeze registry
@@ -236,6 +236,7 @@ object KattonRegistry {
                 synchronized(pendingNativeRegistrations) {
                     pendingNativeRegistrations.add(components.id to {
                         components.setId(ResourceKey.create(Registries.ITEM, components.id))
+                        components.finalizeComponentInitializer()
                         itemFactory(components)
                     })
                 }
@@ -245,6 +246,7 @@ object KattonRegistry {
             // Delayed factory ensures Item is created during unfreeze window
             val delayedFactory = {
                 components.setId(ResourceKey.create(Registries.ITEM, components.id))
+                components.finalizeComponentInitializer()
                 itemFactory(components)
             }
             val entry = KattonItemEntry(
