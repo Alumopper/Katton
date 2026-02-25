@@ -105,35 +105,16 @@ registerNativeItem(
 ### Register Modes
 
 - `RegisterMode.AUTO` - Automatically choose the best mode based on current game state
-- `RegisterMode.RELOADABLE` - Item can be hot-reloaded; changes take effect after `/katton reload`
+- `RegisterMode.RELOADABLE` - Item can be hot-reloaded; changes take effect after `/reload`
 - `RegisterMode.PERSISTENT` - Item persists across reloads; use for items that should always exist
 
-### Important Notes
-
-1. **Item Construction Timing**: The `itemFactory` lambda is called during the registration window when the registry is temporarily unfrozen. Do not construct Item instances outside this lambda.
-
-2. **Hot Reload Behavior**: When using `RELOADABLE` mode, the item's behavior can be updated by modifying the script and running `/katton reload`. The item instance itself remains registered in the game's registry.
-
-3. **Accessing Registered Items**: Use the `ITEMS` registry to get your registered items:
-
-```kotlin
-import top.katton.registry.KattonRegistry.ITEMS
-import top.katton.registry.id
-
-val myItem = ITEMS[id("mymod:custom_item")]
-val itemStack = myItem?.getDefaultInstance()
-```
-
-### Giving Items to Players
-
-```kotlin
-import top.katton.api.*
-
-// Give item to player
-ITEMS[id("mymod:custom_item")]?.let {
-    giveItem(player, it.getDefaultInstance())
-}
-```
+>[!WARNING]
+>
+>1. **Item Construction Timing**: The `itemFactory` lambda is called during the registration window when the registry is temporarily unfrozen. Do not construct Item instances outside this lambda.
+>
+>2. **Hot Reload Behavior**: When using `RELOADABLE` mode, the item's behavior can be updated by modifying the script and running `/reload`. The item instance itself remains registered in the game's registry.
+>
+>3. **Accessing Registered Items**: Use the `ITEMS` registry to get your registered items:
 
 ## Hot Reloading
 
@@ -146,7 +127,7 @@ Run `/katton reload` to reload all scripts without restarting the server. This w
 > [!NOTE]
 > Items registered with `RELOADABLE` mode will have their behavior updated on reload, but the item instance itself remains in the game registry. To add new items, simply add new `registerNativeItem` calls in your scripts.
 
-## Unsafe Dynamic Injection (Experimental)
+## Dynamic Injection (Experimental)
 
 > [!WARNING]
 > `top.katton.api.unsafe` is intentionally dangerous. It can redefine classes at runtime and hook arbitrary methods. Use only if you fully understand JVM instrumentation side effects.
@@ -201,8 +182,10 @@ injectAfter(m) { ctx, result, throwable ->
 rollbackUnsafe(handle)
 ```
 
-### Important notes
-
-1. Hook execution exceptions are caught and logged, so they do not directly break the target method invocation chain.
-2. This API does not add whitelist/permission sandbox by default.
-3. Runtime redefinition may conflict with other transformers/mods depending on load order and target classes.
+>[!WARNING]
+>
+>1. Hook execution exceptions are caught and logged, so they do not directly break the target method invocation chain.
+>
+>2. This API does not add whitelist/permission sandbox by default.
+>
+>3. Runtime redefinition may conflict with other transformers/mods depending on load order and target classes.
