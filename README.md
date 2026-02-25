@@ -145,3 +145,64 @@ Run `/katton reload` to reload all scripts without restarting the server. This w
 
 > [!NOTE]
 > Items registered with `RELOADABLE` mode will have their behavior updated on reload, but the item instance itself remains in the game registry. To add new items, simply add new `registerNativeItem` calls in your scripts.
+
+## Unsafe Dynamic Injection (Experimental)
+
+> [!WARNING]
+> `top.katton.api.unsafe` is intentionally dangerous. It can redefine classes at runtime and hook arbitrary methods. Use only if you fully understand JVM instrumentation side effects.
+
+Katton provides an experimental unsafe API for dynamic runtime method hooks:
+
+- Before hook: run callback before target method body
+- After hook: run callback after target method body (with result/throwable)
+- Rollback by handle or owner
+
+### How it works
+
+The internal implementation is in [`UnsafeInjectionManager`](src/main/kotlin/top/katton/engine/UnsafeInjectionManager.kt).
+
+1. On first injection for a method, Katton installs ByteBuddy agent and redefines the target class.
+2. A universal Advice bridge is woven into method enter/exit.
+3. Advice forwards runtime calls to Katton's before/after handler registries.
+4. During `/katton reload`, Katton clears unsafe hook registries before re-running scripts.
+
+### API entry points
+
+Unsafe script API is provided by [`UnsafeApi.kt`](src/main/kotlin/top/katton/api/unsafe/UnsafeApi.kt):
+
+- [`injectBefore(...)`](src/main/kotlin/top/katton/api/unsafe/UnsafeApi.kt:72)
+- [`injectAfter(...)`](src/main/kotlin/top/katton/api/unsafe/UnsafeApi.kt:119)
+- [`rollbackUnsafe(...)`](src/main/kotlin/top/katton/api/unsafe/UnsafeApi.kt:159)
+- [`rollbackUnsafeByOwner(...)`](src/main/kotlin/top/katton/api/unsafe/UnsafeApi.kt:166)
+
+Both string-based and `Method`-based overloads are supported.
+
+### Example (Method overload)
+
+```kotlin
+import top.katton.api.unsafe.*
+import net.minecraft.server.level.ServerPlayer
+
+val m = ServerPlayer::class.java.getDeclaredMethod("getName")
+
+val handle = injectBefore(m) { ctx ->
+    println("before: ${ctx.method.declaringClass.simpleName}.${ctx.method.name}")
+}
+
+injectAfter(m) { ctx, result, throwable ->
+    if (throwable != null) {
+        println("after with error: ${throwable.message}")
+    } else {
+        println("after result: $result")
+    }
+}
+
+// rollback one
+rollbackUnsafe(handle)
+```
+
+### Important notes
+
+1. Hook execution exceptions are caught and logged, so they do not directly break the target method invocation chain.
+2. This API does not add whitelist/permission sandbox by default.
+3. Runtime redefinition may conflict with other transformers/mods depending on load order and target classes.

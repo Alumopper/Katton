@@ -14,6 +14,7 @@ import top.katton.command.ScriptCommand;
 import top.katton.registry.ScriptCommandRegistry;
 import top.katton.engine.ScriptEngine;
 import top.katton.engine.ScriptLoader;
+import top.katton.engine.UnsafeInjectionManager;
 import top.katton.registry.KattonRegistry;
 import top.katton.util.Event;
 import top.katton.network.Networking;
@@ -81,6 +82,7 @@ public class Katton implements ModInitializer {
         KattonRegistry.BLOCKS.INSTANCE.beginReload();
         EntityEvent.INSTANCE.beginReload();
         Event.Companion.getFabricEventRegistry().values().forEach(list -> list.forEach(Event::clear));
+        UnsafeInjectionManager.beginReload();
         ScriptEngine.compileAndExecuteAll(ScriptLoader.getScripts().values());
         EntityEvent.INSTANCE.rebindLoadedEntities(server);
     }

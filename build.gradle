@@ -48,6 +48,8 @@ dependencies {
 	include(implementation('org.jetbrains.kotlin:kotlin-stdlib'))
 	include(implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm:1.8.0"))
 	include(implementation("org.jetbrains.kotlinx:kotlinx-coroutines-jdk8:1.8.0"))
+	include(implementation("net.bytebuddy:byte-buddy:1.17.8"))
+	include(implementation("net.bytebuddy:byte-buddy-agent:1.17.8"))
 	include(implementation("org.jetbrains:annotations:26.0.2"))
 
 	// To change the versions see the gradle.properties file
