@@ -4,6 +4,7 @@ plugins {
 	id 'net.fabricmc.fabric-loom' version "${loom_version}"
 	id 'maven-publish'
 	id "org.jetbrains.kotlin.jvm" version "2.3.10"
+	id "org.jetbrains.dokka" version "2.1.0"
 }
 
 version = project.mod_version
@@ -65,6 +66,15 @@ processResources {
 
 	filesMatching("fabric.mod.json") {
 		expand "version": inputs.properties.version
+	}
+}
+
+dokka {
+	pluginsConfiguration {
+		html {
+			customAssets.from("src/main/resources/assets/kts4mc/logo.png")
+			footerMessage.set("(c) Alumopper")
+		}
 	}
 }
 

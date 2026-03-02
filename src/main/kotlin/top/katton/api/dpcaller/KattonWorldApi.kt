@@ -1,6 +1,6 @@
 @file:Suppress("unused")
 
-package top.katton.api
+package top.katton.api.dpcaller
 
 import com.mojang.datafixers.util.Pair
 import net.minecraft.core.BlockPos
@@ -30,6 +30,8 @@ import net.minecraft.world.level.block.state.BlockState
 import net.minecraft.world.level.levelgen.structure.Structure
 import net.minecraft.world.phys.Vec3
 import net.minecraft.world.timeline.Timeline
+import top.katton.api.LOGGER
+import top.katton.api.requireServer
 import top.katton.util.Result
 import kotlin.jvm.optionals.getOrDefault
 import kotlin.math.sqrt
@@ -151,7 +153,7 @@ fun fill(level: Level, start: BlockPos, end: BlockPos, block: Block) {
  * @param biomePredicate predicate to further filter biome application
  */
 fun fillBiome(level: Level, start: BlockPos, end: BlockPos, biome: Identifier, biomePredicate: (Holder<Biome>) -> Boolean) {
-    if (level !is net.minecraft.server.level.ServerLevel) return
+    if (level !is ServerLevel) return
     val b = requireServer().registryAccess().lookupOrThrow(Registries.BIOME).get(biome)
     if(b.isEmpty) {
         LOGGER.warn("Biome $biome not found")
@@ -696,5 +698,4 @@ fun setWorldBorderSize(level: ServerLevel, size: Double, time: Long = 0L){
         border.setSize(size)
     }
 }
-
 

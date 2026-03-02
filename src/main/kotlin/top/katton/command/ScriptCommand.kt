@@ -16,7 +16,7 @@ object ScriptCommand {
                 .then(
                     literal("reload")
                         .executes {
-                            reloadScript(it.source.server)
+//                            reloadScript(it.source.server)
                             1
                         }
                 )

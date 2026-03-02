@@ -22,10 +22,13 @@ import net.minecraft.world.level.storage.loot.parameters.LootContextParams
 import net.minecraft.world.level.storage.loot.predicates.LootItemCondition
 import net.minecraft.world.phys.AABB
 import net.minecraft.world.phys.Vec3
-import top.katton.api.getEntityNbt
+import top.katton.api.dpcaller.getEntityNbt
 import java.util.*
 import java.util.function.Predicate
 
+/**
+ * Builder class for creating EntitySelector instances with a fluent API.
+ */
 @Suppress("unused")
 class EntitySelectorBuilder {
 
@@ -60,6 +63,9 @@ class EntitySelectorBuilder {
     private var hasScores = false
     private var hasAdvancements = false
 
+    /**
+     * Sets the entity type to filter by. If inverse is true, selects entities that are NOT of the specified type.
+     */
     fun type(entityType: EntityType<*>, inverse: Boolean = false): EntitySelectorBuilder {
         this.type = entityType
         this.typeInverse = inverse
@@ -69,71 +75,107 @@ class EntitySelectorBuilder {
         return this
     }
 
+    /**
+     * Sets the sorting order of the selector results. If not set, defaults to arbitrary order.
+     */
     fun orderArbitrary(): EntitySelectorBuilder {
         this.order = EntitySelector.ORDER_ARBITRARY
         this.isSorted = true
         return this
     }
 
+    /**
+     * Sets the sorting order of the selector results. If not set, defaults to arbitrary order.
+     */
     fun orderNearest(): EntitySelectorBuilder {
         this.order = EntitySelectorParser.ORDER_NEAREST
         this.isSorted = true
         return this
     }
 
+    /**
+     * Sets the sorting order of the selector results. If not set, defaults to arbitrary order.
+     */
     fun orderFurthest(): EntitySelectorBuilder {
         this.order = EntitySelectorParser.ORDER_FURTHEST
         this.isSorted = true
         return this
     }
 
+    /**
+     * Sets the sorting order of the selector results. If not set, defaults to arbitrary order.
+     */
     fun orderRandom(): EntitySelectorBuilder {
         this.order = EntitySelectorParser.ORDER_RANDOM
         this.isSorted = true
         return this
     }
 
+    /**
+     * Adds a predicate to filter only alive entities.
+     */
     fun isAlive(): EntitySelectorBuilder {
         this.predicates.add(Entity::isAlive)
         return this
     }
 
+    /**
+     * Used for volume-based selection. Similar to the "x" argument in target selectors in commands.
+     */
     fun x(x: Double): EntitySelectorBuilder {
         this.x = x
         this.worldLimited = true
         return this
     }
 
-     fun y(y: Double): EntitySelectorBuilder {
+    /**
+     * Used for volume-based selection. Similar to the "y" argument in target selectors in commands.
+     */
+    fun y(y: Double): EntitySelectorBuilder {
         this.y = y
         this.worldLimited = true
         return this
     }
 
+    /**
+     * Used for volume-based selection. Similar to the "z" argument in target selectors in commands.
+     */
     fun z(z: Double): EntitySelectorBuilder {
         this.z = z
         this.worldLimited = true
         return this
     }
 
+    /**
+     * Used for volume-based selection. Similar to the "dx" argument in target selectors in commands.
+     */
     fun dx(deltaX: Double): EntitySelectorBuilder {
         this.deltaX = deltaX
         this.worldLimited = true
         return this
     }
 
+    /**
+     * Used for volume-based selection. Similar to the "dy" argument in target selectors in commands.
+     */
     fun dy(deltaY: Double): EntitySelectorBuilder {
         this.deltaY = deltaY
         this.worldLimited = true
         return this
     }
 
+    /**
+     * Used for volume-based selection. Similar to the "dz" argument in target selectors in commands.
+     */
     fun dz(deltaZ: Double): EntitySelectorBuilder {
         this.deltaZ = deltaZ
         this.worldLimited = true
         return this
     }
 
+    /**
+     * Filter target selection by name.
+     */
     fun name(name: String, inverse: Boolean = false): EntitySelectorBuilder {
         if(this.namePredicate != null) {
             this.predicates.remove(namePredicate)
@@ -146,6 +188,9 @@ class EntitySelectorBuilder {
         return this
     }
 
+    /**
+     * Filter target selection based on their Euclidean distances from some point, searching for the target's feet (a point at the bottom of the center of their hitbox).
+     */
     fun distance(minDistance: Double, maxDistance: Double): EntitySelectorBuilder {
         if(minDistance < 0 || maxDistance < 0) {
             LOGGER.error("Distance cannot be negative")
@@ -160,6 +205,9 @@ class EntitySelectorBuilder {
         return this
     }
 
+    /**
+     * Filter target selection based on their Euclidean distances from some point, searching for the target's feet (a point at the bottom of the center of their hitbox).
+     */
     fun distanceBelow(maxDistance: Double): EntitySelectorBuilder {
         if(maxDistance < 0) {
             LOGGER.error("Distance cannot be negative")
@@ -170,6 +218,9 @@ class EntitySelectorBuilder {
         return this
     }
 
+    /**
+     * Filter target selection based on their Euclidean distances from some point, searching for the target's feet (a point at the bottom of the center of their hitbox).
+     */
     fun distanceAbove(minDistance: Double): EntitySelectorBuilder {
         if(minDistance < 0) {
             LOGGER.error("Distance cannot be negative")
@@ -180,6 +231,9 @@ class EntitySelectorBuilder {
         return this
     }
 
+    /**
+     * Filter target selection based on the entity's experience levels. This naturally filters out all non-player targets.
+     */
     fun level(minLevel: Int, maxLevel: Int): EntitySelectorBuilder {
         if (minLevel < 0 || maxLevel < 0) {
             LOGGER.error("Level cannot be negative")
@@ -194,6 +248,9 @@ class EntitySelectorBuilder {
         return this
     }
 
+    /**
+     * Filter target selection based on the entity's experience levels. This naturally filters out all non-player targets.
+     */
     fun levelBelow(maxLevel: Int): EntitySelectorBuilder {
         if (maxLevel < 0) {
             LOGGER.error("Level cannot be negative")
@@ -204,6 +261,9 @@ class EntitySelectorBuilder {
         return this
     }
 
+    /**
+     * Filter target selection based on the entity's experience levels. This naturally filters out all non-player targets.
+     */
     fun levelAbove(minLevel: Int): EntitySelectorBuilder {
         if (minLevel < 0) {
             LOGGER.error("Level cannot be negative")
@@ -214,6 +274,9 @@ class EntitySelectorBuilder {
         return this
     }
 
+    /**
+     * Filter target selection based on the entity's rotation along the pitch axis, measured in degrees.
+     */
     fun x_rotation(minDegrees: Float, maxDegrees: Float): EntitySelectorBuilder {
         if(minDegrees > maxDegrees) {
             LOGGER.error("Min rotation cannot be greater than max rotation")
@@ -223,6 +286,9 @@ class EntitySelectorBuilder {
         return this
     }
 
+    /**
+     * Filter target selection based on the entity's rotation along the yaw axis, measured clockwise in degrees from due south (or the positive Z direction).
+     */
     fun y_rotation(minDegrees: Float, maxDegrees: Float): EntitySelectorBuilder {
         if(minDegrees > maxDegrees) {
             LOGGER.error("Min rotation cannot be greater than max rotation")
@@ -232,6 +298,9 @@ class EntitySelectorBuilder {
         return this
     }
 
+    /**
+     * Limit the number of selectable targets for a target selector
+     */
     fun limit(i: Int): EntitySelectorBuilder {
         if(i < 1) {
             LOGGER.error("Limit must be at least 1")
@@ -242,7 +311,10 @@ class EntitySelectorBuilder {
         return this
     }
 
-    fun gamemode(gamemode: GameType, inverse: Boolean): EntitySelectorBuilder {
+    /**
+     * Filter target selection by game mode. This naturally filters out all non-player targets.
+     */
+    fun gamemode(gamemode: GameType, inverse: Boolean = false): EntitySelectorBuilder {
         if(this.gamemodePredicate != null) {
             this.predicates.remove(gamemodePredicate)
         }
@@ -261,7 +333,10 @@ class EntitySelectorBuilder {
         return this
     }
 
-    fun team(team: String, inverse: Boolean): EntitySelectorBuilder {
+    /**
+     * Filter target selection based on teams.
+     */
+    fun team(team: String, inverse: Boolean = false): EntitySelectorBuilder {
         if(this.teamPredicate != null) {
             this.predicates.remove(teamPredicate)
         }
@@ -275,7 +350,10 @@ class EntitySelectorBuilder {
         return this
     }
 
-    fun type(type: Identifier, inverse: Boolean): EntitySelectorBuilder {
+    /**
+     * Filter target selection based on entity type. If inverse is true, selects entities that are NOT of the specified type.
+     */
+    fun type(type: Identifier, inverse: Boolean = false): EntitySelectorBuilder {
         val entityType = EntityType.byString(type.toString()).orElse(null)
         if(entityType == null) {
             LOGGER.error("Invalid entity type: $type")
@@ -284,7 +362,10 @@ class EntitySelectorBuilder {
         return type(entityType, inverse)
     }
 
-    fun type(typeTag: TagKey<EntityType<*>>, inverse: Boolean): EntitySelectorBuilder {
+    /**
+     * Filter target selection based on entity type. If inverse is true, selects entities that are NOT of the specified type.
+     */
+    fun type(typeTag: TagKey<EntityType<*>>, inverse: Boolean = false): EntitySelectorBuilder {
         val predicate = Predicate<Entity> { entity ->
             entity.`is`(typeTag) != inverse
         }
@@ -292,7 +373,10 @@ class EntitySelectorBuilder {
         return this
     }
 
-    fun tag(tag: String, inverse: Boolean): EntitySelectorBuilder {
+    /**
+     * Filter target selection based on the entity's scoreboard tags.
+     */
+    fun tag(tag: String, inverse: Boolean = false): EntitySelectorBuilder {
         val predicate = Predicate<Entity> { entity ->
             if(tag == "") {
                 entity.entityTags().isEmpty() != inverse
@@ -304,7 +388,10 @@ class EntitySelectorBuilder {
         return this
     }
 
-    fun nbt(nbt: CompoundTag, inverse: Boolean): EntitySelectorBuilder {
+    /**
+     * Filter target selection based on the entity's NBT data. Note that this selector argument should be used with care, as accessing NBT data is a heavy process for the CPU.
+     */
+    fun nbt(nbt: CompoundTag, inverse: Boolean = false): EntitySelectorBuilder {
         val predicate = Predicate<Entity> { entity ->
             NbtUtils.compareNbt(nbt, getEntityNbt(entity), true) != inverse
         }
@@ -312,6 +399,9 @@ class EntitySelectorBuilder {
         return this
     }
 
+    /**
+     *  Filter target selection based on their scores in the specified objectives.
+     */
     fun score(objectiveName: String, min: Int? = null, max: Int? = null): EntitySelectorBuilder {
         val predicate = Predicate<Entity> { entity ->
             val scoreboard = entity.level().scoreboard
@@ -326,6 +416,9 @@ class EntitySelectorBuilder {
         return this
     }
 
+    /**
+     * Filter target selection based on the entity's advancements. This naturally filters out all non-player targets.
+     */
     fun advancements(advancement: Identifier, isDone: Boolean): EntitySelectorBuilder {
         val predicate = Predicate<Entity> { entity ->
             if(entity !is ServerPlayer) return@Predicate false
@@ -339,6 +432,9 @@ class EntitySelectorBuilder {
         return this
     }
 
+    /**
+     * Filter target selection based on the entity's advancements. This naturally filters out all non-player targets.
+     */
     fun advancements(advancement: Identifier, criterion: String, isDone: Boolean): EntitySelectorBuilder {
         val predicate = Predicate<Entity> { entity ->
             if(entity !is ServerPlayer) return@Predicate false
@@ -353,7 +449,10 @@ class EntitySelectorBuilder {
         return this
     }
 
-    fun predicate(predicateKey: ResourceKey<LootItemCondition>, inverse: Boolean): EntitySelectorBuilder {
+    /**
+     * Filter target selection by predicates.
+     */
+    fun predicate(predicateKey: ResourceKey<LootItemCondition>, inverse: Boolean = false): EntitySelectorBuilder {
         val predicate = Predicate<Entity> { entity ->
             if(entity.level() !is ServerLevel) return@Predicate false
             val condition = entity.level().server?.reloadableRegistries()?.lookup()?.get(predicateKey)?.map { it.value() } ?: return@Predicate false
@@ -369,7 +468,10 @@ class EntitySelectorBuilder {
         return this
     }
 
-    fun predicate(predicate: LootItemCondition, inverse: Boolean): EntitySelectorBuilder {
+    /**
+     * Filter target selection by predicates.
+     */
+    fun predicate(predicate: LootItemCondition, inverse: Boolean = false): EntitySelectorBuilder {
         val predicateWrapper = Predicate<Entity> { entity ->
             if(entity.level() !is ServerLevel) return@Predicate false
             val params = LootParams.Builder(entity.level() as ServerLevel)
@@ -383,6 +485,9 @@ class EntitySelectorBuilder {
         return this
     }
 
+    /**
+     * Build an EntitySelector instance based on the current configuration of this builder.
+     */
     fun create(): EntitySelector {
         var aABB: AABB?
 		if (this.deltaX == null && this.deltaY == null && this.deltaZ == null) {
@@ -439,6 +544,9 @@ class EntitySelectorBuilder {
 
         private val LOGGER = LogUtils.getLogger()
 
+        /**
+         * Return an EntitySelectorBuilder that selects all players in the world.
+         */
         fun allPlayers(): EntitySelectorBuilder {
             return EntitySelectorBuilder().apply {
                 maxResults = Int.MAX_VALUE
@@ -446,6 +554,9 @@ class EntitySelectorBuilder {
             }.type(EntityType.PLAYER)
         }
 
+        /**
+         * Return an EntitySelectorBuilder that selects all entities in the world, including players.
+         */
         fun allEntities(): EntitySelectorBuilder {
             return EntitySelectorBuilder().apply {
                 maxResults = Int.MAX_VALUE
@@ -453,6 +564,9 @@ class EntitySelectorBuilder {
             }
         }
 
+        /**
+         * Return an EntitySelectorBuilder that selects the nearest player to some point.
+         */
         fun nearestPlayer(): EntitySelectorBuilder {
             return EntitySelectorBuilder().apply {
                 maxResults = 1
@@ -461,6 +575,9 @@ class EntitySelectorBuilder {
             }.orderNearest().type(EntityType.PLAYER)
         }
 
+        /**
+         * Return an EntitySelectorBuilder that selects the nearest entity to some point, including players.
+         */
         fun nearestEntity(): EntitySelectorBuilder {
             return EntitySelectorBuilder().apply {
                 maxResults = 1
@@ -468,6 +585,9 @@ class EntitySelectorBuilder {
             }.orderNearest()
         }
 
+        /**
+         * Return an EntitySelectorBuilder that selects random entities in the world. Defaults to selecting one random entity, but can be configured to select more.
+         */
         fun randomEntity(): EntitySelectorBuilder {
             return EntitySelectorBuilder().apply {
                 maxResults = 1
@@ -475,6 +595,9 @@ class EntitySelectorBuilder {
             }.orderRandom()
         }
 
+        /**
+         * Return an EntitySelectorBuilder that selects a random player in the world. Defaults to selecting one random player, but can be configured to select more.
+         */
         fun randomPlayer(): EntitySelectorBuilder {
             return EntitySelectorBuilder().apply {
                 maxResults = 1

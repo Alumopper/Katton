@@ -1,11 +1,10 @@
 @file:Suppress("unused")
 
-package top.katton.api
+package top.katton.api.registry
 
 import net.minecraft.resources.Identifier
 import net.minecraft.world.effect.MobEffect
 import net.minecraft.world.effect.MobEffectCategory
-import org.jetbrains.annotations.ApiStatus
 import top.katton.registry.KattonRegistry
 import top.katton.registry.RegisterMode
 import top.katton.registry.id

@@ -130,7 +130,7 @@ Run `/katton reload` to reload all scripts without restarting the server. This w
 ## Dynamic Injection (Experimental)
 
 > [!WARNING]
-> `top.katton.api.unsafe` is intentionally dangerous. It can redefine classes at runtime and hook arbitrary methods. Use only if you fully understand JVM instrumentation side effects.
+> `top.katton.api.inject` is intentionally dangerous. It can redefine classes at runtime and hook arbitrary methods. Use only if you fully understand JVM instrumentation side effects.
 
 Katton provides an experimental unsafe API for dynamic runtime method hooks:
 
@@ -149,19 +149,19 @@ The internal implementation is in [`UnsafeInjectionManager`](src/main/kotlin/top
 
 ### API entry points
 
-Unsafe script API is provided by [`UnsafeApi.kt`](src/main/kotlin/top/katton/api/unsafe/UnsafeApi.kt):
+Unsafe script API is provided by [`UnsafeApi.kt`](src/main/kotlin/top/katton/api/inject/UnsafeApi.kt):
 
-- [`injectBefore(...)`](src/main/kotlin/top/katton/api/unsafe/UnsafeApi.kt:72)
-- [`injectAfter(...)`](src/main/kotlin/top/katton/api/unsafe/UnsafeApi.kt:119)
-- [`rollbackUnsafe(...)`](src/main/kotlin/top/katton/api/unsafe/UnsafeApi.kt:159)
-- [`rollbackUnsafeByOwner(...)`](src/main/kotlin/top/katton/api/unsafe/UnsafeApi.kt:166)
+- [`injectBefore(...)`](src/main/kotlin/top/katton/api/inject/UnsafeApi.kt:72)
+- [`injectAfter(...)`](src/main/kotlin/top/katton/api/inject/UnsafeApi.kt:119)
+- [`rollbackUnsafe(...)`](src/main/kotlin/top/katton/api/inject/UnsafeApi.kt:159)
+- [`rollbackUnsafeByOwner(...)`](src/main/kotlin/top/katton/api/inject/UnsafeApi.kt:166)
 
 Both string-based and `Method`-based overloads are supported.
 
 ### Example (Method overload)
 
 ```kotlin
-import top.katton.api.unsafe.*
+import top.katton.api.inject.*
 import net.minecraft.server.level.ServerPlayer
 
 val m = ServerPlayer::class.java.getDeclaredMethod("getName")

@@ -5,7 +5,6 @@ import net.bytebuddy.ByteBuddy
 import net.bytebuddy.agent.ByteBuddyAgent
 import net.bytebuddy.asm.Advice
 import net.bytebuddy.dynamic.loading.ClassReloadingStrategy
-import net.bytebuddy.implementation.bytecode.assign.Assigner
 import net.bytebuddy.matcher.ElementMatchers
 import top.katton.util.Event
 import java.lang.reflect.Constructor
@@ -27,7 +26,7 @@ import java.util.concurrent.CopyOnWriteArrayList
  * - The goal is dynamic hooks with rollback support across script reloads.
  *
  */
-internal object UnsafeInjectionManager {
+internal object InjectionManager {
     private val logger = LogUtils.getLogger()
 
     /**
@@ -38,7 +37,7 @@ internal object UnsafeInjectionManager {
      * @property arguments raw argument array
      * @property owner script owner used for reload lifecycle management
      */
-    data class UnsafeInvocation(
+    data class InjectionInvocation(
         val method: Method,
         val instance: Any?,
         val arguments: Array<Any?>,
@@ -48,7 +47,7 @@ internal object UnsafeInjectionManager {
             if (this === other) return true
             if (javaClass != other?.javaClass) return false
 
-            other as UnsafeInvocation
+            other as InjectionInvocation
 
             if (method != other.method) return false
             if (instance != other.instance) return false
@@ -69,12 +68,12 @@ internal object UnsafeInjectionManager {
         private var enterControl: EnterControl? = null
         private var exitControl: ExitControl? = null
 
-        internal fun bindEnter(control: EnterControl): UnsafeInvocation {
+        internal fun bindEnter(control: EnterControl): InjectionInvocation {
             this.enterControl = control
             return this
         }
 
-        internal fun bindExit(control: ExitControl): UnsafeInvocation {
+        internal fun bindExit(control: ExitControl): InjectionInvocation {
             this.exitControl = control
             return this
         }
@@ -124,19 +123,19 @@ internal object UnsafeInjectionManager {
     private data class BeforeEntry(
         val id: String,
         val owner: String?,
-        val handler: (UnsafeInvocation) -> Unit
+        val handler: (InjectionInvocation) -> Unit
     )
 
     private data class AfterEntry(
         val id: String,
         val owner: String?,
-        val handler: (UnsafeInvocation, Any?, Throwable?) -> Unit
+        val handler: (InjectionInvocation, Any?, Throwable?) -> Unit
     )
 
     private data class ReplaceEntry(
         val id: String,
         val owner: String?,
-        val handler: (UnsafeInvocation) -> Any?
+        val handler: (InjectionInvocation) -> Any?
     )
 
     private data class RedirectEntry(
@@ -145,7 +144,7 @@ internal object UnsafeInjectionManager {
         val target: Method
     )
 
-    data class UnsafeConstructorInvocation(
+    data class ConstructorInvocation(
         val constructor: Constructor<*>,
         val instance: Any?,
         val arguments: Array<Any?>,
@@ -155,7 +154,7 @@ internal object UnsafeInjectionManager {
             if (this === other) return true
             if (javaClass != other?.javaClass) return false
 
-            other as UnsafeConstructorInvocation
+            other as ConstructorInvocation
 
             if (constructor != other.constructor) return false
             if (instance != other.instance) return false
@@ -177,13 +176,13 @@ internal object UnsafeInjectionManager {
     private data class ConstructorBeforeEntry(
         val id: String,
         val owner: String?,
-        val handler: (UnsafeConstructorInvocation) -> Unit
+        val handler: (ConstructorInvocation) -> Unit
     )
 
     private data class ConstructorAfterEntry(
         val id: String,
         val owner: String?,
-        val handler: (UnsafeConstructorInvocation) -> Unit
+        val handler: (ConstructorInvocation) -> Unit
     )
 
     private data class HandleMeta(
@@ -345,7 +344,7 @@ internal object UnsafeInjectionManager {
         targetClassName: String,
         methodName: String,
         parameterTypeNames: List<String>,
-        handler: (UnsafeInvocation) -> Unit
+        handler: (InjectionInvocation) -> Unit
     ): InjectionHandle {
         val targetClass = Class.forName(targetClassName)
         val parameterTypes = parameterTypeNames.map(::resolveType)
@@ -360,7 +359,7 @@ internal object UnsafeInjectionManager {
     fun injectBefore(
         owner: String?,
         method: Method,
-        handler: (UnsafeInvocation) -> Unit
+        handler: (InjectionInvocation) -> Unit
     ): InjectionHandle {
         val targetClass = method.declaringClass
         ensureInstrumented(targetClass, method)
@@ -383,7 +382,7 @@ internal object UnsafeInjectionManager {
         targetClassName: String,
         methodName: String,
         parameterTypeNames: List<String>,
-        handler: (UnsafeInvocation, Any?, Throwable?) -> Unit
+        handler: (InjectionInvocation, Any?, Throwable?) -> Unit
     ): InjectionHandle {
         val targetClass = Class.forName(targetClassName)
         val parameterTypes = parameterTypeNames.map(::resolveType)
@@ -398,7 +397,7 @@ internal object UnsafeInjectionManager {
     fun injectAfter(
         owner: String?,
         method: Method,
-        handler: (UnsafeInvocation, Any?, Throwable?) -> Unit
+        handler: (InjectionInvocation, Any?, Throwable?) -> Unit
     ): InjectionHandle {
         val targetClass = method.declaringClass
         ensureInstrumented(targetClass, method)
@@ -418,7 +417,7 @@ internal object UnsafeInjectionManager {
         targetClassName: String,
         methodName: String,
         parameterTypeNames: List<String>,
-        handler: (UnsafeInvocation) -> Any?
+        handler: (InjectionInvocation) -> Any?
     ): InjectionHandle {
         val targetClass = Class.forName(targetClassName)
         val parameterTypes = parameterTypeNames.map(::resolveType)
@@ -430,7 +429,7 @@ internal object UnsafeInjectionManager {
     fun injectReplace(
         owner: String?,
         method: Method,
-        handler: (UnsafeInvocation) -> Any?
+        handler: (InjectionInvocation) -> Any?
     ): InjectionHandle {
         val targetClass = method.declaringClass
         ensureInstrumented(targetClass, method)
@@ -488,7 +487,7 @@ internal object UnsafeInjectionManager {
         owner: String?,
         targetClassName: String,
         parameterTypeNames: List<String>,
-        handler: (UnsafeConstructorInvocation) -> Unit
+        handler: (ConstructorInvocation) -> Unit
     ): InjectionHandle {
         val targetClass = Class.forName(targetClassName)
         val parameterTypes = parameterTypeNames.map(::resolveType)
@@ -500,7 +499,7 @@ internal object UnsafeInjectionManager {
     fun injectConstructorBefore(
         owner: String?,
         constructor: Constructor<*>,
-        handler: (UnsafeConstructorInvocation) -> Unit
+        handler: (ConstructorInvocation) -> Unit
     ): InjectionHandle {
         val targetClass = constructor.declaringClass
         ensureConstructorInstrumented(targetClass, constructor)
@@ -519,7 +518,7 @@ internal object UnsafeInjectionManager {
         owner: String?,
         targetClassName: String,
         parameterTypeNames: List<String>,
-        handler: (UnsafeConstructorInvocation) -> Unit
+        handler: (ConstructorInvocation) -> Unit
     ): InjectionHandle {
         val targetClass = Class.forName(targetClassName)
         val parameterTypes = parameterTypeNames.map(::resolveType)
@@ -531,7 +530,7 @@ internal object UnsafeInjectionManager {
     fun injectConstructorAfter(
         owner: String?,
         constructor: Constructor<*>,
-        handler: (UnsafeConstructorInvocation) -> Unit
+        handler: (ConstructorInvocation) -> Unit
     ): InjectionHandle {
         val targetClass = constructor.declaringClass
         ensureConstructorInstrumented(targetClass, constructor)
@@ -595,7 +594,7 @@ internal object UnsafeInjectionManager {
         if (replaceEntry != null) {
             runCatching {
                 Event.withScriptOwner(replaceEntry.owner) {
-                    val invocation = UnsafeInvocation(method, instance, args, replaceEntry.owner).bindEnter(enterControl)
+                    val invocation = InjectionInvocation(method, instance, args, replaceEntry.owner).bindEnter(enterControl)
                     val replaced = replaceEntry.handler(invocation)
                     invocation.cancelWith(replaced)
                 }
@@ -608,7 +607,7 @@ internal object UnsafeInjectionManager {
         if (redirectEntry != null) {
             runCatching {
                 Event.withScriptOwner(redirectEntry.owner) {
-                    val invocation = UnsafeInvocation(method, instance, args, redirectEntry.owner).bindEnter(enterControl)
+                    val invocation = InjectionInvocation(method, instance, args, redirectEntry.owner).bindEnter(enterControl)
                     val target = redirectEntry.target
                     val receiver = if (java.lang.reflect.Modifier.isStatic(target.modifiers)) null else instance
                     val redirected = target.invoke(receiver, *args)
@@ -623,7 +622,7 @@ internal object UnsafeInjectionManager {
         for (entry in entries) {
             runCatching {
                 Event.withScriptOwner(entry.owner) {
-                    entry.handler(UnsafeInvocation(method, instance, args, entry.owner).bindEnter(enterControl))
+                    entry.handler(InjectionInvocation(method, instance, args, entry.owner).bindEnter(enterControl))
                 }
             }.onFailure {
                 logger.error("[Katton Unsafe] before handler failed at {}", key, it)
@@ -649,7 +648,7 @@ internal object UnsafeInjectionManager {
             runCatching {
                 Event.withScriptOwner(entry.owner) {
                     entry.handler(
-                        UnsafeInvocation(method, instance, args, entry.owner).bindExit(exitControl),
+                        InjectionInvocation(method, instance, args, entry.owner).bindExit(exitControl),
                         result,
                         throwable
                     )
@@ -667,7 +666,7 @@ internal object UnsafeInjectionManager {
         for (entry in entries) {
             runCatching {
                 Event.withScriptOwner(entry.owner) {
-                    entry.handler(UnsafeConstructorInvocation(constructor, instance, args, entry.owner))
+                    entry.handler(ConstructorInvocation(constructor, instance, args, entry.owner))
                 }
             }.onFailure {
                 logger.error("[Katton Unsafe] constructor before handler failed at {}", key, it)
@@ -682,7 +681,7 @@ internal object UnsafeInjectionManager {
         for (entry in entries) {
             runCatching {
                 Event.withScriptOwner(entry.owner) {
-                    entry.handler(UnsafeConstructorInvocation(constructor, instance, args, entry.owner))
+                    entry.handler(ConstructorInvocation(constructor, instance, args, entry.owner))
                 }
             }.onFailure {
                 logger.error("[Katton Unsafe] constructor after handler failed at {}", key, it)

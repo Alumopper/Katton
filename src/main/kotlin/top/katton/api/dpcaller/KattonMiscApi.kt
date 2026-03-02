@@ -1,6 +1,6 @@
 @file:Suppress("unused")
 
-package top.katton.api
+package top.katton.api.dpcaller
 
 import net.minecraft.ChatFormatting
 import net.minecraft.commands.CommandSourceStack
@@ -24,6 +24,8 @@ import net.minecraft.world.scores.PlayerTeam
 import net.minecraft.world.waypoints.Waypoint
 import net.minecraft.world.waypoints.WaypointStyleAsset
 import net.minecraft.world.waypoints.WaypointTransmitter
+import top.katton.api.LOGGER
+import top.katton.api.requireServer
 import java.util.*
 import java.util.function.Consumer
 

@@ -1,6 +1,6 @@
 @file:Suppress("unused")
 
-package top.katton.api
+package top.katton.api.dpcaller
 
 import net.minecraft.network.chat.Component
 import net.minecraft.network.chat.numbers.NumberFormat
@@ -8,6 +8,8 @@ import net.minecraft.server.level.ServerPlayer
 import net.minecraft.world.entity.Entity
 import net.minecraft.world.scores.*
 import net.minecraft.world.scores.criteria.ObjectiveCriteria
+import top.katton.api.LOGGER
+import top.katton.api.requireServer
 
 operator fun Scoreboard.get(target: ScoreHolder, objective: Objective): Int? =
     scoreboard.getPlayerScoreInfo(target, objective)?.value()

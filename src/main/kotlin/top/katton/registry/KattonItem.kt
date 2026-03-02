@@ -9,12 +9,17 @@ import net.minecraft.world.item.Item
 import top.katton.api.server
 
 /**
- * Extended Item.Properties that supports custom name and model.
+ * Extended Item.Properties that supports custom name and model with hot-reload capabilities.
+ * 
+ * This class extends Minecraft's [Item.Properties] to provide additional functionality
+ * for defining custom item names and models. It is designed to work with Katton's
+ * hot-reload system by deferring the intrusive holder creation until registration time.
  * 
  * Does not call setId() in constructor to avoid triggering intrusive holder creation.
  * The resource key is set during registration time instead.
  * 
- * @param id The identifier for this item
+ * @param id The identifier for this item, used for registration and default naming
+ * @see KattonRegistry.ITEMS for registration
  */
 @Suppress("unused")
 class KattonItemProperties(
@@ -25,7 +30,10 @@ class KattonItemProperties(
     
     /**
      * The display name of the item.
-     * Defaults to a translatable component based on the item id.
+     * 
+     * If not explicitly set, defaults to a translatable component using the pattern
+     * `item.{namespace}.{path}`. For example, an item with id "mymod:custom_sword"
+     * would default to the translation key "item.mymod.custom_sword".
      */
     var name: Component
         get() = _name ?: Component.translatable("item.${id.namespace}.${id.path}")
@@ -35,7 +43,9 @@ class KattonItemProperties(
 
     /**
      * Sets the display name of the item.
-     * @return this for chaining
+     * 
+     * @param name The display name component to set
+     * @return This properties instance for method chaining
      */
     fun setName(name: Component): KattonItemProperties {
         this.name = name
@@ -46,7 +56,13 @@ class KattonItemProperties(
     
     /**
      * The model identifier for the item.
-     * Defaults to "namespace:item/path" based on the item id.
+     * 
+     * If not explicitly set, defaults to "namespace:item/path" based on the item id.
+     * For example, an item with id "mymod:custom_sword" would default to the model
+     * identifier "mymod:item/custom_sword".
+     * 
+     * This identifier is used by the client to locate the item's model JSON file
+     * in the resource pack.
      */
     var model: Identifier
         get() = _model ?: id.withPath("item/${id.path}")
@@ -56,7 +72,9 @@ class KattonItemProperties(
 
     /**
      * Sets the model identifier for the item.
-     * @return this for chaining
+     * 
+     * @param model The model identifier to set
+     * @return This properties instance for method chaining
      */
     fun setModel(model: Identifier): KattonItemProperties {
         this.model = model
@@ -66,17 +84,21 @@ class KattonItemProperties(
     /**
      * Finalizes the componentInitializer to include custom ITEM_NAME and ITEM_MODEL.
      *
-     * In MC 26.1+, Item's constructor registers a componentInitializer into
+     * In Minecraft 26.1+, Item's constructor registers a componentInitializer into
      * BuiltInRegistries.DATA_COMPONENT_INITIALIZERS via finalizeInitializer().
      * When DataComponentInitializers.build() runs later (during registry binding),
-     * it uses these initializers to set holder.components. We must ensure the
+     * it uses these initializers to set holder.components. This method ensures the
      * initializer produces the correct ITEM_NAME and ITEM_MODEL values.
+     *
+     * This method also adds a validator to ensure items cannot have both durability
+     * (DAMAGE component) and be stackable (MAX_STACK_SIZE > 1) at the same time,
+     * which would cause issues in gameplay.
      *
      * This method must be called before the Item is constructed.
      *
-     * @return this for chaining
+     * @return This properties instance for method chaining
      */
-    fun finalizeComponentInitializer(): KattonItemProperties {
+    internal fun finalizeComponentInitializer(): KattonItemProperties {
         val capturedName = name
         val capturedModel = model
         this.componentInitializer = this.componentInitializer.andThen { components, _, _ ->
@@ -95,25 +117,26 @@ class KattonItemProperties(
     /**
      * Builds the data component map for this item.
      *
-     * Always sets ITEM_NAME and ITEM_MODEL first, then attempts to add
-     * additional components through the initializer. If itemId is not set
-     * (e.g., during hot-reload), the basic components are still preserved.
+     * This method constructs a [DataComponentMap] containing all the item's
+     * data components. It always sets ITEM_NAME and ITEM_MODEL first, then
+     * attempts to add additional components through the initializer.
+     * 
+     * If the itemId is not set (e.g., during hot-reload before registration),
+     * the basic components are still preserved and the initializer is skipped
+     * gracefully.
      *
-     * @return The built DataComponentMap
+     * @return The built DataComponentMap containing all configured components
      */
-    fun buildComponent(): DataComponentMap {
+    internal fun buildComponent(): DataComponentMap {
         val mapBuilder = DataComponentMap.builder()
         
-        // Always set basic components first
         mapBuilder.set(DataComponents.ITEM_NAME, name)
         mapBuilder.set(DataComponents.ITEM_MODEL, model)
         
-        // Try to add additional components via initializer
         server?.let {
             try {
                 this.componentInitializer.run(mapBuilder, it.registryAccess(), itemIdOrThrow())
             } catch (_: Throwable) {
-                // itemId not set - basic components already applied
             }
         }
         return mapBuilder.build()
@@ -122,7 +145,12 @@ class KattonItemProperties(
     companion object {
         /**
          * Creates a new KattonItemProperties with the given identifier.
+         * 
+         * This is a convenience factory method for creating properties instances.
+         * 
+         * @param id The identifier for the item
+         * @return A new KattonItemProperties instance
          */
-        fun components(id: Identifier) = KattonItemProperties(id)
+        internal fun components(id: Identifier) = KattonItemProperties(id)
     }
 }

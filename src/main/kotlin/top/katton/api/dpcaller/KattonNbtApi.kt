@@ -1,6 +1,6 @@
 @file:Suppress("unused")
 
-package top.katton.api
+package top.katton.api.dpcaller
 
 import net.minecraft.advancements.criterion.NbtPredicate
 import net.minecraft.core.BlockPos
@@ -11,6 +11,7 @@ import net.minecraft.server.commands.data.EntityDataAccessor
 import net.minecraft.world.entity.Entity
 import net.minecraft.world.level.Level
 import net.minecraft.world.level.block.entity.BlockEntity
+import top.katton.api.requireServer
 import kotlin.jvm.optionals.getOrNull
 
 fun <T : Number> numericTagOf(value: T) {

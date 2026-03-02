@@ -9,12 +9,12 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.packs.PackType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import top.katton.api.EntityEvent;
+import top.katton.api.dpcaller.EntityEvent;
 import top.katton.command.ScriptCommand;
 import top.katton.registry.ScriptCommandRegistry;
 import top.katton.engine.ScriptEngine;
 import top.katton.engine.ScriptLoader;
-import top.katton.engine.UnsafeInjectionManager;
+import top.katton.engine.InjectionManager;
 import top.katton.registry.KattonRegistry;
 import top.katton.util.Event;
 import top.katton.network.Networking;
@@ -82,7 +82,8 @@ public class Katton implements ModInitializer {
         KattonRegistry.BLOCKS.INSTANCE.beginReload();
         EntityEvent.INSTANCE.beginReload();
         Event.Companion.getFabricEventRegistry().values().forEach(list -> list.forEach(Event::clear));
-        UnsafeInjectionManager.beginReload();
+        InjectionManager.beginReload();
+        //TODO: reload scripts
         ScriptEngine.compileAndExecuteAll(ScriptLoader.getScripts().values());
         EntityEvent.INSTANCE.rebindLoadedEntities(server);
     }

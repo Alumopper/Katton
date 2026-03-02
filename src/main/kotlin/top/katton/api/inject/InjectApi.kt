@@ -1,26 +1,13 @@
 @file:Suppress("unused")
 
-package top.katton.api.unsafe
+package top.katton.api.inject
 
-import top.katton.engine.UnsafeInjectionManager
+import top.katton.engine.InjectionManager
 import top.katton.util.Event
 import java.lang.reflect.Constructor
 import java.lang.reflect.Method
 
-/**
- * Experimental `unsafe` dynamic injection API.
- *
- * Design goals:
- * - Allow scripts to attach before/after hooks to arbitrary methods at runtime.
- * - Support rollback by handle and by owner, compatible with hot reload.
- * - Keep script-side usage concise.
- *
- * Key behaviors:
- * - This API does not add extra safety restrictions (no whitelist / permission gate).
- * - Runtime hook failures are caught and logged by the engine without breaking the target call chain.
- * - Injection dispatch is keyed by [Method].
- */
-class UnsafeHandle internal constructor(
+class InjectionHandle internal constructor(
     /** Injection registration id, used for rollback. */
     val id: String
 )
@@ -28,8 +15,8 @@ class UnsafeHandle internal constructor(
 /**
  * Invocation context passed to unsafe callbacks.
  */
-class UnsafeInvocationContext internal constructor(
-    private val delegate: UnsafeInjectionManager.UnsafeInvocation
+class InjectionInvocationContext internal constructor(
+    private val delegate: InjectionManager.InjectionInvocation
 ) {
     /** Method currently being invoked. */
     val method: Method get() = delegate.method
@@ -67,8 +54,8 @@ class UnsafeInvocationContext internal constructor(
 /**
  * Constructor invocation context passed to unsafe constructor callbacks.
  */
-class UnsafeConstructorInvocationContext internal constructor(
-    private val delegate: UnsafeInjectionManager.UnsafeConstructorInvocation
+class ConstructorInvocationContext internal constructor(
+    private val delegate: InjectionManager.ConstructorInvocation
 ) {
     /** Constructor currently being invoked. */
     val constructor: Constructor<*> get() = delegate.constructor
@@ -83,18 +70,6 @@ class UnsafeConstructorInvocationContext internal constructor(
     val owner: String? get() = delegate.owner
 }
 
-/**
- * Compatibility helper: returns JVM property `katton.unsafe.enable`.
- *
- * Note: current unsafe implementation does not strictly require this flag.
- */
-fun unsafeEnabled(): Boolean = UnsafeInjectionManager.isEnabled()
-
-/**
- * Resolves effective owner:
- * - Prefer explicit owner if provided.
- * - Otherwise use current script execution owner.
- */
 private fun effectiveOwner(explicitOwner: String?): String? {
     return explicitOwner ?: Event.currentScriptOwner()
 }
@@ -114,17 +89,17 @@ fun injectBefore(
     methodName: String,
     parameterTypeNames: List<String> = emptyList(),
     owner: String? = null,
-    handler: (UnsafeInvocationContext) -> Unit
-): UnsafeHandle {
-    val h = UnsafeInjectionManager.injectBefore(
+    handler: (InjectionInvocationContext) -> Unit
+): InjectionHandle {
+    val h = InjectionManager.injectBefore(
         owner = effectiveOwner(owner),
         targetClassName = targetClassName,
         methodName = methodName,
         parameterTypeNames = parameterTypeNames
     ) { invocation ->
-        handler(UnsafeInvocationContext(invocation))
+        handler(InjectionInvocationContext(invocation))
     }
-    return UnsafeHandle(h.id)
+    return InjectionHandle(h.id)
 }
 
 /**
@@ -136,15 +111,15 @@ fun injectBefore(
 fun injectBefore(
     method: Method,
     owner: String? = null,
-    handler: (UnsafeInvocationContext) -> Unit
-): UnsafeHandle {
-    val h = UnsafeInjectionManager.injectBefore(
+    handler: (InjectionInvocationContext) -> Unit
+): InjectionHandle {
+    val h = InjectionManager.injectBefore(
         owner = effectiveOwner(owner),
         method = method
     ) { invocation ->
-        handler(UnsafeInvocationContext(invocation))
+        handler(InjectionInvocationContext(invocation))
     }
-    return UnsafeHandle(h.id)
+    return InjectionHandle(h.id)
 }
 
 /**
@@ -162,17 +137,17 @@ fun injectAfter(
     methodName: String,
     parameterTypeNames: List<String> = emptyList(),
     owner: String? = null,
-    handler: (UnsafeInvocationContext, Any?, Throwable?) -> Unit
-): UnsafeHandle {
-    val h = UnsafeInjectionManager.injectAfter(
+    handler: (InjectionInvocationContext, Any?, Throwable?) -> Unit
+): InjectionHandle {
+    val h = InjectionManager.injectAfter(
         owner = effectiveOwner(owner),
         targetClassName = targetClassName,
         methodName = methodName,
         parameterTypeNames = parameterTypeNames
     ) { invocation, result, throwable ->
-        handler(UnsafeInvocationContext(invocation), result, throwable)
+        handler(InjectionInvocationContext(invocation), result, throwable)
     }
-    return UnsafeHandle(h.id)
+    return InjectionHandle(h.id)
 }
 
 /**
@@ -188,16 +163,16 @@ fun injectConstructorBefore(
     targetClassName: String,
     parameterTypeNames: List<String> = emptyList(),
     owner: String? = null,
-    handler: (UnsafeConstructorInvocationContext) -> Unit
-): UnsafeHandle {
-    val h = UnsafeInjectionManager.injectConstructorBefore(
+    handler: (ConstructorInvocationContext) -> Unit
+): InjectionHandle {
+    val h = InjectionManager.injectConstructorBefore(
         owner = effectiveOwner(owner),
         targetClassName = targetClassName,
         parameterTypeNames = parameterTypeNames
     ) { invocation ->
-        handler(UnsafeConstructorInvocationContext(invocation))
+        handler(ConstructorInvocationContext(invocation))
     }
-    return UnsafeHandle(h.id)
+    return InjectionHandle(h.id)
 }
 
 /**
@@ -206,15 +181,15 @@ fun injectConstructorBefore(
 fun injectConstructorBefore(
     constructor: Constructor<*>,
     owner: String? = null,
-    handler: (UnsafeConstructorInvocationContext) -> Unit
-): UnsafeHandle {
-    val h = UnsafeInjectionManager.injectConstructorBefore(
+    handler: (ConstructorInvocationContext) -> Unit
+): InjectionHandle {
+    val h = InjectionManager.injectConstructorBefore(
         owner = effectiveOwner(owner),
         constructor = constructor
     ) { invocation ->
-        handler(UnsafeConstructorInvocationContext(invocation))
+        handler(ConstructorInvocationContext(invocation))
     }
-    return UnsafeHandle(h.id)
+    return InjectionHandle(h.id)
 }
 
 /**
@@ -230,16 +205,16 @@ fun injectConstructorAfter(
     targetClassName: String,
     parameterTypeNames: List<String> = emptyList(),
     owner: String? = null,
-    handler: (UnsafeConstructorInvocationContext) -> Unit
-): UnsafeHandle {
-    val h = UnsafeInjectionManager.injectConstructorAfter(
+    handler: (ConstructorInvocationContext) -> Unit
+): InjectionHandle {
+    val h = InjectionManager.injectConstructorAfter(
         owner = effectiveOwner(owner),
         targetClassName = targetClassName,
         parameterTypeNames = parameterTypeNames
     ) { invocation ->
-        handler(UnsafeConstructorInvocationContext(invocation))
+        handler(ConstructorInvocationContext(invocation))
     }
-    return UnsafeHandle(h.id)
+    return InjectionHandle(h.id)
 }
 
 /**
@@ -248,15 +223,15 @@ fun injectConstructorAfter(
 fun injectConstructorAfter(
     constructor: Constructor<*>,
     owner: String? = null,
-    handler: (UnsafeConstructorInvocationContext) -> Unit
-): UnsafeHandle {
-    val h = UnsafeInjectionManager.injectConstructorAfter(
+    handler: (ConstructorInvocationContext) -> Unit
+): InjectionHandle {
+    val h = InjectionManager.injectConstructorAfter(
         owner = effectiveOwner(owner),
         constructor = constructor
     ) { invocation ->
-        handler(UnsafeConstructorInvocationContext(invocation))
+        handler(ConstructorInvocationContext(invocation))
     }
-    return UnsafeHandle(h.id)
+    return InjectionHandle(h.id)
 }
 
 /**
@@ -267,15 +242,15 @@ fun injectConstructorAfter(
 fun injectAfter(
     method: Method,
     owner: String? = null,
-    handler: (UnsafeInvocationContext, Any?, Throwable?) -> Unit
-): UnsafeHandle {
-    val h = UnsafeInjectionManager.injectAfter(
+    handler: (InjectionInvocationContext, Any?, Throwable?) -> Unit
+): InjectionHandle {
+    val h = InjectionManager.injectAfter(
         owner = effectiveOwner(owner),
         method = method
     ) { invocation, result, throwable ->
-        handler(UnsafeInvocationContext(invocation), result, throwable)
+        handler(InjectionInvocationContext(invocation), result, throwable)
     }
-    return UnsafeHandle(h.id)
+    return InjectionHandle(h.id)
 }
 
 /**
@@ -283,45 +258,45 @@ fun injectAfter(
  *
  * The handler return value becomes the method return value.
  */
-fun injectReplace(
+fun replace(
     targetClassName: String,
     methodName: String,
     parameterTypeNames: List<String> = emptyList(),
     owner: String? = null,
-    handler: (UnsafeInvocationContext) -> Any?
-): UnsafeHandle {
-    val h = UnsafeInjectionManager.injectReplace(
+    handler: (InjectionInvocationContext) -> Any?
+): InjectionHandle {
+    val h = InjectionManager.injectReplace(
         owner = effectiveOwner(owner),
         targetClassName = targetClassName,
         methodName = methodName,
         parameterTypeNames = parameterTypeNames
     ) { invocation ->
-        handler(UnsafeInvocationContext(invocation))
+        handler(InjectionInvocationContext(invocation))
     }
-    return UnsafeHandle(h.id)
+    return InjectionHandle(h.id)
 }
 
 /**
  * Replaces entire target method body (Method overload).
  */
-fun injectReplace(
+fun replace(
     method: Method,
     owner: String? = null,
-    handler: (UnsafeInvocationContext) -> Any?
-): UnsafeHandle {
-    val h = UnsafeInjectionManager.injectReplace(
+    handler: (InjectionInvocationContext) -> Any?
+): InjectionHandle {
+    val h = InjectionManager.injectReplace(
         owner = effectiveOwner(owner),
         method = method
     ) { invocation ->
-        handler(UnsafeInvocationContext(invocation))
+        handler(InjectionInvocationContext(invocation))
     }
-    return UnsafeHandle(h.id)
+    return InjectionHandle(h.id)
 }
 
 /**
  * Redirects a source method to another target method (string-based overload).
  */
-fun injectRedirect(
+fun redirect(
     sourceClassName: String,
     sourceMethodName: String,
     sourceParameterTypeNames: List<String> = emptyList(),
@@ -329,8 +304,8 @@ fun injectRedirect(
     targetMethodName: String,
     targetParameterTypeNames: List<String> = emptyList(),
     owner: String? = null
-): UnsafeHandle {
-    val h = UnsafeInjectionManager.injectRedirect(
+): InjectionHandle {
+    val h = InjectionManager.injectRedirect(
         owner = effectiveOwner(owner),
         sourceClassName = sourceClassName,
         sourceMethodName = sourceMethodName,
@@ -339,36 +314,36 @@ fun injectRedirect(
         targetMethodName = targetMethodName,
         targetParameterTypeNames = targetParameterTypeNames
     )
-    return UnsafeHandle(h.id)
+    return InjectionHandle(h.id)
 }
 
 /**
  * Redirects a source method to another target method (Method overload).
  */
-fun injectRedirect(
+fun redirect(
     sourceMethod: Method,
     targetMethod: Method,
     owner: String? = null
-): UnsafeHandle {
-    val h = UnsafeInjectionManager.injectRedirect(
+): InjectionHandle {
+    val h = InjectionManager.injectRedirect(
         owner = effectiveOwner(owner),
         sourceMethod = sourceMethod,
         targetMethod = targetMethod
     )
-    return UnsafeHandle(h.id)
+    return InjectionHandle(h.id)
 }
 
 /**
  * Rolls back one unsafe injection by handle.
  */
-fun rollbackUnsafe(handle: UnsafeHandle): Boolean {
-    return UnsafeInjectionManager.rollback(handle.id)
+fun rollbackUnsafe(handle: InjectionHandle): Boolean {
+    return InjectionManager.rollback(handle.id)
 }
 
 /**
  * Rolls back all unsafe injections by owner.
  */
-fun rollbackUnsafeByOwner(owner: String): Unit {
-    UnsafeInjectionManager.rollbackByOwner(owner)
+fun rollbackUnsafeByOwner(owner: String) {
+    InjectionManager.rollbackByOwner(owner)
 }
 

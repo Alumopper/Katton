@@ -1,6 +1,6 @@
 @file:Suppress("unused")
 
-package top.katton.api
+package top.katton.api.dpcaller
 
 import net.minecraft.commands.CommandSourceStack
 import net.minecraft.commands.arguments.selector.EntitySelector
@@ -17,6 +17,8 @@ import net.minecraft.world.level.GameType
 import net.minecraft.world.level.gamerules.GameRule
 import net.minecraft.world.level.storage.CommandStorage
 import net.minecraft.world.scores.Scoreboard
+import top.katton.api.LOGGER
+import top.katton.api.requireServer
 import java.util.*
 
 
@@ -151,8 +153,6 @@ fun op(player: ServerPlayer) {
 fun setDifficulty(difficulty: Difficulty, ignoreLock: Boolean = true) {
     requireServer().setDifficulty(difficulty, ignoreLock)
 }
-
-// ==================== Effect ====================
 
 
 /**

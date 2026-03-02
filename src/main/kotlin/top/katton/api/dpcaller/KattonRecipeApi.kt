@@ -1,6 +1,6 @@
 @file:Suppress("unused")
 
-package top.katton.api
+package top.katton.api.dpcaller
 
 import net.minecraft.server.level.ServerPlayer
 import net.minecraft.world.item.crafting.RecipeHolder

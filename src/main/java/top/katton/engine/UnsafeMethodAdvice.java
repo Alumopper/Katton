@@ -19,13 +19,13 @@ public final class UnsafeMethodAdvice {
     }
 
     @Advice.OnMethodEnter(skipOn = Advice.OnNonDefaultValue.class, suppress = Throwable.class)
-    public static UnsafeInjectionManager.EnterState onEnter(
+    public static InjectionManager.EnterState onEnter(
             @Advice.Origin Method method,
             @Advice.This(optional = true) Object instance,
             @Advice.AllArguments Object[] args
     ) {
-        UnsafeInjectionManager.EnterControl enterControl = UnsafeInjectionManager.createEnterControl();
-        UnsafeInjectionManager.dispatchBefore(method, instance, args, enterControl);
+        InjectionManager.EnterControl enterControl = InjectionManager.createEnterControl();
+        InjectionManager.dispatchBefore(method, instance, args, enterControl);
 
         if (!enterControl.getSkip()) {
             return null;
@@ -33,8 +33,8 @@ public final class UnsafeMethodAdvice {
 
         Object returnValue = enterControl.getOverrideReturn()
                 ? enterControl.getReturnValue()
-                : UnsafeInjectionManager.defaultReturnValueFor(method.getReturnType());
-        return new UnsafeInjectionManager.EnterState(returnValue);
+                : InjectionManager.defaultReturnValueFor(method.getReturnType());
+        return new InjectionManager.EnterState(returnValue);
     }
 
     @Advice.OnMethodExit(onThrowable = Throwable.class, suppress = Throwable.class)
@@ -42,7 +42,7 @@ public final class UnsafeMethodAdvice {
             @Advice.Origin Method method,
             @Advice.This(optional = true) Object instance,
             @Advice.AllArguments Object[] args,
-            @Advice.Enter UnsafeInjectionManager.EnterState enterState,
+            @Advice.Enter InjectionManager.EnterState enterState,
             @Advice.Return(readOnly = false, typing = Assigner.Typing.DYNAMIC) Object result,
             @Advice.Thrown(readOnly = false) Throwable throwable
     ) {
@@ -54,8 +54,8 @@ public final class UnsafeMethodAdvice {
             mutableThrowable = null;
         }
 
-        UnsafeInjectionManager.ExitControl exitControl = UnsafeInjectionManager.createExitControl();
-        UnsafeInjectionManager.dispatchAfter(method, instance, args, mutableResult, mutableThrowable, exitControl);
+        InjectionManager.ExitControl exitControl = InjectionManager.createExitControl();
+        InjectionManager.dispatchAfter(method, instance, args, mutableResult, mutableThrowable, exitControl);
 
         if (exitControl.getOverrideReturn()) {
             mutableResult = exitControl.getReturnValue();

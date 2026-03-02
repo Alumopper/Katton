@@ -2,6 +2,7 @@ package top.katton.mixin;
 
 import net.minecraft.core.Holder;
 import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.state.BlockBehaviour;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.gen.Accessor;
 
@@ -9,5 +10,8 @@ import org.spongepowered.asm.mixin.gen.Accessor;
 public interface BlockAccessor {
     @Accessor("builtInRegistryHolder")
     Holder.Reference<Block> katton$getBuiltInRegistryHolder();
+    
+    @Accessor("properties")
+    BlockBehaviour.Properties katton$getProperties();
 }
 

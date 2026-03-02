@@ -7,3 +7,4 @@ accessible field net/minecraft/world/item/Item builtInRegistryHolder Lnet/minecr
 accessible field net/minecraft/core/MappedRegistry unregisteredIntrusiveHolders Ljava/util/Map;
 accessible field net/minecraft/core/Holder$Reference components Lnet/minecraft/core/component/DataComponentMap;
 accessible field net/minecraft/core/Holder$Reference tags Ljava/util/Set;
+accessible field net/minecraft/world/level/block/state/BlockBehaviour properties Lnet/minecraft/world/level/block/state/BlockBehaviour$Properties;

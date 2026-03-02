@@ -1,4 +1,4 @@
-package top.katton.api
+package top.katton.api.dpcaller
 
 import net.minecraft.core.BlockPos
 import net.minecraft.nbt.CompoundTag

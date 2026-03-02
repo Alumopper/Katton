@@ -1,19 +1,6 @@
 @file:Suppress("unused")
 
-/**
- * KattonEvents
- *
- * This file provides Kotlin-friendly wrappers around various Fabric API events.
- * Each nested object groups related server-side events and exposes them as
- * reloadable Event properties via top.katton.util.Event.createReloadable.
- *
- * The wrappers adapt Fabric's Java-style callback invokers into concise Kotlin
- * lambdas, making event handling ergonomical for Kotlin-based mods.
- *
- * Note: the properties mirror Fabric event semantics and typically aggregate
- * or dispatch underlying callbacks according to the original Fabric behavior.
- */
-package top.katton.api
+package top.katton.api.event
 
 import net.fabricmc.fabric.api.entity.event.v1.EntityElytraEvents
 import net.fabricmc.fabric.api.entity.event.v1.EntitySleepEvents
@@ -42,6 +29,7 @@ import net.fabricmc.fabric.api.item.v1.EnchantingContext
 import net.fabricmc.fabric.api.item.v1.EnchantmentEvents
 import net.fabricmc.fabric.api.item.v1.EnchantmentSource
 import net.fabricmc.fabric.api.loot.v3.LootTableEvents
+import net.fabricmc.fabric.api.loot.v3.LootTableSource
 import net.fabricmc.fabric.api.message.v1.ServerMessageEvents
 import net.fabricmc.fabric.api.util.EventResult
 import net.fabricmc.fabric.api.util.TriState
@@ -49,8 +37,9 @@ import net.minecraft.commands.CommandSourceStack
 import net.minecraft.core.BlockPos
 import net.minecraft.core.Direction
 import net.minecraft.core.Holder
+import net.minecraft.core.HolderLookup
 import net.minecraft.core.Registry
-import net.minecraft.network.chat.ChatType.Bound
+import net.minecraft.network.chat.ChatType
 import net.minecraft.network.chat.Component
 import net.minecraft.network.chat.PlayerChatMessage
 import net.minecraft.resources.ResourceKey
@@ -60,26 +49,36 @@ import net.minecraft.server.level.ServerLevel
 import net.minecraft.server.packs.resources.ResourceManager
 import net.minecraft.world.InteractionHand
 import net.minecraft.world.InteractionResult
+import net.minecraft.world.damagesource.DamageSource
 import net.minecraft.world.effect.MobEffectInstance
 import net.minecraft.world.entity.ConversionParams
 import net.minecraft.world.entity.Entity
 import net.minecraft.world.entity.EquipmentSlot
 import net.minecraft.world.entity.LivingEntity
 import net.minecraft.world.entity.Mob
-import net.minecraft.world.entity.player.Player
 import net.minecraft.world.item.ItemStack
 import net.minecraft.world.item.context.UseOnContext
-import net.minecraft.world.item.enchantment.Enchantment.Builder
 import net.minecraft.world.level.Level
+import net.minecraft.world.level.block.entity.BlockEntity
 import net.minecraft.world.level.block.state.BlockState
 import net.minecraft.world.level.chunk.LevelChunk
 import net.minecraft.world.level.storage.loot.LootContext
 import net.minecraft.world.phys.BlockHitResult
+import net.minecraft.world.phys.EntityHitResult
 import net.minecraft.world.phys.Vec3
 import top.katton.util.Event
 import top.katton.util.Extension.dispatch
 
 /**
+ *
+ * Provides Kotlin-friendly wrappers around various Fabric API events.
+ *
+ * Each nested object groups related server-side events and exposes them as
+ * reloadable Event properties via top.katton.util.Event.createReloadable.
+ *
+ * The wrappers adapt Fabric's Java-style callback invokers into concise Kotlin
+ * lambdas, making event handling ergonomical for Kotlin-based mods.
+ *
  * Central container object that organizes event wrappers into logical groups.
  *
  * Use KattonEvents.<Group>.<eventProperty> to access the corresponding reloadable
@@ -126,17 +125,20 @@ object KattonEvents {
 
         data class ServerArg(val server: MinecraftServer)
 
-        val onServerStarting = Event.createReloadable(ServerLifecycleEvents.SERVER_STARTING,
+        val onServerStarting = Event.Companion.createReloadable(
+            ServerLifecycleEvents.SERVER_STARTING,
             { c -> ServerLifecycleEvents.ServerStarting {c(ServerArg(it))} },
             unit<ServerArg>()
         )
 
-        val onServerStarted = Event.createReloadable(ServerLifecycleEvents.SERVER_STARTED,
+        val onServerStarted = Event.Companion.createReloadable(
+            ServerLifecycleEvents.SERVER_STARTED,
             { c -> ServerLifecycleEvents.ServerStarted {c(ServerArg(it))} },
             unit<ServerArg>()
         )
 
-        val onServerStopped = Event.createReloadable(ServerLifecycleEvents.SERVER_STOPPED,
+        val onServerStopped = Event.Companion.createReloadable(
+            ServerLifecycleEvents.SERVER_STOPPED,
             { c -> ServerLifecycleEvents.ServerStopped {c(ServerArg(it))} },
             unit<ServerArg>()
         )
@@ -147,8 +149,9 @@ object KattonEvents {
         )
 
         val onSyncDatapackContents =
-            Event.createReloadable(ServerLifecycleEvents.SYNC_DATA_PACK_CONTENTS,
-            { c -> ServerLifecycleEvents.SyncDataPackContents {a, b -> c(SyncDatapackContentsArg(a, b))} },
+            Event.Companion.createReloadable(
+                ServerLifecycleEvents.SYNC_DATA_PACK_CONTENTS,
+            { c -> ServerLifecycleEvents.SyncDataPackContents { a, b -> c(SyncDatapackContentsArg(a, b))} },
             unit<SyncDatapackContentsArg>()
         )
 
@@ -158,8 +161,9 @@ object KattonEvents {
         )
 
         val onStartDatapackReload =
-            Event.createReloadable(ServerLifecycleEvents.START_DATA_PACK_RELOAD,
-            { c -> ServerLifecycleEvents.StartDataPackReload {a, b -> c(StartDatapackReloadArg(a, b))} },
+            Event.Companion.createReloadable(
+                ServerLifecycleEvents.START_DATA_PACK_RELOAD,
+            { c -> ServerLifecycleEvents.StartDataPackReload { a, b -> c(StartDatapackReloadArg(a, b))} },
             unit<StartDatapackReloadArg>()
         )
 
@@ -169,8 +173,9 @@ object KattonEvents {
             val success: Boolean
         )
 
-        val onEndDatapackReload = Event.createReloadable(ServerLifecycleEvents.END_DATA_PACK_RELOAD,
-            { c -> ServerLifecycleEvents.EndDataPackReload {a, b, c -> c(EndDatapackReloadArg(a, b, c))} },
+        val onEndDatapackReload = Event.Companion.createReloadable(
+            ServerLifecycleEvents.END_DATA_PACK_RELOAD,
+            { c -> ServerLifecycleEvents.EndDataPackReload { a, b, c -> c(EndDatapackReloadArg(a, b, c))} },
             unit<EndDatapackReloadArg>()
         )
 
@@ -180,13 +185,15 @@ object KattonEvents {
             val force: Boolean
         )
 
-        val onBeforeSave = Event.createReloadable(ServerLifecycleEvents.BEFORE_SAVE,
-            { c -> ServerLifecycleEvents.BeforeSave {a, b, c -> c(SaveArg(a, b, c))} },
+        val onBeforeSave = Event.Companion.createReloadable(
+            ServerLifecycleEvents.BEFORE_SAVE,
+            { c -> ServerLifecycleEvents.BeforeSave { a, b, c -> c(SaveArg(a, b, c))} },
             unit<SaveArg>()
         )
 
-        val onAfterSave = Event.createReloadable(ServerLifecycleEvents.AFTER_SAVE,
-            { c -> ServerLifecycleEvents.AfterSave {a, b, c -> c(SaveArg(a, b, c))} },
+        val onAfterSave = Event.Companion.createReloadable(
+            ServerLifecycleEvents.AFTER_SAVE,
+            { c -> ServerLifecycleEvents.AfterSave { a, b, c -> c(SaveArg(a, b, c))} },
             unit<SaveArg>()
         )
     }
@@ -197,24 +204,28 @@ object KattonEvents {
     object ServerTick {
         data class ServerTickArg(val server: MinecraftServer)
 
-        val onStartServerTick = Event.createReloadable(ServerTickEvents.START_SERVER_TICK,
+        val onStartServerTick = Event.Companion.createReloadable(
+            ServerTickEvents.START_SERVER_TICK,
             { c -> ServerTickEvents.StartTick {c(ServerTickArg(it))} },
             unit<ServerTickArg>()
         )
 
-        val onEndServerTick = Event.createReloadable(ServerTickEvents.END_SERVER_TICK,
+        val onEndServerTick = Event.Companion.createReloadable(
+            ServerTickEvents.END_SERVER_TICK,
             { c -> ServerTickEvents.EndTick {c(ServerTickArg(it))} },
             unit<ServerTickArg>()
         )
 
         data class WorldTickArg(val world: ServerLevel)
 
-        val onStartWorldTick = Event.createReloadable(ServerTickEvents.START_LEVEL_TICK,
+        val onStartWorldTick = Event.Companion.createReloadable(
+            ServerTickEvents.START_LEVEL_TICK,
             { c -> ServerTickEvents.StartLevelTick {c(WorldTickArg(it))} },
             unit<WorldTickArg>()
         )
 
-        val onEndWorldTick = Event.createReloadable(ServerTickEvents.END_LEVEL_TICK,
+        val onEndWorldTick = Event.Companion.createReloadable(
+            ServerTickEvents.END_LEVEL_TICK,
             { c -> ServerTickEvents.EndLevelTick {c(WorldTickArg(it))} },
             unit<WorldTickArg>()
         )
@@ -229,13 +240,15 @@ object KattonEvents {
             val world: ServerLevel
         )
 
-        val onEntityLoad = Event.createReloadable(ServerEntityEvents.ENTITY_LOAD,
-            { c -> ServerEntityEvents.Load {a, b -> c(EntityLoadArg(a, b))} },
+        val onEntityLoad = Event.Companion.createReloadable(
+            ServerEntityEvents.ENTITY_LOAD,
+            { c -> ServerEntityEvents.Load { a, b -> c(EntityLoadArg(a, b))} },
             unit<EntityLoadArg>()
         )
 
-        val onEntityUnload = Event.createReloadable(ServerEntityEvents.ENTITY_UNLOAD,
-            { c -> ServerEntityEvents.Unload {a, b -> c(EntityLoadArg(a, b))} },
+        val onEntityUnload = Event.Companion.createReloadable(
+            ServerEntityEvents.ENTITY_UNLOAD,
+            { c -> ServerEntityEvents.Unload { a, b -> c(EntityLoadArg(a, b))} },
             unit<EntityLoadArg>()
         )
 
@@ -246,8 +259,9 @@ object KattonEvents {
             val to: ItemStack
         )
 
-        val onEquipmentChange = Event.createReloadable(ServerEntityEvents.EQUIPMENT_CHANGE,
-            { c -> ServerEntityEvents.EquipmentChange {a, b, c, d -> c(EquipmentChangeArg(a, b, c, d))} },
+        val onEquipmentChange = Event.Companion.createReloadable(
+            ServerEntityEvents.EQUIPMENT_CHANGE,
+            { c -> ServerEntityEvents.EquipmentChange { a, b, c, d -> c(EquipmentChangeArg(a, b, c, d))} },
             unit<EquipmentChangeArg>()
         )
     }
@@ -262,8 +276,9 @@ object KattonEvents {
             val isNew: Boolean
         )
 
-        val onChunkLoad = Event.createReloadable(ServerChunkEvents.CHUNK_LOAD,
-            { c -> ServerChunkEvents.Load {a, b, c -> c(ChunkLoadArg(a, b, c))} },
+        val onChunkLoad = Event.Companion.createReloadable(
+            ServerChunkEvents.CHUNK_LOAD,
+            { c -> ServerChunkEvents.Load { a, b, c -> c(ChunkLoadArg(a, b, c))} },
             unit<ChunkLoadArg>()
         )
 
@@ -272,8 +287,9 @@ object KattonEvents {
             val chunk: LevelChunk
         )
 
-        val onChunkUnload = Event.createReloadable(ServerChunkEvents.CHUNK_UNLOAD,
-            { c -> ServerChunkEvents.Unload {a, b -> c(ChunkUnloadArg(a, b))} },
+        val onChunkUnload = Event.Companion.createReloadable(
+            ServerChunkEvents.CHUNK_UNLOAD,
+            { c -> ServerChunkEvents.Unload { a, b -> c(ChunkUnloadArg(a, b))} },
             unit<ChunkUnloadArg>()
         )
 
@@ -285,8 +301,9 @@ object KattonEvents {
         )
 
         val onChunkLevelTypeChange =
-            Event.createReloadable(ServerChunkEvents.FULL_CHUNK_STATUS_CHANGE,
-                { c -> ServerChunkEvents.FullChunkStatusChange {a, b, c, d -> c(ChunkStatusChangeArg(a, b, c, d))} },
+            Event.Companion.createReloadable(
+                ServerChunkEvents.FULL_CHUNK_STATUS_CHANGE,
+                { c -> ServerChunkEvents.FullChunkStatusChange { a, b, c, d -> c(ChunkStatusChangeArg(a, b, c, d))} },
                 unit<ChunkStatusChangeArg>()
             )
     }
@@ -296,17 +313,19 @@ object KattonEvents {
      */
     object ServerBlockEntity {
         data class BlockEntityLoadArg(
-            val blockEntity: net.minecraft.world.level.block.entity.BlockEntity,
+            val blockEntity: BlockEntity,
             val world: ServerLevel
         )
 
-        val onBlockEntityLoad = Event.createReloadable(ServerBlockEntityEvents.BLOCK_ENTITY_LOAD,
-            { c -> ServerBlockEntityEvents.Load {a, b -> c(BlockEntityLoadArg(a, b))} },
+        val onBlockEntityLoad = Event.Companion.createReloadable(
+            ServerBlockEntityEvents.BLOCK_ENTITY_LOAD,
+            { c -> ServerBlockEntityEvents.Load { a, b -> c(BlockEntityLoadArg(a, b))} },
             unit<BlockEntityLoadArg>()
         )
 
-        val onBlockEntityUnload = Event.createReloadable(ServerBlockEntityEvents.BLOCK_ENTITY_UNLOAD,
-            { c -> ServerBlockEntityEvents.Unload {a, b -> c(BlockEntityLoadArg(a, b))} },
+        val onBlockEntityUnload = Event.Companion.createReloadable(
+            ServerBlockEntityEvents.BLOCK_ENTITY_UNLOAD,
+            { c -> ServerBlockEntityEvents.Unload { a, b -> c(BlockEntityLoadArg(a, b))} },
             unit<BlockEntityLoadArg>()
         )
     }
@@ -325,8 +344,9 @@ object KattonEvents {
             val hitResult: BlockHitResult
         )
 
-        val onUseItemOn = Event.createReloadable(BlockEvents.USE_ITEM_ON,
-            { c -> BlockEvents.UseItemOnCallback {a, b, c1, d, e, f, g -> c(UseItemOnArg(a, b, c1, d, e, f, g))} },
+        val onUseItemOn = Event.Companion.createReloadable(
+            BlockEvents.USE_ITEM_ON,
+            { c -> BlockEvents.UseItemOnCallback { a, b, c1, d, e, f, g -> c(UseItemOnArg(a, b, c1, d, e, f, g))} },
             dispatch<UseItemOnArg, InteractionResult>(InteractionResult.PASS)
         )
 
@@ -338,8 +358,9 @@ object KattonEvents {
             val hitResult: BlockHitResult
         )
 
-        val onUseWithoutItem = Event.createReloadable(BlockEvents.USE_WITHOUT_ITEM,
-            { c -> BlockEvents.UseWithoutItemCallback {a, b, c1, d, e -> c(UseWithoutItemArg(a, b, c1, d, e))} },
+        val onUseWithoutItem = Event.Companion.createReloadable(
+            BlockEvents.USE_WITHOUT_ITEM,
+            { c -> BlockEvents.UseWithoutItemCallback { a, b, c1, d, e -> c(UseWithoutItemArg(a, b, c1, d, e))} },
             dispatch<UseWithoutItemArg, InteractionResult>(InteractionResult.PASS)
         )
     }
@@ -351,7 +372,8 @@ object KattonEvents {
 
         data class UseOnArg(val context: UseOnContext)
 
-        val onUseOn = Event.createReloadable(ItemEvents.USE_ON,
+        val onUseOn = Event.Companion.createReloadable(
+            ItemEvents.USE_ON,
             {c -> ItemEvents.UseOnCallback {c(UseOnArg(it))}},
             dispatch<UseOnArg, InteractionResult>(InteractionResult.PASS)
         )
@@ -362,8 +384,9 @@ object KattonEvents {
             val hand: InteractionHand
         )
 
-        val onUse = Event.createReloadable(ItemEvents.USE,
-            {c -> ItemEvents.UseCallback {a, b, c1 -> c(UseArg(a, b, c1))}},
+        val onUse = Event.Companion.createReloadable(
+            ItemEvents.USE,
+            {c -> ItemEvents.UseCallback { a, b, c1 -> c(UseArg(a, b, c1))}},
             dispatch<UseArg, InteractionResult>(InteractionResult.PASS)
         )
     }
@@ -381,8 +404,9 @@ object KattonEvents {
             val direction: Direction,
         )
 
-        val onAttackBlock = Event.createReloadable(AttackBlockCallback.EVENT,
-            {c -> AttackBlockCallback {a, b, c1, d, e -> c(OnAttackBlockArg(a, b, c1, d, e))}},
+        val onAttackBlock = Event.Companion.createReloadable(
+            AttackBlockCallback.EVENT,
+            {c -> AttackBlockCallback { a, b, c1, d, e -> c(OnAttackBlockArg(a, b, c1, d, e)) } },
             dispatch<OnAttackBlockArg, InteractionResult>(InteractionResult.PASS)
         )
 
@@ -391,10 +415,11 @@ object KattonEvents {
             val world: Level,
             val hand: InteractionHand,
             val entity: Entity,
-            val hitResult: net.minecraft.world.phys.EntityHitResult?
+            val hitResult: EntityHitResult?
         )
 
-        val onAttackEntity = Event.createReloadable(AttackEntityCallback.EVENT,
+        val onAttackEntity = Event.Companion.createReloadable(
+            AttackEntityCallback.EVENT,
             { c -> AttackEntityCallback { a, b, c1, d, e -> c(AttackEntityArg(a, b, c1, d, e)) } },
             dispatch<AttackEntityArg, InteractionResult>(InteractionResult.PASS)
         )
@@ -406,7 +431,8 @@ object KattonEvents {
             val hitResult: BlockHitResult
         )
 
-        val onUseBlock = Event.createReloadable(UseBlockCallback.EVENT,
+        val onUseBlock = Event.Companion.createReloadable(
+            UseBlockCallback.EVENT,
             { c -> UseBlockCallback { a, b, c1, d -> c(UseBlockArg(a, b, c1, d)) } },
             dispatch<UseBlockArg, InteractionResult>(InteractionResult.PASS)
         )
@@ -416,10 +442,11 @@ object KattonEvents {
             val world: Level,
             val hand: InteractionHand,
             val entity: Entity,
-            val hitResult: net.minecraft.world.phys.EntityHitResult?
+            val hitResult: EntityHitResult?
         )
 
-        val onUseEntity = Event.createReloadable(UseEntityCallback.EVENT,
+        val onUseEntity = Event.Companion.createReloadable(
+            UseEntityCallback.EVENT,
             { c -> UseEntityCallback { a, b, c1, d, e -> c(UseEntityArg(a, b, c1, d, e)) } },
             dispatch<UseEntityArg, InteractionResult>(InteractionResult.PASS)
         )
@@ -430,7 +457,8 @@ object KattonEvents {
             val hand: InteractionHand
         )
 
-        val onUseItem = Event.createReloadable(UseItemCallback.EVENT,
+        val onUseItem = Event.Companion.createReloadable(
+            UseItemCallback.EVENT,
             { c -> UseItemCallback { a, b, c1 -> c(UseItemArg(a, b, c1)) } },
             dispatch<UseItemArg, InteractionResult>(InteractionResult.PASS)
         )
@@ -443,11 +471,12 @@ object KattonEvents {
         data class LootTableReplaceArg(
             val key: ResourceKey<net.minecraft.world.level.storage.loot.LootTable>,
             val original: net.minecraft.world.level.storage.loot.LootTable,
-            val source: net.fabricmc.fabric.api.loot.v3.LootTableSource,
-            val registries: net.minecraft.core.HolderLookup.Provider
+            val source: LootTableSource,
+            val registries: HolderLookup.Provider
         )
 
-        val onLootTableReplace = Event.createReloadable(LootTableEvents.REPLACE,
+        val onLootTableReplace = Event.Companion.createReloadable(
+            LootTableEvents.REPLACE,
             { c -> LootTableEvents.Replace { a, b, c1, d -> c(LootTableReplaceArg(a, b, c1, d)) } },
             firstNotNullOfOrNull<LootTableReplaceArg, net.minecraft.world.level.storage.loot.LootTable?>()
         )
@@ -455,12 +484,13 @@ object KattonEvents {
         data class LootTableModifyArg(
             val key: ResourceKey<net.minecraft.world.level.storage.loot.LootTable>,
             val tableBuilder: net.minecraft.world.level.storage.loot.LootTable.Builder,
-            val source: net.fabricmc.fabric.api.loot.v3.LootTableSource,
-            val registries: net.minecraft.core.HolderLookup.Provider
+            val source: LootTableSource,
+            val registries: HolderLookup.Provider
         )
 
-        val onLootTableModify = Event.createReloadable(LootTableEvents.MODIFY,
-            { c -> LootTableEvents.Modify {a, b, c1, d -> c(LootTableModifyArg(a, b, c1, d))} },
+        val onLootTableModify = Event.Companion.createReloadable(
+            LootTableEvents.MODIFY,
+            { c -> LootTableEvents.Modify { a, b, c1, d -> c(LootTableModifyArg(a, b, c1, d))} },
             unit<LootTableModifyArg>()
         )
 
@@ -469,8 +499,9 @@ object KattonEvents {
             val lootDataManager: Registry<net.minecraft.world.level.storage.loot.LootTable>
         )
 
-        val onLootTableAllLoad = Event.createReloadable(LootTableEvents.ALL_LOADED,
-            { c -> LootTableEvents.Loaded {a, b -> c(LootTableAllLoadArg(a, b))} },
+        val onLootTableAllLoad = Event.Companion.createReloadable(
+            LootTableEvents.ALL_LOADED,
+            { c -> LootTableEvents.Loaded { a, b -> c(LootTableAllLoadArg(a, b))} },
             unit<LootTableAllLoadArg>()
         )
 
@@ -480,8 +511,9 @@ object KattonEvents {
             val drops: List<ItemStack>
         )
 
-        val onLootTableModifyDrops = Event.createReloadable(LootTableEvents.MODIFY_DROPS,
-            { c -> LootTableEvents.ModifyDrops {a, b, c1 -> c(LootTableModifyDropsArg(a, b, c1))} },
+        val onLootTableModifyDrops = Event.Companion.createReloadable(
+            LootTableEvents.MODIFY_DROPS,
+            { c -> LootTableEvents.ModifyDrops { a, b, c1 -> c(LootTableModifyDropsArg(a, b, c1))} },
             unit<LootTableModifyDropsArg>()
         )
     }
@@ -492,12 +524,14 @@ object KattonEvents {
     object ServerPlayer {
         data class PlayerArg(val player: net.minecraft.server.level.ServerPlayer)
 
-        val onPlayerJoin = Event.createReloadable(ServerPlayerEvents.JOIN,
+        val onPlayerJoin = Event.Companion.createReloadable(
+            ServerPlayerEvents.JOIN,
             { c -> ServerPlayerEvents.Join {c(PlayerArg(it))} },
             unit<PlayerArg>()
         )
 
-        val onPlayerLeave = Event.createReloadable(ServerPlayerEvents.LEAVE,
+        val onPlayerLeave = Event.Companion.createReloadable(
+            ServerPlayerEvents.LEAVE,
             { c -> ServerPlayerEvents.Leave {c(PlayerArg(it))} },
             unit<PlayerArg>()
         )
@@ -508,19 +542,22 @@ object KattonEvents {
             val alive: Boolean
         )
 
-        val onAfterPlayerRespawn = Event.createReloadable(ServerPlayerEvents.AFTER_RESPAWN,
-            { c -> ServerPlayerEvents.AfterRespawn {a, b, c1 -> c(AfterRespawnArg(a, b, c1))} },
+        val onAfterPlayerRespawn = Event.Companion.createReloadable(
+            ServerPlayerEvents.AFTER_RESPAWN,
+            { c -> ServerPlayerEvents.AfterRespawn { a, b, c1 -> c(AfterRespawnArg(a, b, c1))} },
             unit<AfterRespawnArg>()
         )
 
         data class AllowDeathArg(
             val player: net.minecraft.server.level.ServerPlayer,
-            val damageSource: net.minecraft.world.damagesource.DamageSource,
+            val damageSource: DamageSource,
             val damageAmount: Float
         )
 
+        @Suppress("DEPRECATION")
         @Deprecated("Use the more general ServerLivingEntityEvents.ALLOW_DEATH event instead and check for instanceof ServerPlayerEntity.")
-        val onPlayerAllowDeath = Event.createReloadable(ServerPlayerEvents.ALLOW_DEATH,
+        val onPlayerAllowDeath = Event.Companion.createReloadable(
+            ServerPlayerEvents.ALLOW_DEATH,
             { c -> ServerPlayerEvents.AllowDeath { a, b, c1 -> c(AllowDeathArg(a, b, c1)) } },
             all<AllowDeathArg>()
         )
@@ -531,8 +568,9 @@ object KattonEvents {
             val alive: Boolean
         )
 
-        val onPlayerCopy = Event.createReloadable(ServerPlayerEvents.COPY_FROM,
-            { c -> ServerPlayerEvents.CopyFrom {a, b, c1 -> c(CopyArg(a, b, c1))} },
+        val onPlayerCopy = Event.Companion.createReloadable(
+            ServerPlayerEvents.COPY_FROM,
+            { c -> ServerPlayerEvents.CopyFrom { a, b, c1 -> c(CopyArg(a, b, c1))} },
             unit<CopyArg>()
         )
     }
@@ -541,19 +579,21 @@ object KattonEvents {
      * Elytra related entity events.
      */
     object EntityElytra {
-        data class ElytraAllowArg(val entity: net.minecraft.world.entity.LivingEntity)
+        data class ElytraAllowArg(val entity: LivingEntity)
 
-        val onEntityElytraAllow = Event.createReloadable(EntityElytraEvents.ALLOW,
+        val onEntityElytraAllow = Event.Companion.createReloadable(
+            EntityElytraEvents.ALLOW,
             { c -> EntityElytraEvents.Allow { c(ElytraAllowArg(it)) } },
             all<ElytraAllowArg>()
         )
 
         data class ElytraCustomArg(
-            val entity: net.minecraft.world.entity.LivingEntity,
+            val entity: LivingEntity,
             val tickElytra: Boolean
         )
 
-        val onEntityElytraCustom = Event.createReloadable(EntityElytraEvents.CUSTOM,
+        val onEntityElytraCustom = Event.Companion.createReloadable(
+            EntityElytraEvents.CUSTOM,
             { c -> EntityElytraEvents.Custom { a, b -> c(ElytraCustomArg(a, b)) } },
             any<ElytraCustomArg>()
         )
@@ -564,27 +604,30 @@ object KattonEvents {
      */
     object EntitySleep {
         data class AllowSleepingArg(
-            val entity: net.minecraft.world.entity.LivingEntity,
+            val entity: LivingEntity,
             val pos: BlockPos
         )
 
-        val onAllowSleeping = Event.createReloadable(EntitySleepEvents.ALLOW_SLEEPING,
+        val onAllowSleeping = Event.Companion.createReloadable(
+            EntitySleepEvents.ALLOW_SLEEPING,
             { c -> EntitySleepEvents.AllowSleeping { a, b -> c(AllowSleepingArg(a, b)) } },
-            firstNotNullOfOrNull<AllowSleepingArg, Player.BedSleepingProblem?>()
+            firstNotNullOfOrNull<AllowSleepingArg, net.minecraft.world.entity.player.Player.BedSleepingProblem?>()
         )
 
         data class SleepingArg(
-            val entity: net.minecraft.world.entity.LivingEntity,
+            val entity: LivingEntity,
             val pos: BlockPos
         )
 
-        val onStartSleeping = Event.createReloadable(EntitySleepEvents.START_SLEEPING,
-            { c -> EntitySleepEvents.StartSleeping {a, b -> c(SleepingArg(a, b))} },
+        val onStartSleeping = Event.Companion.createReloadable(
+            EntitySleepEvents.START_SLEEPING,
+            { c -> EntitySleepEvents.StartSleeping { a, b -> c(SleepingArg(a, b))} },
             unit<SleepingArg>()
         )
 
-        val onStopSleeping = Event.createReloadable(EntitySleepEvents.STOP_SLEEPING,
-            { c -> EntitySleepEvents.StopSleeping {a, b -> c(SleepingArg(a, b))} },
+        val onStopSleeping = Event.Companion.createReloadable(
+            EntitySleepEvents.STOP_SLEEPING,
+            { c -> EntitySleepEvents.StopSleeping { a, b -> c(SleepingArg(a, b))} },
             unit<SleepingArg>()
         )
 
@@ -595,7 +638,8 @@ object KattonEvents {
             val vanillaResult: Boolean
         )
 
-        val onAllowBed = Event.createReloadable(EntitySleepEvents.ALLOW_BED,
+        val onAllowBed = Event.Companion.createReloadable(
+            EntitySleepEvents.ALLOW_BED,
             { c -> EntitySleepEvents.AllowBed { a, b, c1, d -> c(AllowBedArg(a, b, c1, d)) } },
             dispatch<AllowBedArg, EventResult>(EventResult.PASS)
         )
@@ -606,14 +650,16 @@ object KattonEvents {
             val vanillaResult: Boolean
         )
 
-        val onAllowNearbyMonsters = Event.createReloadable(EntitySleepEvents.ALLOW_NEARBY_MONSTERS,
+        val onAllowNearbyMonsters = Event.Companion.createReloadable(
+            EntitySleepEvents.ALLOW_NEARBY_MONSTERS,
             { c -> EntitySleepEvents.AllowNearbyMonsters { a, b, c1 -> c(AllowNearbyMonstersArg(a, b, c1)) } },
             dispatch<AllowNearbyMonstersArg, EventResult>(EventResult.PASS)
         )
 
         data class AllowResettingTimeArg(val player: net.minecraft.world.entity.player.Player)
 
-        val onAllowResettingTime = Event.createReloadable(EntitySleepEvents.ALLOW_RESETTING_TIME,
+        val onAllowResettingTime = Event.Companion.createReloadable(
+            EntitySleepEvents.ALLOW_RESETTING_TIME,
             { c -> EntitySleepEvents.AllowResettingTime { c(AllowResettingTimeArg(it)) } },
             all<AllowResettingTimeArg>()
         )
@@ -624,7 +670,8 @@ object KattonEvents {
             val direction: Direction?
         )
 
-        val onModifySleepingDirection = Event.createReloadable(EntitySleepEvents.MODIFY_SLEEPING_DIRECTION,
+        val onModifySleepingDirection = Event.Companion.createReloadable(
+            EntitySleepEvents.MODIFY_SLEEPING_DIRECTION,
             { c -> EntitySleepEvents.ModifySleepingDirection { a, b, c1 -> c(ModifySleepingDirectionArg(a, b, c1)) } },
             { events ->
                 { arg: ModifySleepingDirectionArg ->
@@ -640,7 +687,8 @@ object KattonEvents {
             val pos: BlockPos
         )
 
-        val onAllowSettingSpawn = Event.createReloadable(EntitySleepEvents.ALLOW_SETTING_SPAWN,
+        val onAllowSettingSpawn = Event.Companion.createReloadable(
+            EntitySleepEvents.ALLOW_SETTING_SPAWN,
             { c -> EntitySleepEvents.AllowSettingSpawn { a, b -> c(SettingSpawnArg(a, b)) } },
             all<SettingSpawnArg>()
         )
@@ -652,7 +700,8 @@ object KattonEvents {
             val occupied: Boolean
         )
 
-        val onSetBedOccupationState = Event.createReloadable(EntitySleepEvents.SET_BED_OCCUPATION_STATE,
+        val onSetBedOccupationState = Event.Companion.createReloadable(
+            EntitySleepEvents.SET_BED_OCCUPATION_STATE,
             { c -> EntitySleepEvents.SetBedOccupationState { a, b, c1, d -> c(SetBedOccupationStateArg(a, b, c1, d)) } },
             any<SetBedOccupationStateArg>()
         )
@@ -664,7 +713,8 @@ object KattonEvents {
             val wakeUpPos: Vec3?
         )
 
-        val onModifyWakeUpPosition = Event.createReloadable(EntitySleepEvents.MODIFY_WAKE_UP_POSITION,
+        val onModifyWakeUpPosition = Event.Companion.createReloadable(
+            EntitySleepEvents.MODIFY_WAKE_UP_POSITION,
             { c -> EntitySleepEvents.ModifyWakeUpPosition { a, b, c1, d -> c(ModifyWakeUpPositionArg(a, b, c1, d)) } },
             { events ->
                 { arg: ModifyWakeUpPositionArg ->
@@ -681,47 +731,51 @@ object KattonEvents {
      */
     object ServerLivingEntity {
         data class AllowDamageArg(
-            val entity: net.minecraft.world.entity.LivingEntity,
-            val source: net.minecraft.world.damagesource.DamageSource,
+            val entity: LivingEntity,
+            val source: DamageSource,
             val amount: Float
         )
 
-        val onAllowDamage = Event.createReloadable(ServerLivingEntityEvents.ALLOW_DAMAGE,
+        val onAllowDamage = Event.Companion.createReloadable(
+            ServerLivingEntityEvents.ALLOW_DAMAGE,
             { c -> ServerLivingEntityEvents.AllowDamage { a, b, c1 -> c(AllowDamageArg(a, b, c1)) } },
             all<AllowDamageArg>()
         )
 
         data class AfterDamageArg(
-            val entity: net.minecraft.world.entity.LivingEntity,
-            val source: net.minecraft.world.damagesource.DamageSource,
+            val entity: LivingEntity,
+            val source: DamageSource,
             val initialDamage: Float,
             val finalDamage: Float,
             val handled: Boolean
         )
 
-        val onAfterDamage = Event.createReloadable(ServerLivingEntityEvents.AFTER_DAMAGE,
-            { c -> ServerLivingEntityEvents.AfterDamage {a, b, c1, d, e -> c(AfterDamageArg(a, b, c1, d, e))} },
+        val onAfterDamage = Event.Companion.createReloadable(
+            ServerLivingEntityEvents.AFTER_DAMAGE,
+            { c -> ServerLivingEntityEvents.AfterDamage { a, b, c1, d, e -> c(AfterDamageArg(a, b, c1, d, e))} },
             unit<AfterDamageArg>()
         )
 
         data class AllowDeathArg(
-            val entity: net.minecraft.world.entity.LivingEntity,
-            val source: net.minecraft.world.damagesource.DamageSource,
+            val entity: LivingEntity,
+            val source: DamageSource,
             val amount: Float
         )
 
-        val onAllowDeath = Event.createReloadable(ServerLivingEntityEvents.ALLOW_DEATH,
+        val onAllowDeath = Event.Companion.createReloadable(
+            ServerLivingEntityEvents.ALLOW_DEATH,
             { c -> ServerLivingEntityEvents.AllowDeath { a, b, c1 -> c(AllowDeathArg(a, b, c1)) } },
             all<AllowDeathArg>()
         )
 
         data class AfterDeathArg(
-            val entity: net.minecraft.world.entity.LivingEntity,
-            val source: net.minecraft.world.damagesource.DamageSource
+            val entity: LivingEntity,
+            val source: DamageSource
         )
 
-        val onAfterDeath = Event.createReloadable(ServerLivingEntityEvents.AFTER_DEATH,
-            { c -> ServerLivingEntityEvents.AfterDeath {a, b -> c(AfterDeathArg(a, b))} },
+        val onAfterDeath = Event.Companion.createReloadable(
+            ServerLivingEntityEvents.AFTER_DEATH,
+            { c -> ServerLivingEntityEvents.AfterDeath { a, b -> c(AfterDeathArg(a, b))} },
             unit<AfterDeathArg>()
         )
 
@@ -731,8 +785,9 @@ object KattonEvents {
             val keepEquipment: ConversionParams
         )
 
-        val onMobConversion = Event.createReloadable(ServerLivingEntityEvents.MOB_CONVERSION,
-            { c -> ServerLivingEntityEvents.MobConversion {a, b, c1 -> c(MobConversionArg(a, b, c1))} },
+        val onMobConversion = Event.Companion.createReloadable(
+            ServerLivingEntityEvents.MOB_CONVERSION,
+            { c -> ServerLivingEntityEvents.MobConversion { a, b, c1 -> c(MobConversionArg(a, b, c1))} },
             unit<MobConversionArg>()
         )
     }
@@ -745,11 +800,12 @@ object KattonEvents {
             val world: ServerLevel,
             val entity: Entity,
             val killedEntity: LivingEntity,
-            val source: net.minecraft.world.damagesource.DamageSource
+            val source: DamageSource
         )
 
-        val onAfterKilledOtherEntity = Event.createReloadable(ServerEntityCombatEvents.AFTER_KILLED_OTHER_ENTITY,
-            { c -> ServerEntityCombatEvents.AfterKilledOtherEntity {a, b, c1, d -> c(AfterKilledOtherEntityArg(a, b, c1, d))} },
+        val onAfterKilledOtherEntity = Event.Companion.createReloadable(
+            ServerEntityCombatEvents.AFTER_KILLED_OTHER_ENTITY,
+            { c -> ServerEntityCombatEvents.AfterKilledOtherEntity { a, b, c1, d -> c(AfterKilledOtherEntityArg(a, b, c1, d))} },
             unit<AfterKilledOtherEntityArg>()
         )
     }
@@ -765,8 +821,9 @@ object KattonEvents {
             val destinationLevel: ServerLevel
         )
 
-        val onAfterEntityChangeLevel = Event.createReloadable(ServerEntityLevelChangeEvents.AFTER_ENTITY_CHANGE_LEVEL,
-            { c -> ServerEntityLevelChangeEvents.AfterEntityChange {a, b, c1, d -> c(AfterEntityChangeLevelArg(a, b, c1, d))} },
+        val onAfterEntityChangeLevel = Event.Companion.createReloadable(
+            ServerEntityLevelChangeEvents.AFTER_ENTITY_CHANGE_LEVEL,
+            { c -> ServerEntityLevelChangeEvents.AfterEntityChange { a, b, c1, d -> c(AfterEntityChangeLevelArg(a, b, c1, d))} },
             unit<AfterEntityChangeLevelArg>()
         )
 
@@ -776,8 +833,9 @@ object KattonEvents {
             val destinationLevel: ServerLevel
         )
 
-        val onAfterPlayerChangeLevel = Event.createReloadable(ServerEntityLevelChangeEvents.AFTER_PLAYER_CHANGE_LEVEL,
-             { c -> ServerEntityLevelChangeEvents.AfterPlayerChange {a, b, c1 -> c(AfterPlayerChangeLevelArg(a, b, c1))} },
+        val onAfterPlayerChangeLevel = Event.Companion.createReloadable(
+            ServerEntityLevelChangeEvents.AFTER_PLAYER_CHANGE_LEVEL,
+             { c -> ServerEntityLevelChangeEvents.AfterPlayerChange { a, b, c1 -> c(AfterPlayerChangeLevelArg(a, b, c1))} },
              unit<AfterPlayerChangeLevelArg>()
         )
     }
@@ -792,7 +850,8 @@ object KattonEvents {
             val context: EffectEventContext
         )
 
-        val onAllowAdd = Event.createReloadable(ServerMobEffectEvents.ALLOW_ADD,
+        val onAllowAdd = Event.Companion.createReloadable(
+            ServerMobEffectEvents.ALLOW_ADD,
             { c -> ServerMobEffectEvents.AllowAdd { a, b, c1 -> c(AllowMobEffectArg(a, b, c1)) } },
             all<AllowMobEffectArg>()
         )
@@ -803,28 +862,33 @@ object KattonEvents {
             val context: EffectEventContext
         )
 
-        val onBeforeAdd = Event.createReloadable(ServerMobEffectEvents.BEFORE_ADD,
-            { c -> ServerMobEffectEvents.BeforeAdd {a, b, c1 -> c(MobEffectArg(a, b, c1))} },
+        val onBeforeAdd = Event.Companion.createReloadable(
+            ServerMobEffectEvents.BEFORE_ADD,
+            { c -> ServerMobEffectEvents.BeforeAdd { a, b, c1 -> c(MobEffectArg(a, b, c1))} },
             unit<MobEffectArg>()
         )
 
-        val onAfterAdd = Event.createReloadable(ServerMobEffectEvents.AFTER_ADD,
-             { c -> ServerMobEffectEvents.AfterAdd {a, b, c1 -> c(MobEffectArg(a, b, c1))} },
+        val onAfterAdd = Event.Companion.createReloadable(
+            ServerMobEffectEvents.AFTER_ADD,
+             { c -> ServerMobEffectEvents.AfterAdd { a, b, c1 -> c(MobEffectArg(a, b, c1))} },
              unit<MobEffectArg>()
         )
 
-        val onAllowEarlyRemove = Event.createReloadable(ServerMobEffectEvents.ALLOW_EARLY_REMOVE,
+        val onAllowEarlyRemove = Event.Companion.createReloadable(
+            ServerMobEffectEvents.ALLOW_EARLY_REMOVE,
             { c -> ServerMobEffectEvents.AllowEarlyRemove { a, b, c1 -> c(AllowMobEffectArg(a, b, c1)) } },
             all<AllowMobEffectArg>()
         )
 
-        val onBeforeRemove = Event.createReloadable(ServerMobEffectEvents.BEFORE_REMOVE,
-            { c -> ServerMobEffectEvents.BeforeRemove {a, b, c1 -> c(MobEffectArg(a, b, c1))} },
+        val onBeforeRemove = Event.Companion.createReloadable(
+            ServerMobEffectEvents.BEFORE_REMOVE,
+            { c -> ServerMobEffectEvents.BeforeRemove { a, b, c1 -> c(MobEffectArg(a, b, c1))} },
             unit<MobEffectArg>()
         )
 
-        val onAfterRemove = Event.createReloadable(ServerMobEffectEvents.AFTER_REMOVE,
-             { c -> ServerMobEffectEvents.AfterRemove {a, b, c1 -> c(MobEffectArg(a, b, c1))} },
+        val onAfterRemove = Event.Companion.createReloadable(
+            ServerMobEffectEvents.AFTER_REMOVE,
+             { c -> ServerMobEffectEvents.AfterRemove { a, b, c1 -> c(MobEffectArg(a, b, c1))} },
              unit<MobEffectArg>()
         )
     }
@@ -834,25 +898,28 @@ object KattonEvents {
      */
     object PlayerBlockBreak {
         data class BlockBreakArg(
-            val world: net.minecraft.world.level.Level,
+            val world: Level,
             val player: net.minecraft.world.entity.player.Player,
-            val pos: net.minecraft.core.BlockPos,
-            val state: net.minecraft.world.level.block.state.BlockState,
-            val blockEntity: net.minecraft.world.level.block.entity.BlockEntity?
+            val pos: BlockPos,
+            val state: BlockState,
+            val blockEntity: BlockEntity?
         )
 
-        val onBefore = Event.createReloadable(PlayerBlockBreakEvents.BEFORE,
-            { c -> PlayerBlockBreakEvents.Before {a, b, c1, d, e -> c(BlockBreakArg(a, b, c1, d, e))} },
+        val onBefore = Event.Companion.createReloadable(
+            PlayerBlockBreakEvents.BEFORE,
+            { c -> PlayerBlockBreakEvents.Before { a, b, c1, d, e -> c(BlockBreakArg(a, b, c1, d, e))} },
             all<BlockBreakArg>()
         )
 
-        val onAfter = Event.createReloadable(PlayerBlockBreakEvents.AFTER,
-            { c -> PlayerBlockBreakEvents.After {a, b, c1, d, e -> c(BlockBreakArg(a, b, c1, d, e))} },
+        val onAfter = Event.Companion.createReloadable(
+            PlayerBlockBreakEvents.AFTER,
+            { c -> PlayerBlockBreakEvents.After { a, b, c1, d, e -> c(BlockBreakArg(a, b, c1, d, e))} },
             unit<BlockBreakArg>()
         )
 
-        val onCanceled = Event.createReloadable(PlayerBlockBreakEvents.CANCELED,
-             { c -> PlayerBlockBreakEvents.Canceled {a, b, c1, d, e -> c(BlockBreakArg(a, b, c1, d, e))} },
+        val onCanceled = Event.Companion.createReloadable(
+            PlayerBlockBreakEvents.CANCELED,
+             { c -> PlayerBlockBreakEvents.Canceled { a, b, c1, d, e -> c(BlockBreakArg(a, b, c1, d, e))} },
              unit<BlockBreakArg>()
         )
     }
@@ -868,7 +935,8 @@ object KattonEvents {
             val includeData: Boolean
         )
 
-        val onPickFromBlock = Event.createReloadable(PlayerPickItemEvents.BLOCK,
+        val onPickFromBlock = Event.Companion.createReloadable(
+            PlayerPickItemEvents.BLOCK,
             { c -> PlayerPickItemEvents.PickItemFromBlock { a, b, c1, d -> c(PickFromBlockArg(a, b, c1, d)) } },
             firstNotNullOfOrNull<PickFromBlockArg, ItemStack>()
         )
@@ -879,7 +947,8 @@ object KattonEvents {
             val includeData: Boolean
         )
 
-        val onPickFromEntity = Event.createReloadable(PlayerPickItemEvents.ENTITY,
+        val onPickFromEntity = Event.Companion.createReloadable(
+            PlayerPickItemEvents.ENTITY,
              { c -> PlayerPickItemEvents.PickItemFromEntity { a, b, c1 -> c(PickFromEntityArg(a, b, c1)) } },
              firstNotNullOfOrNull<PickFromEntityArg, ItemStack>()
         )
@@ -891,7 +960,8 @@ object KattonEvents {
     object DefaultItemComponent {
         data class ModifyContextArg(val context: DefaultItemComponentEvents.ModifyContext)
 
-        val onModify = Event.createReloadable(DefaultItemComponentEvents.MODIFY,
+        val onModify = Event.Companion.createReloadable(
+            DefaultItemComponentEvents.MODIFY,
             { c -> DefaultItemComponentEvents.ModifyCallback {c(ModifyContextArg(it))} },
             unit<ModifyContextArg>()
         )
@@ -907,19 +977,21 @@ object KattonEvents {
             val context: EnchantingContext
         )
 
-        val onAllowEnchanting = Event.createReloadable(EnchantmentEvents.ALLOW_ENCHANTING,
+        val onAllowEnchanting = Event.Companion.createReloadable(
+            EnchantmentEvents.ALLOW_ENCHANTING,
             { c -> EnchantmentEvents.AllowEnchanting { a, b, c1 -> c(AllowEnchantingArg(a, b, c1)) } },
             triState<AllowEnchantingArg>()
         )
 
         data class ModifyEnchantmentArg(
             val key: ResourceKey<net.minecraft.world.item.enchantment.Enchantment>,
-            val builder: Builder,
+            val builder: net.minecraft.world.item.enchantment.Enchantment.Builder,
             val enchantments: EnchantmentSource
         )
 
-        val onModify = Event.createReloadable(EnchantmentEvents.MODIFY,
-            { c -> EnchantmentEvents.Modify {a, b, c1 -> c(ModifyEnchantmentArg(a, b, c1))} },
+        val onModify = Event.Companion.createReloadable(
+            EnchantmentEvents.MODIFY,
+            { c -> EnchantmentEvents.Modify { a, b, c1 -> c(ModifyEnchantmentArg(a, b, c1))} },
             unit<ModifyEnchantmentArg>()
         )
     }
@@ -931,10 +1003,11 @@ object KattonEvents {
         data class AllowChatMessageArg(
             val message: PlayerChatMessage,
             val sender: net.minecraft.server.level.ServerPlayer,
-            val params: Bound
+            val params: ChatType.Bound
         )
 
-        val onAllowChatMessage = Event.createReloadable(ServerMessageEvents.ALLOW_CHAT_MESSAGE,
+        val onAllowChatMessage = Event.Companion.createReloadable(
+            ServerMessageEvents.ALLOW_CHAT_MESSAGE,
             { c -> ServerMessageEvents.AllowChatMessage { a, b, c1 -> c(AllowChatMessageArg(a, b, c1)) } },
             all<AllowChatMessageArg>()
         )
@@ -945,7 +1018,8 @@ object KattonEvents {
             val overlay: Boolean
         )
 
-        val onAllowGameMessage = Event.createReloadable(ServerMessageEvents.ALLOW_GAME_MESSAGE,
+        val onAllowGameMessage = Event.Companion.createReloadable(
+            ServerMessageEvents.ALLOW_GAME_MESSAGE,
             { c -> ServerMessageEvents.AllowGameMessage { a, b, c1 -> c(AllowGameMessageArg(a, b, c1)) } },
             all<AllowGameMessageArg>()
         )
@@ -953,10 +1027,11 @@ object KattonEvents {
         data class AllowCommandMessageArg(
             val message: PlayerChatMessage,
             val source: CommandSourceStack,
-            val params: Bound
+            val params: ChatType.Bound
         )
 
-        val onAllowCommandMessage = Event.createReloadable(ServerMessageEvents.ALLOW_COMMAND_MESSAGE,
+        val onAllowCommandMessage = Event.Companion.createReloadable(
+            ServerMessageEvents.ALLOW_COMMAND_MESSAGE,
             { c -> ServerMessageEvents.AllowCommandMessage { a, b, c1 -> c(AllowCommandMessageArg(a, b, c1)) } },
             all<AllowCommandMessageArg>()
         )
@@ -964,11 +1039,12 @@ object KattonEvents {
         data class ChatMessageArg(
             val message: PlayerChatMessage,
             val sender: net.minecraft.server.level.ServerPlayer,
-            val params: Bound
+            val params: ChatType.Bound
         )
 
-        val onChatMessage = Event.createReloadable(ServerMessageEvents.CHAT_MESSAGE,
-            { c -> ServerMessageEvents.ChatMessage {a, b, c1 -> c(ChatMessageArg(a, b, c1))} },
+        val onChatMessage = Event.Companion.createReloadable(
+            ServerMessageEvents.CHAT_MESSAGE,
+            { c -> ServerMessageEvents.ChatMessage { a, b, c1 -> c(ChatMessageArg(a, b, c1))} },
             unit<ChatMessageArg>()
         )
 
@@ -978,19 +1054,21 @@ object KattonEvents {
             val overlay: Boolean
         )
 
-        val onGameMessage = Event.createReloadable(ServerMessageEvents.GAME_MESSAGE,
-             { c -> ServerMessageEvents.GameMessage {a, b, c1 -> c(GameMessageArg(a, b, c1))} },
+        val onGameMessage = Event.Companion.createReloadable(
+            ServerMessageEvents.GAME_MESSAGE,
+             { c -> ServerMessageEvents.GameMessage { a, b, c1 -> c(GameMessageArg(a, b, c1))} },
              unit<GameMessageArg>()
         )
 
         data class CommandMessageArg(
             val message: PlayerChatMessage,
             val source: CommandSourceStack,
-            val params: Bound
+            val params: ChatType.Bound
         )
 
-        val onCommandMessage = Event.createReloadable(ServerMessageEvents.COMMAND_MESSAGE,
-             { c -> ServerMessageEvents.CommandMessage {a, b, c1 -> c(CommandMessageArg(a, b, c1))} },
+        val onCommandMessage = Event.Companion.createReloadable(
+            ServerMessageEvents.COMMAND_MESSAGE,
+             { c -> ServerMessageEvents.CommandMessage { a, b, c1 -> c(CommandMessageArg(a, b, c1))} },
              unit<CommandMessageArg>()
         )
     }

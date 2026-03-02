@@ -25,27 +25,56 @@ import java.util.Collections.emptySet
 import java.util.concurrent.ConcurrentHashMap
 
 /**
- * Creates an Identifier from namespace and path.
+ * Creates an [Identifier] from a namespace and path.
+ * 
+ * This is a convenience function for creating Minecraft resource identifiers.
+ * 
+ * @param namespace The namespace (mod id) for the identifier
+ * @param path The path component of the identifier
+ * @return A new [Identifier] instance
  */
 fun id(namespace: String, path: String) = Identifier.fromNamespaceAndPath(namespace, path)
 
 /**
- * Parses an Identifier from string format "namespace:path".
+ * Parses an [Identifier] from a string in the format "namespace:path".
+ * 
+ * @param string The string to parse
+ * @return The parsed [Identifier]
+ * @throws IllegalArgumentException if the string is not a valid identifier format
  */
 fun id(string: String) = Identifier.parse(string)
 
 /**
- * Interface for objects that have an Identifier.
+ * Interface for objects that have an [Identifier].
+ * 
+ * This interface provides a common contract for objects that can be identified
+ * by a Minecraft resource identifier. It is used throughout the registry system
+ * to track and manage registered objects.
  */
 interface Identifiable {
+    /**
+     * The unique identifier for this object.
+     */
     val id: Identifier
 }
 
 /**
- * Registration mode for items.
- * - GLOBAL: Register during mod initialization, cannot be hot-reloaded
- * - RELOADABLE: Register with hot-reload support
- * - AUTO: Choose based on current load state
+ * Registration mode for game objects.
+ * 
+ * This enum defines how objects should be registered with Minecraft's registries,
+ * particularly in relation to the hot-reload system.
+ * 
+ * - **GLOBAL**: Register during mod initialization, cannot be hot-reloaded.
+ *   Use this for objects that need to persist across reloads or are required
+ *   for the mod to function properly.
+ *   
+ * - **RELOADABLE**: Register with hot-reload support. Objects registered this
+ *   way can be redefined during script reloads. Use this for content that
+ *   may change during development or configuration.
+ *   
+ * - **AUTO**: Automatically choose based on current load state. During initial
+ *   mod loading, behaves like GLOBAL. After initialization, behaves like
+ *   RELOADABLE. This is the recommended mode for most use cases.
  */
 enum class RegisterMode {
     GLOBAL,
@@ -55,31 +84,65 @@ enum class RegisterMode {
 
 /**
  * Central registry for Katton mod components.
- * Handles registration of custom items with hot-reload support.
+ * 
+ * This object provides a unified interface for registering custom game objects
+ * such as items, blocks, and mob effects. It supports both traditional global
+ * registration and hot-reloadable registration for script-defined content.
+ * 
+ * The registry uses a custom approach to handle registration after Minecraft's
+ * registries are frozen, temporarily unfreeze registries
+ * and inject intrusive holders as needed.
  */
 object KattonRegistry {
 
+    //这个热重载怎么这么难写啊QwQ
+    //感觉会有一堆bug但是现在能运行那就先不管了吧qwq
+
     /**
      * Base class for Katton registries.
-     * Provides a map-like interface for storing registered entries.
+     * 
+     * Provides a map-like interface for storing registered entries, allowing
+     * lookup by identifier. Each registry has its own unique identifier for
+     * debugging and logging purposes.
+     * 
+     * @param T The type of entries stored in this registry, must implement [Identifiable]
+     * @property id The identifier for this registry instance
+     * @param entries The initial entries map, defaults to an empty mutable map
      */
     abstract class KattonRegistries<T : Identifiable>(
         override val id: Identifier,
         entries: MutableMap<Identifier, T> = mutableMapOf()
     ) : Identifiable, MutableMap<Identifier, T> by entries {
 
+        /**
+         * Registers an entry in this registry.
+         * 
+         * @param implement The entry to register
+         * @return The registered entry
+         * @deprecated Use the specific registration methods in ITEMS, BLOCKS, or EFFECTS instead
+         */
         @Deprecated("Use Function In KattonRegistry Instead")
         internal fun register(implement: T): T {
             this[implement.id] = implement
             return implement
         }
 
+        /**
+         * Initializes this registry. Override to perform initialization logic.
+         */
+        @Suppress("unused")
         fun initialize() {}
     }
 
     /**
      * Represents a registered item entry.
-     * Stores the item instance and its properties for component rebuilding.
+     * 
+     * Stores the item instance along with its properties for potential
+     * component rebuilding during hot-reload operations.
+     * 
+     * @property id The unique identifier for this item
+     * @property item The registered Item instance
+     * @property properties The properties used to create this item, may be null for non-reloadable items
      */
     data class KattonItemEntry(
         override val id: Identifier,
@@ -89,6 +152,9 @@ object KattonRegistry {
 
     /**
      * Represents a registered mob effect entry.
+     * 
+     * @property id The unique identifier for this effect
+     * @property effect The registered MobEffect instance
      */
     data class KattonMobEffectEntry(
         override val id: Identifier,
@@ -97,6 +163,9 @@ object KattonRegistry {
 
     /**
      * Represents a registered block entry.
+     * 
+     * @property id The unique identifier for this block
+     * @property block The registered Block instance
      */
     data class KattonBlockEntry(
         override val id: Identifier,
@@ -105,7 +174,18 @@ object KattonRegistry {
 
     /**
      * Registry for Katton items.
-     * Supports both global registration and hot-reloadable registration.
+     * 
+     * Supports both global registration (during mod initialization) and
+     * hot-reloadable registration (after the server has started). Items
+     * registered through this registry are tracked by their script owner
+     * and can be cleared during reload operations.
+     * 
+     * The registry handles the complexity of registering items after
+     * Minecraft's item registry is frozen by:
+     * 1. Temporarily unfreezing the registry
+     * 2. Injecting intrusive holders if needed
+     * 3. Registering the item
+     * 4. Restoring the registry state
      */
     object ITEMS : KattonRegistries<KattonItemEntry>(id(MOD_ID, "item")) {
 
@@ -114,13 +194,29 @@ object KattonRegistry {
         private val pendingNativeRegistrations = mutableListOf<Pair<Identifier, () -> Item>>()
         private val hotReloadableItems = ConcurrentHashMap<Identifier, Item>()
 
+        /**
+         * Registers an item in the global Minecraft registry.
+         * 
+         * @param id The identifier for the item
+         * @param item The item to register
+         * @return The registered item
+         */
         private fun registerGlobalItem(id: Identifier, item: Item): Item =
             Registry.register(BuiltInRegistries.ITEM, id, item)
 
+        /**
+         * Gets the current script owner for tracking purposes.
+         * 
+         * @return The current script owner name, or "global" if not in a script context
+         */
         private fun currentOwner(): String = Event.currentScriptOwner() ?: "global"
 
         /**
          * Clears all managed entries. Called at the start of a reload.
+         * 
+         * This method removes all script-defined items from tracking but does
+         * not remove them from the global Minecraft registry. The items remain
+         * registered but their entries in this registry are cleared.
          */
         @Synchronized
         fun beginReload() {
@@ -131,16 +227,22 @@ object KattonRegistry {
         }
 
         /**
-         * Ensures an item is registered in the global registry.
-         * If the item already exists, updates its components for hot-reload.
-         * If not, registers a new item with hot-reload support.
+         * Ensures an item is registered in the global registry with hot-reload support.
+         * 
+         * If the item already exists in the global registry, updates its components
+         * for hot-reload. If not, registers a new item with the necessary machinery
+         * for future hot-reloads.
+         * 
+         * @param id The identifier for the item
+         * @param itemBuilder Factory function to create the item
+         * @param properties The item properties, used for component updates
+         * @return The registered or existing item
          */
         private fun ensureGlobalItemRegistered(
             id: Identifier,
             itemBuilder: () -> Item,
             properties: KattonItemProperties? = null
         ): Item {
-            // Check if already registered in global registry
             val existing = BuiltInRegistries.ITEM.getOptional(id)
             if (existing.isPresent) {
                 val item = existing.get()
@@ -148,7 +250,6 @@ object KattonRegistry {
                 return item
             }
             
-            // Check hot-reload cache
             hotReloadableItems[id]?.let { return it }
 
             return registerNewItem(id, itemBuilder, properties)
@@ -156,7 +257,13 @@ object KattonRegistry {
 
         /**
          * Updates the components of an existing item's holder.
-         * Called during hot-reload to refresh item properties.
+         * 
+         * Called during hot-reload to refresh item properties without
+         * creating a new item instance.
+         * 
+         * @param item The item to update
+         * @param id The item's identifier
+         * @param properties The new properties to apply
          */
         private fun updateHolderComponents(item: Item, id: Identifier, properties: KattonItemProperties) {
             properties.setId(ResourceKey.create(Registries.ITEM, id))
@@ -166,7 +273,15 @@ object KattonRegistry {
 
         /**
          * Registers a new item with hot-reload support.
-         * Temporarily unfreezes the registry and injects intrusive holders.
+         * 
+         * This method handles the complex process of registering an item after
+         * the Minecraft registry is frozen by temporarily unfreezing it and
+         * injecting intrusive holders.
+         * 
+         * @param id The identifier for the item
+         * @param itemBuilder Factory function to create the item
+         * @param properties The item properties
+         * @return The newly registered item
          */
         private fun registerNewItem(
             id: Identifier,
@@ -177,7 +292,6 @@ object KattonRegistry {
             val itemRegistry = BuiltInRegistries.ITEM as MappedRegistry<Item>
             val accessor = itemRegistry as MappedRegistryAccessor
 
-            // Inject unregisteredIntrusiveHolders if not present
             val previousUnregistered = itemRegistry.unregisteredIntrusiveHolders
             val injectedUnregistered = previousUnregistered == null
             if (injectedUnregistered) {
@@ -187,17 +301,14 @@ object KattonRegistry {
             val savedFrozen = accessor.isFrozen
             
             return try {
-                // Temporarily unfreeze registry
                 accessor.setFrozen(false)
                 val item = itemBuilder()
                 val registered = Registry.register(BuiltInRegistries.ITEM, id, item)
                 
-                // Manually bind holder components
                 bindHolderComponents(item, properties)
                 hotReloadableItems[id] = registered
                 registered
             } finally {
-                // Restore registry state
                 if (savedFrozen) accessor.setFrozen(true)
                 if (injectedUnregistered) itemRegistry.unregisteredIntrusiveHolders = previousUnregistered
             }
@@ -205,7 +316,12 @@ object KattonRegistry {
 
         /**
          * Binds components and tags to an item's holder.
-         * Required for items registered after the registry is frozen.
+         * 
+         * Required for items registered after the registry is frozen,
+         * as the normal binding process may not have occurred.
+         * 
+         * @param item The item to bind components to
+         * @param properties The properties containing component data
          */
         private fun bindHolderComponents(item: Item, properties: KattonItemProperties?) {
             val holder = item.builtInRegistryHolder
@@ -215,6 +331,12 @@ object KattonRegistry {
 
         /**
          * Registers an item with the specified mode.
+         * 
+         * @param id The identifier for the item
+         * @param registerMode The registration mode
+         * @param itemBuilder Factory function to create the item
+         * @param properties The item properties
+         * @return The registered item
          */
         private fun registerItemWithMode(
             id: Identifier,
@@ -235,7 +357,13 @@ object KattonRegistry {
 
         /**
          * Registers a native Item instance with hot-reload support.
-         * Use this to register custom Item subclasses from scripts.
+         * 
+         * Use this method to register custom Item subclasses from scripts.
+         * The method handles all the complexity of late registration and
+         * hot-reload support automatically.
+         * 
+         * If called before the mod is fully initialized, the registration
+         * will be queued and processed later.
          * 
          * @param components The item properties containing id, name, model, etc.
          * @param registerMode The registration mode (GLOBAL, RELOADABLE, or AUTO)
@@ -247,7 +375,6 @@ object KattonRegistry {
             registerMode: RegisterMode = RegisterMode.AUTO,
             itemFactory: (KattonItemProperties) -> Item
         ): KattonItemEntry {
-            // If called too early, queue for later processing
             if (!Katton.globalState.after(LoadState.INIT)) {
                 val placeholder = KattonItemEntry(id = components.id, item = Items.AIR, properties = components)
                 @Suppress("DEPRECATION")
@@ -263,7 +390,6 @@ object KattonRegistry {
                 return placeholder
             }
 
-            // Delayed factory ensures Item is created during unfreeze window
             val delayedFactory = {
                 components.setId(ResourceKey.create(Registries.ITEM, components.id))
                 components.finalizeComponentInitializer()
@@ -282,7 +408,11 @@ object KattonRegistry {
 
         /**
          * Marks an item as managed by a script owner.
-         * Managed items are cleared during reload.
+         * 
+         * Managed items are tracked for cleanup during reload operations.
+         * 
+         * @param itemId The identifier of the item to mark
+         * @param registerMode The registration mode
          */
         private fun markManaged(itemId: Identifier, registerMode: RegisterMode) {
             val owner = currentOwner()
@@ -295,7 +425,6 @@ object KattonRegistry {
 
     /**
      * Registry for Katton mob effects.
-     * Supports global registration and hot-reloadable registration.
      */
     object EFFECTS : KattonRegistries<KattonMobEffectEntry>(id(MOD_ID, "effect")) {
 
@@ -303,11 +432,20 @@ object KattonRegistry {
         private val idsByOwner = ConcurrentHashMap<String, MutableSet<Identifier>>()
         private val hotReloadableEffects = ConcurrentHashMap<Identifier, MobEffect>()
 
+        /**
+         * Registers a mob effect in the global Minecraft registry.
+         */
         private fun registerGlobalEffect(id: Identifier, effect: MobEffect): MobEffect =
             Registry.register(BuiltInRegistries.MOB_EFFECT, id, effect)
 
+        /**
+         * Gets the current script owner for tracking purposes.
+         */
         private fun currentOwner(): String = Event.currentScriptOwner() ?: "global"
 
+        /**
+         * Clears all managed entries. Called at the start of a reload.
+         */
         @Synchronized
         fun beginReload() {
             managedIds.forEach { remove(it) }
@@ -316,6 +454,9 @@ object KattonRegistry {
             hotReloadableEffects.clear()
         }
 
+        /**
+         * Ensures a mob effect is registered in the global registry with hot-reload support.
+         */
         private fun ensureGlobalEffectRegistered(
             id: Identifier,
             effectBuilder: () -> MobEffect
@@ -330,6 +471,9 @@ object KattonRegistry {
             return registerNewEffect(id, effectBuilder)
         }
 
+        /**
+         * Registers a new mob effect with hot-reload support.
+         */
         private fun registerNewEffect(
             id: Identifier,
             effectBuilder: () -> MobEffect
@@ -350,6 +494,9 @@ object KattonRegistry {
             }
         }
 
+        /**
+         * Registers a mob effect with the specified mode.
+         */
         private fun registerEffectWithMode(
             id: Identifier,
             registerMode: RegisterMode,
@@ -366,6 +513,14 @@ object KattonRegistry {
             }
         }
 
+        /**
+         * Registers a native MobEffect instance with hot-reload support.
+         * 
+         * @param id The identifier for the effect
+         * @param registerMode The registration mode
+         * @param effectFactory Factory function to create the MobEffect instance
+         * @return The registered KattonMobEffectEntry
+         */
         fun newNative(
             id: Identifier,
             registerMode: RegisterMode = RegisterMode.AUTO,
@@ -381,6 +536,9 @@ object KattonRegistry {
             return entry
         }
 
+        /**
+         * Marks a mob effect as managed by a script owner.
+         */
         private fun markManaged(effectId: Identifier, registerMode: RegisterMode) {
             val owner = currentOwner()
             if (owner != "global" && registerMode != RegisterMode.GLOBAL) {
@@ -392,7 +550,6 @@ object KattonRegistry {
 
     /**
      * Registry for Katton blocks.
-     * Supports global registration and hot-reloadable registration.
      */
     object BLOCKS : KattonRegistries<KattonBlockEntry>(id(MOD_ID, "block")) {
 
@@ -400,11 +557,20 @@ object KattonRegistry {
         private val idsByOwner = ConcurrentHashMap<String, MutableSet<Identifier>>()
         private val hotReloadableBlocks = ConcurrentHashMap<Identifier, Block>()
 
+        /**
+         * Registers a block in the global Minecraft registry.
+         */
         private fun registerGlobalBlock(id: Identifier, block: Block): Block =
             Registry.register(BuiltInRegistries.BLOCK, id, block)
 
+        /**
+         * Gets the current script owner for tracking purposes.
+         */
         private fun currentOwner(): String = Event.currentScriptOwner() ?: "global"
 
+        /**
+         * Clears all managed entries. Called at the start of a reload.
+         */
         @Synchronized
         fun beginReload() {
             managedIds.forEach { remove(it) }
@@ -413,6 +579,9 @@ object KattonRegistry {
             hotReloadableBlocks.clear()
         }
 
+        /**
+         * Ensures a block is registered in the global registry with hot-reload support.
+         */
         private fun ensureGlobalBlockRegistered(
             id: Identifier,
             blockBuilder: (BlockBehaviour.Properties) -> Block
@@ -429,6 +598,9 @@ object KattonRegistry {
             return registerNewBlock(id, blockBuilder)
         }
 
+        /**
+         * Registers a new block with hot-reload support.
+         */
         private fun registerNewBlock(
             id: Identifier,
             blockBuilder: (BlockBehaviour.Properties) -> Block
@@ -437,7 +609,6 @@ object KattonRegistry {
             val blockRegistry = BuiltInRegistries.BLOCK as MappedRegistry<Block>
             val accessor = blockRegistry as MappedRegistryAccessor
 
-            // Inject unregisteredIntrusiveHolders if not present (same pattern as item registry)
             val previousUnregistered = blockRegistry.unregisteredIntrusiveHolders
             val injectedUnregistered = previousUnregistered == null
             if (injectedUnregistered) {
@@ -460,6 +631,9 @@ object KattonRegistry {
             }
         }
 
+        /**
+         * Registers a block with the specified mode.
+         */
         private fun registerBlockWithMode(
             id: Identifier,
             registerMode: RegisterMode,
@@ -480,6 +654,14 @@ object KattonRegistry {
             }
         }
 
+        /**
+         * Registers a native Block instance with hot-reload support.
+         * 
+         * @param id The identifier for the block
+         * @param registerMode The registration mode
+         * @param blockFactory Factory function to create the Block instance
+         * @return The registered KattonBlockEntry
+         */
         fun newNative(
             id: Identifier,
             registerMode: RegisterMode = RegisterMode.AUTO,
@@ -495,6 +677,9 @@ object KattonRegistry {
             return entry
         }
 
+        /**
+         * Marks a block as managed by a script owner.
+         */
         private fun markManaged(blockId: Identifier, registerMode: RegisterMode) {
             val owner = currentOwner()
             if (owner != "global" && registerMode != RegisterMode.GLOBAL) {
@@ -506,10 +691,21 @@ object KattonRegistry {
 
     /**
      * Custom data component types for Katton.
+     * 
+     * This object defines and registers custom data component types that
+     * can be attached to items for storing mod-specific data.
      */
     object COMPONENTS {
+        /**
+         * A data component type for storing Katton-specific string identifiers.
+         */
         lateinit var KATTON_ID: DataComponentType<String>
 
+        /**
+         * Initializes and registers the custom data component types.
+         * 
+         * This method is idempotent and can be called multiple times safely.
+         */
         fun initialize() {
             if (::KATTON_ID.isInitialized) return
             KATTON_ID = Registry.register(
@@ -520,6 +716,12 @@ object KattonRegistry {
         }
     }
 
+    /**
+     * Initializes all Katton registries.
+     * 
+     * This method should be called during mod initialization to ensure
+     * all custom data component types are registered.
+     */
     fun initialize() {
         COMPONENTS.initialize()
     }

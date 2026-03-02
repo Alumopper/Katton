@@ -1,6 +1,6 @@
 @file:Suppress("unused")
 
-package top.katton.api
+package top.katton.api.dpcaller
 
 import net.minecraft.commands.arguments.EntityAnchorArgument
 import net.minecraft.commands.arguments.selector.EntitySelector
@@ -27,9 +27,15 @@ import net.minecraft.world.level.entity.EntityTypeTest
 import net.minecraft.world.phys.AABB
 import net.minecraft.world.phys.Vec2
 import net.minecraft.world.phys.Vec3
+import top.katton.api.event.KattonEvents
+import top.katton.api.LOGGER
+import top.katton.api.requireServer
 import top.katton.util.ContextEvent
 import java.util.*
 
+/**
+ * Get/Set the NBT data of an Entity.
+ */
 var Entity.nbt: CompoundTag
     get() = getEntityNbt(this)
     set(value) {
@@ -37,7 +43,7 @@ var Entity.nbt: CompoundTag
     }
 
 object EntityEvent {
-    val onTickHandlers = mutableMapOf<Entity, ContextEvent.HandlerEntry<Entity.(Level) -> Unit>>()
+    private val onTickHandlers = mutableMapOf<Entity, ContextEvent.HandlerEntry<Entity.(Level) -> Unit>>()
     class EntityOnTickEvent(entity: Entity): ContextEvent<Entity, Entity.(level: Level)-> Unit>(entity, onTickHandlers) {
         override fun invoker(): Entity.(level: Level) -> Unit {
             return { level ->
@@ -47,6 +53,10 @@ object EntityEvent {
             }
         }
     }
+
+    /**
+     * Register a tick event for this entity.
+     */
     val Entity.onTick: EntityOnTickEvent
         get() = EntityOnTickEvent(this)
 
@@ -79,10 +89,6 @@ object EntityEvent {
         }
     }
 }
-
-
-
-
 
 class KattonServerEntityCollection(
     private val server: MinecraftServer
