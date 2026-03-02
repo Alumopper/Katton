@@ -1,3 +1,5 @@
+<img width="1348" height="256" alt="20260226" src="https://github.com/user-attachments/assets/822f3883-23c9-4bde-88e1-e0a15bb16128" />
+
 # Katton
 
 Katton is a Minecraft Fabric mod that brings Kotlin scripting to datapacks. It lets you interact directly with Minecraft server internals and Fabric APIs from scripts, making it easy to build custom mechanics, commands, and items with Kotlin's concise syntax. Katton also supports hot reloading (similar to vanilla functions), so you can iterate quickly without restarting the server.
