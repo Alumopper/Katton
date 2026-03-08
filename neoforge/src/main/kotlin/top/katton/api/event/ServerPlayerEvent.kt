@@ -16,9 +16,9 @@ import net.neoforged.neoforge.event.entity.player.PlayerEvent
 import net.neoforged.neoforge.event.entity.player.PlayerSpawnPhantomsEvent
 import net.neoforged.neoforge.event.entity.player.PlayerXpEvent
 import top.katton.Katton
-import top.katton.util.createCancellableUnit
-import top.katton.util.createFirstNotNullOfOrNull
-import top.katton.util.createUnit
+import top.katton.util.CancellableDelegateEvent
+import top.katton.util.CancellableEventArg
+import top.katton.util.DelegateEvent
 import top.katton.util.setCancel
 
 /**
@@ -35,19 +35,19 @@ object ServerPlayerEvent {
     private val respawnStateByPlayerId = mutableMapOf<java.util.UUID, RespawnState>()
 
     @SubscribeEvent
-    private fun onPlayerJoin(e: PlayerEvent.PlayerLoggedInEvent) {
+    private fun handlePlayerJoin(e: PlayerEvent.PlayerLoggedInEvent) {
         val player = e.entity as? ServerPlayer ?: return
         onPlayerJoin(PlayerArg(player))
     }
 
     @SubscribeEvent
-    private fun onPlayerLeave(e: PlayerEvent.PlayerLoggedOutEvent) {
+    private fun handlePlayerLeave(e: PlayerEvent.PlayerLoggedOutEvent) {
         val player = e.entity as? ServerPlayer ?: return
         onPlayerLeave(PlayerArg(player))
     }
 
     @SubscribeEvent
-    private fun onPlayerCopy(e: PlayerEvent.Clone) {
+    private fun handlePlayerCopy(e: PlayerEvent.Clone) {
         val oldPlayer = e.original as? ServerPlayer ?: return
         val newPlayer = e.entity as? ServerPlayer ?: return
         val alive = !e.isWasDeath
@@ -56,7 +56,7 @@ object ServerPlayerEvent {
     }
 
     @SubscribeEvent
-    private fun onAfterPlayerRespawn(e: PlayerEvent.PlayerRespawnEvent) {
+    private fun handleAfterPlayerRespawn(e: PlayerEvent.PlayerRespawnEvent) {
         val newPlayer = e.entity as? ServerPlayer ?: return
         val state = respawnStateByPlayerId.remove(newPlayer.uuid)
         val oldPlayer = state?.oldPlayer ?: newPlayer
@@ -65,7 +65,7 @@ object ServerPlayerEvent {
     }
 
     @SubscribeEvent
-    private fun onPlayerXpChange(e: PlayerXpEvent.XpChange) {
+    private fun handlePlayerXpChange(e: PlayerXpEvent.XpChange) {
         onPlayerXpChange(
             PlayerXpChangeArg(e.entity, e.amount)
         )
@@ -73,7 +73,7 @@ object ServerPlayerEvent {
     }
 
     @SubscribeEvent
-    private fun onPlayerXpLevelChange(e: PlayerXpEvent.LevelChange) {
+    private fun handlePlayerXpLevelChange(e: PlayerXpEvent.LevelChange) {
         onPlayerXpLevelChange(
             PlayerXpLevelChangeArg(e.entity, e.levels)
         )
@@ -81,7 +81,7 @@ object ServerPlayerEvent {
     }
 
     @SubscribeEvent
-    private fun onPlayerPickupXp(e: PlayerXpEvent.PickupXp) {
+    private fun handlePlayerPickupXp(e: PlayerXpEvent.PickupXp) {
         onPlayerPickupXp(
             PlayerPickupXpArg(e.entity, e.orb)
         )
@@ -89,37 +89,37 @@ object ServerPlayerEvent {
     }
 
     @SubscribeEvent
-    private fun onStartTracking(e: PlayerEvent.StartTracking) {
+    private fun handleStartTracking(e: PlayerEvent.StartTracking) {
         val player = e.entity as? ServerPlayer ?: return
         onStartTracking(PlayerTrackingArg(player, e.target))
     }
 
     @SubscribeEvent
-    private fun onStopTracking(e: PlayerEvent.StopTracking) {
+    private fun handleStopTracking(e: PlayerEvent.StopTracking) {
         val player = e.entity as? ServerPlayer ?: return
         onStopTracking(PlayerTrackingArg(player, e.target))
     }
 
     @SubscribeEvent
-    private fun onPlayerLoadFromFile(e: PlayerEvent.LoadFromFile) {
+    private fun handlePlayerLoadFromFile(e: PlayerEvent.LoadFromFile) {
         val player = e.entity as? ServerPlayer ?: return
         onPlayerLoadFromFile(PlayerFileArg(player, e.playerDirectory, e.playerUUID))
     }
 
     @SubscribeEvent
-    private fun onPlayerSaveToFile(e: PlayerEvent.SaveToFile) {
+    private fun handlePlayerSaveToFile(e: PlayerEvent.SaveToFile) {
         val player = e.entity as? ServerPlayer ?: return
         onPlayerSaveToFile(PlayerFileArg(player, e.playerDirectory, e.playerUUID))
     }
 
     @SubscribeEvent
-    private fun onItemToss(e: ItemTossEvent) {
+    private fun handleItemToss(e: ItemTossEvent) {
         val player = e.player as? ServerPlayer ?: return
         onItemToss(ItemTossArg(player, e.entity))
     }
 
     @SubscribeEvent
-    private fun onItemPickupPre(e: ItemEntityPickupEvent.Pre) {
+    private fun handleItemPickupPre(e: ItemEntityPickupEvent.Pre) {
         val player = e.player as? ServerPlayer ?: return
         val arg = PlayerItemPickupPreArg(player, e.itemEntity, e.canPickup())
         onItemPickupPre(arg)
@@ -127,7 +127,7 @@ object ServerPlayerEvent {
     }
 
     @SubscribeEvent
-    private fun onItemPickupPost(e: ItemEntityPickupEvent.Post) {
+    private fun handleItemPickupPost(e: ItemEntityPickupEvent.Post) {
         val player = e.player as? ServerPlayer ?: return
         onItemPickupPost(
             PlayerItemPickupPostArg(
@@ -140,19 +140,19 @@ object ServerPlayerEvent {
     }
 
     @SubscribeEvent
-    private fun onPlayerItemCrafted(e: PlayerEvent.ItemCraftedEvent) {
+    private fun handlePlayerItemCrafted(e: PlayerEvent.ItemCraftedEvent) {
         val player = e.entity as? ServerPlayer ?: return
         onPlayerItemCrafted(PlayerCraftedItemArg(player, e.crafting, e.inventory))
     }
 
     @SubscribeEvent
-    private fun onPlayerItemSmelted(e: PlayerEvent.ItemSmeltedEvent) {
+    private fun handlePlayerItemSmelted(e: PlayerEvent.ItemSmeltedEvent) {
         val player = e.entity as? ServerPlayer ?: return
         onPlayerItemSmelted(PlayerSmeltedItemArg(player, e.smelting, e.amountRemoved))
     }
 
     @SubscribeEvent
-    private fun onPlayerSpawnPhantoms(e: PlayerSpawnPhantomsEvent) {
+    private fun handlePlayerSpawnPhantoms(e: PlayerSpawnPhantomsEvent) {
         val player = e.entity as? ServerPlayer ?: return
         val arg = PlayerSpawnPhantomsArg(player, e.phantomsToSpawn, e.result)
         onPlayerSpawnPhantoms(arg)
@@ -162,51 +162,51 @@ object ServerPlayerEvent {
 
     // === Player Lifecycle Events ===
     @JvmField
-    val onPlayerJoin = createUnit<PlayerArg>()
+    val onPlayerJoin = createUnitEvent<PlayerArg>()
 
     @JvmField
-    val onPlayerLeave =  createUnit<PlayerArg>()
+    val onPlayerLeave =  createUnitEvent<PlayerArg>()
 
     @JvmField
-    val onAfterPlayerRespawn =  createUnit<ServerPlayerAfterRespawnArg>()
+    val onAfterPlayerRespawn =  createUnitEvent<ServerPlayerAfterRespawnArg>()
 
     @JvmField
-    val onPlayerCopy = createUnit<ServerPlayerCopyArg>()
+    val onPlayerCopy = createUnitEvent<ServerPlayerCopyArg>()
 
     // === Player XP Events ===
-    val onPlayerXpChange = createCancellableUnit<PlayerXpChangeArg>()
+    val onPlayerXpChange = createCancellableUnitEvent<PlayerXpChangeArg>()
 
-    val onPlayerXpLevelChange = createCancellableUnit<PlayerXpLevelChangeArg>()
+    val onPlayerXpLevelChange = createCancellableUnitEvent<PlayerXpLevelChangeArg>()
 
-    val onPlayerPickupXp = createCancellableUnit<PlayerPickupXpArg>()
+    val onPlayerPickupXp = createCancellableUnitEvent<PlayerPickupXpArg>()
 
-    val onStartTracking = createUnit<PlayerTrackingArg>()
+    val onStartTracking = createUnitEvent<PlayerTrackingArg>()
 
-    val onStopTracking = createUnit<PlayerTrackingArg>()
+    val onStopTracking = createUnitEvent<PlayerTrackingArg>()
 
-    val onPlayerLoadFromFile = createUnit<PlayerFileArg>()
+    val onPlayerLoadFromFile = createUnitEvent<PlayerFileArg>()
 
-    val onPlayerSaveToFile = createUnit<PlayerFileArg>()
+    val onPlayerSaveToFile = createUnitEvent<PlayerFileArg>()
 
-    val onItemToss = createUnit<ItemTossArg>()
+    val onItemToss = createUnitEvent<ItemTossArg>()
 
-    val onItemPickupPre = createUnit<PlayerItemPickupPreArg>()
+    val onItemPickupPre = createUnitEvent<PlayerItemPickupPreArg>()
 
-    val onItemPickupPost = createUnit<PlayerItemPickupPostArg>()
+    val onItemPickupPost = createUnitEvent<PlayerItemPickupPostArg>()
 
-    val onPlayerItemCrafted = createUnit<PlayerCraftedItemArg>()
+    val onPlayerItemCrafted = createUnitEvent<PlayerCraftedItemArg>()
 
-    val onPlayerItemSmelted = createUnit<PlayerSmeltedItemArg>()
+    val onPlayerItemSmelted = createUnitEvent<PlayerSmeltedItemArg>()
 
-    val onPlayerSpawnPhantoms = createUnit<PlayerSpawnPhantomsArg>()
+    val onPlayerSpawnPhantoms = createUnitEvent<PlayerSpawnPhantomsArg>()
 
     // === Item Picking Events  ===
 
     @JvmField
-    val onPickFromBlock = createFirstNotNullOfOrNull<PlayerPickFromBlockArg, ItemStack>()
+    val onPickFromBlock = createFirstNotNullOfOrNullEvent<PlayerPickFromBlockArg, ItemStack>()
 
     @JvmField
-    val onPickFromEntity = createFirstNotNullOfOrNull<PlayerPickFromEntityArg, ItemStack>()
+    val onPickFromEntity = createFirstNotNullOfOrNullEvent<PlayerPickFromEntityArg, ItemStack>()
 
     data class PlayerTrackingArg(
         val player: ServerPlayer,
@@ -254,4 +254,16 @@ object ServerPlayerEvent {
         val oldPlayer: ServerPlayer,
         val alive: Boolean
     )
+
+    private fun <T> createUnitEvent() = DelegateEvent<T, Unit> { events ->
+        { arg -> events.forEach { handler -> handler(arg) } }
+    }
+
+    private fun <T : CancellableEventArg> createCancellableUnitEvent() = CancellableDelegateEvent<T, Unit> { events ->
+        { arg -> events.forEach { handler -> handler(arg) } }
+    }
+
+    private fun <T, R> createFirstNotNullOfOrNullEvent() = DelegateEvent<T, R?> { events ->
+        { arg -> events.firstNotNullOfOrNull { handler -> handler(arg) } }
+    }
 }

@@ -17,9 +17,8 @@ import net.minecraft.world.level.block.state.BlockBehaviour
 import top.katton.Katton
 import top.katton.Katton.MOD_ID
 import top.katton.LoadState
-import top.katton.mixin.CommonBlockAccessor
-import top.katton.mixin.CommonMappedRegistryAccessor
 import top.katton.util.Event
+import top.katton.util.ReflectUtil
 import java.util.*
 import java.util.Collections.emptySet
 import java.util.concurrent.ConcurrentHashMap
@@ -94,6 +93,14 @@ enum class RegisterMode {
  * and inject intrusive holders as needed.
  */
 object KattonRegistry {
+
+    private fun isRegistryFrozen(registry: MappedRegistry<*>): Boolean {
+        return ReflectUtil.getT<Boolean>(registry, "frozen").getOrNull() ?: true
+    }
+
+    private fun setRegistryFrozen(registry: MappedRegistry<*>, frozen: Boolean) {
+        ReflectUtil.set(registry, "frozen", frozen)
+    }
 
     //这个热重载怎么这么难写啊QwQ
     //感觉会有一堆bug但是现在能运行那就先不管了吧qwq
@@ -290,7 +297,6 @@ object KattonRegistry {
         ): Item {
             @Suppress("UNCHECKED_CAST") 
             val itemRegistry = BuiltInRegistries.ITEM as MappedRegistry<Item>
-            val accessor = itemRegistry as CommonMappedRegistryAccessor
 
             val previousUnregistered = itemRegistry.unregisteredIntrusiveHolders
             val injectedUnregistered = previousUnregistered == null
@@ -298,10 +304,10 @@ object KattonRegistry {
                 itemRegistry.unregisteredIntrusiveHolders = IdentityHashMap()
             }
             
-            val savedFrozen = accessor.isFrozen
+            val savedFrozen = isRegistryFrozen(itemRegistry)
             
             return try {
-                accessor.setFrozen(false)
+                setRegistryFrozen(itemRegistry, false)
                 val item = itemBuilder()
                 val registered = Registry.register(BuiltInRegistries.ITEM, id, item)
                 
@@ -309,7 +315,7 @@ object KattonRegistry {
                 hotReloadableItems[id] = registered
                 registered
             } finally {
-                if (savedFrozen) accessor.setFrozen(true)
+                if (savedFrozen) setRegistryFrozen(itemRegistry, true)
                 if (injectedUnregistered) itemRegistry.unregisteredIntrusiveHolders = previousUnregistered
             }
         }
@@ -480,17 +486,16 @@ object KattonRegistry {
         ): MobEffect {
             @Suppress("UNCHECKED_CAST")
             val effectRegistry = BuiltInRegistries.MOB_EFFECT as MappedRegistry<MobEffect>
-            val accessor = effectRegistry as CommonMappedRegistryAccessor
-            val savedFrozen = accessor.isFrozen
+            val savedFrozen = isRegistryFrozen(effectRegistry)
 
             return try {
-                accessor.setFrozen(false)
+                setRegistryFrozen(effectRegistry, false)
                 val effect = effectBuilder()
                 val registered = Registry.register(BuiltInRegistries.MOB_EFFECT, id, effect)
                 hotReloadableEffects[id] = registered
                 registered
             } finally {
-                if (savedFrozen) accessor.setFrozen(true)
+                if (savedFrozen) setRegistryFrozen(effectRegistry, true)
             }
         }
 
@@ -589,7 +594,7 @@ object KattonRegistry {
             val existing = BuiltInRegistries.BLOCK.getOptional(id)
             if (existing.isPresent) {
                 val block = existing.get()
-                (block as CommonBlockAccessor).`katton$getBuiltInRegistryHolder`().tags = emptySet()
+                block.builtInRegistryHolder().tags = emptySet()
                 return block
             }
 
@@ -607,7 +612,6 @@ object KattonRegistry {
         ): Block {
             @Suppress("UNCHECKED_CAST")
             val blockRegistry = BuiltInRegistries.BLOCK as MappedRegistry<Block>
-            val accessor = blockRegistry as CommonMappedRegistryAccessor
 
             val previousUnregistered = blockRegistry.unregisteredIntrusiveHolders
             val injectedUnregistered = previousUnregistered == null
@@ -615,18 +619,18 @@ object KattonRegistry {
                 blockRegistry.unregisteredIntrusiveHolders = IdentityHashMap()
             }
 
-            val savedFrozen = accessor.isFrozen
+            val savedFrozen = isRegistryFrozen(blockRegistry)
 
             return try {
-                accessor.setFrozen(false)
+                setRegistryFrozen(blockRegistry, false)
                 val props = BlockBehaviour.Properties.of().setId(ResourceKey.create(Registries.BLOCK, id))
                 val block = blockBuilder(props)
                 val registered = Registry.register(BuiltInRegistries.BLOCK, id, block)
-                (registered as CommonBlockAccessor).`katton$getBuiltInRegistryHolder`().tags = emptySet()
+                registered.builtInRegistryHolder().tags = emptySet()
                 hotReloadableBlocks[id] = registered
                 registered
             } finally {
-                if (savedFrozen) accessor.setFrozen(true)
+                if (savedFrozen) setRegistryFrozen(blockRegistry, true)
                 if (injectedUnregistered) blockRegistry.unregisteredIntrusiveHolders = previousUnregistered
             }
         }
@@ -708,11 +712,23 @@ object KattonRegistry {
          */
         fun initialize() {
             if (::KATTON_ID.isInitialized) return
-            KATTON_ID = Registry.register(
-                BuiltInRegistries.DATA_COMPONENT_TYPE,
-                Identifier.fromNamespaceAndPath(MOD_ID, "id"),
-                DataComponentType.builder<String>().persistent(Codec.STRING).build()
-            )
+
+            @Suppress("UNCHECKED_CAST")
+            val componentRegistry = BuiltInRegistries.DATA_COMPONENT_TYPE as MappedRegistry<DataComponentType<*>>
+            val savedFrozen = isRegistryFrozen(componentRegistry)
+
+            try {
+                setRegistryFrozen(componentRegistry, false)
+                KATTON_ID = Registry.register(
+                    BuiltInRegistries.DATA_COMPONENT_TYPE,
+                    Identifier.fromNamespaceAndPath(MOD_ID, "id"),
+                    DataComponentType.builder<String>().persistent(Codec.STRING).build()
+                )
+            } finally {
+                if (savedFrozen) {
+                    setRegistryFrozen(componentRegistry, true)
+                }
+            }
         }
     }
 

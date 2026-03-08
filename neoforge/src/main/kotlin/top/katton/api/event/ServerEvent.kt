@@ -13,7 +13,7 @@ import net.neoforged.neoforge.event.server.ServerStoppingEvent
 import net.neoforged.neoforge.event.tick.LevelTickEvent
 import net.neoforged.neoforge.event.tick.ServerTickEvent
 import top.katton.Katton
-import top.katton.util.createUnit
+import top.katton.util.DelegateEvent
 
 @Suppress("unused")
 @EventBusSubscriber(
@@ -22,27 +22,27 @@ import top.katton.util.createUnit
 )
 object ServerEvent {
     @SubscribeEvent
-    private fun onServerStarting(e: ServerStartingEvent) {
+    private fun handleServerStarting(e: ServerStartingEvent) {
         onServerStarting(ServerArg(e.server))
     }
 
     @SubscribeEvent
-    private fun onServerStarted(e: ServerStartedEvent) {
+    private fun handleServerStarted(e: ServerStartedEvent) {
         onServerStarted(ServerArg(e.server))
     }
 
     @SubscribeEvent
-    private fun onServerStopped(e: ServerStoppedEvent) {
+    private fun handleServerStopped(e: ServerStoppedEvent) {
         onServerStopped(ServerArg(e.server))
     }
 
     @SubscribeEvent
-    private fun onServerStopping(e: ServerStoppingEvent) {
+    private fun handleServerStopping(e: ServerStoppingEvent) {
         onServerStopping(ServerArg(e.server))
     }
 
     @SubscribeEvent
-    private fun onSyncDatapackContents(e: OnDatapackSyncEvent) {
+    private fun handleSyncDatapackContents(e: OnDatapackSyncEvent) {
         val player = e.player
         if (player != null) {
             onSyncDatapackContents(SyncDatapackContentsArg(player, true))
@@ -54,87 +54,91 @@ object ServerEvent {
     }
 
     @SubscribeEvent
-    private fun onStartServerTick(e: ServerTickEvent.Pre) {
+    private fun handleStartServerTick(e: ServerTickEvent.Pre) {
         onStartServerTick(ServerTickArg(e.server))
     }
 
     @SubscribeEvent
-    private fun onEndServerTick(e: ServerTickEvent.Post) {
+    private fun handleEndServerTick(e: ServerTickEvent.Post) {
         onEndServerTick(ServerTickArg(e.server))
     }
 
     @SubscribeEvent
-    private fun onStartWorldTick(e: LevelTickEvent.Pre) {
+    private fun handleStartWorldTick(e: LevelTickEvent.Pre) {
         if (e.level is ServerLevel) {
             onStartWorldTick(WorldTickArg(e.level as ServerLevel))
         }
     }
 
     @SubscribeEvent
-    private fun onEndWorldTick(e: LevelTickEvent.Post) {
+    private fun handleEndWorldTick(e: LevelTickEvent.Post) {
         if (e.level is ServerLevel) {
             onEndWorldTick(WorldTickArg(e.level as ServerLevel))
         }
     }
 
     @SubscribeEvent
-    private fun onLevelLoad(e: LevelEvent.Load) {
+    private fun handleLevelLoad(e: LevelEvent.Load) {
         val level = e.level as? ServerLevel ?: return
         onLevelLoad(ServerLevelArg(level))
     }
 
     @SubscribeEvent
-    private fun onLevelUnload(e: LevelEvent.Unload) {
+    private fun handleLevelUnload(e: LevelEvent.Unload) {
         val level = e.level as? ServerLevel ?: return
         onLevelUnload(ServerLevelArg(level))
     }
 
     @SubscribeEvent
-    private fun onLevelSave(e: LevelEvent.Save) {
+    private fun handleLevelSave(e: LevelEvent.Save) {
         val level = e.level as? ServerLevel ?: return
         onLevelSave(ServerLevelArg(level))
     }
 
-    val onServerStarting = createUnit<ServerArg>()
+    val onServerStarting = createUnitEvent<ServerArg>()
 
-    val onServerStarted = createUnit<ServerArg>()
+    val onServerStarted = createUnitEvent<ServerArg>()
 
-    val onServerStopped = createUnit<ServerArg>()
+    val onServerStopped = createUnitEvent<ServerArg>()
 
-    val onServerStopping = createUnit<ServerArg>()
-
-    @JvmField
-    val onSyncDatapackContents = createUnit<SyncDatapackContentsArg>()
+    val onServerStopping = createUnitEvent<ServerArg>()
 
     @JvmField
-    val onStartDatapackReload = createUnit<StartDatapackReloadArg>()
+    val onSyncDatapackContents = createUnitEvent<SyncDatapackContentsArg>()
 
     @JvmField
-    val onEndDatapackReload = createUnit<EndDatapackReloadArg>()
+    val onStartDatapackReload = createUnitEvent<StartDatapackReloadArg>()
 
     @JvmField
-    val onBeforeSave = createUnit<SaveArg>()
+    val onEndDatapackReload = createUnitEvent<EndDatapackReloadArg>()
 
     @JvmField
-    val onAfterSave = createUnit<SaveArg>()
-
-    val onStartServerTick = createUnit<ServerTickArg>()
-
-    val onEndServerTick = createUnit<ServerTickArg>()
-
-    val onStartWorldTick = createUnit<WorldTickArg>()
-
-    val onEndWorldTick = createUnit<WorldTickArg>()
+    val onBeforeSave = createUnitEvent<SaveArg>()
 
     @JvmField
-    val onLevelLoad = createUnit<ServerLevelArg>()
+    val onAfterSave = createUnitEvent<SaveArg>()
+
+    val onStartServerTick = createUnitEvent<ServerTickArg>()
+
+    val onEndServerTick = createUnitEvent<ServerTickArg>()
+
+    val onStartWorldTick = createUnitEvent<WorldTickArg>()
+
+    val onEndWorldTick = createUnitEvent<WorldTickArg>()
 
     @JvmField
-    val onLevelUnload = createUnit<ServerLevelArg>()
+    val onLevelLoad = createUnitEvent<ServerLevelArg>()
 
     @JvmField
-    val onLevelSave = createUnit<ServerLevelArg>()
+    val onLevelUnload = createUnitEvent<ServerLevelArg>()
+
+    @JvmField
+    val onLevelSave = createUnitEvent<ServerLevelArg>()
 
     @JvmInline
     value class ServerLevelArg(val level: ServerLevel)
+
+    private fun <T> createUnitEvent() = DelegateEvent<T, Unit> { events ->
+        { arg -> events.forEach { handler -> handler(arg) } }
+    }
 }

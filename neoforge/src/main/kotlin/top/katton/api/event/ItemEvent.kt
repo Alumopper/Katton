@@ -7,7 +7,7 @@ import net.neoforged.fml.common.EventBusSubscriber
 import net.neoforged.neoforge.event.entity.player.PlayerInteractEvent
 import net.neoforged.neoforge.event.entity.player.UseItemOnBlockEvent
 import top.katton.Katton
-import top.katton.util.createReturnIfNot
+import top.katton.util.DelegateEvent
 
 /**
  * Item interaction events (use / useOn)
@@ -19,7 +19,7 @@ import top.katton.util.createReturnIfNot
 )
 object ItemEvent {
     @SubscribeEvent
-    private fun onUseOn(e: UseItemOnBlockEvent) {
+    private fun handleUseOn(e: UseItemOnBlockEvent) {
         if (e.level.isClientSide || e.usePhase != UseItemOnBlockEvent.UsePhase.ITEM_AFTER_BLOCK) {
             return
         }
@@ -31,7 +31,7 @@ object ItemEvent {
     }
 
     @SubscribeEvent
-    private fun onUse(e: PlayerInteractEvent.RightClickItem) {
+    private fun handleUse(e: PlayerInteractEvent.RightClickItem) {
         if (e.level.isClientSide) {
             return
         }
@@ -44,8 +44,18 @@ object ItemEvent {
     }
 
     @JvmField
-    val onUseOn = createReturnIfNot<ItemUseOnArg, InteractionResult>(InteractionResult.PASS, null)
+    val onUseOn = createReturnIfNotEvent<ItemUseOnArg, InteractionResult>(InteractionResult.PASS, null)
 
     @JvmField
-    val onUse = createReturnIfNot<ItemUseArg, InteractionResult>(InteractionResult.PASS, null)
+    val onUse = createReturnIfNotEvent<ItemUseArg, InteractionResult>(InteractionResult.PASS, null)
+
+    private fun <T, R> createReturnIfNotEvent(unexpectedValue: R, returnValue: R?) =
+        DelegateEvent<T, R?> { events ->
+            { arg ->
+                events.firstNotNullOfOrNull { handler ->
+                    val result = handler(arg)
+                    if (result != unexpectedValue) result else null
+                } ?: returnValue
+            }
+        }
 }

@@ -6,8 +6,7 @@ import net.neoforged.fml.common.EventBusSubscriber
 import net.neoforged.neoforge.event.entity.living.LivingShieldBlockEvent
 import net.neoforged.neoforge.event.entity.player.CriticalHitEvent
 import top.katton.Katton
-import top.katton.util.createAll
-import top.katton.util.createUnit
+import top.katton.util.DelegateEvent
 
 /**
  * Server entity combat events (critical hits, shield blocking, and entity combat).
@@ -21,25 +20,34 @@ import top.katton.util.createUnit
 object ServerEntityCombatEvent {
 
     @SubscribeEvent
-    private fun onCriticalHit(e: CriticalHitEvent) {
+    private fun handleCriticalHit(e: CriticalHitEvent) {
         onCriticalHit(CriticalHitArg(e.entity, e.target, e.isVanillaCritical))
     }
 
     @SubscribeEvent
-    private fun onShieldBlock(e: LivingShieldBlockEvent) {
+    private fun handleShieldBlock(e: LivingShieldBlockEvent) {
         val result = onShieldBlock(ShieldBlockArg(e.entity, e.damageSource, e.blockedDamage, e.originalBlock))
-        if(result.isSuccess){
-            e.blocked = result.getOrNull()!!
+        val blocked = result.getOrNull()
+        if (blocked != null) {
+            e.blocked = blocked
         }
     }
 
     // === Entity Combat ===
     @JvmField
-    val onAfterKilledOtherEntity = createUnit<AfterKilledOtherEntityArg>()
+    val onAfterKilledOtherEntity = createUnitEvent<AfterKilledOtherEntityArg>()
 
     // === Critical Hits ===
-    val onCriticalHit = createUnit<CriticalHitArg>()
+    val onCriticalHit = createUnitEvent<CriticalHitArg>()
 
     // === Shield Block ===
-    val onShieldBlock = createAll<ShieldBlockArg>()
+    val onShieldBlock = createAllEvent<ShieldBlockArg>()
+
+    private fun <T> createUnitEvent() = DelegateEvent<T, Unit> { events ->
+        { arg -> events.forEach { handler -> handler(arg) } }
+    }
+
+    private fun <T> createAllEvent() = DelegateEvent<T, Boolean> { events ->
+        { arg -> events.all { handler -> handler(arg) } }
+    }
 }

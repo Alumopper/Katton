@@ -10,9 +10,9 @@ import net.neoforged.bus.api.SubscribeEvent
 import net.neoforged.fml.common.EventBusSubscriber
 import net.neoforged.neoforge.event.entity.living.MobEffectEvent
 import top.katton.Katton
+import top.katton.util.CancellableDelegateEvent
 import top.katton.util.CancellableEventArg
-import top.katton.util.createCancellableUnit
-import top.katton.util.createUnit
+import top.katton.util.DelegateEvent
 import top.katton.util.setCancel
 
 @EventBusSubscriber(
@@ -22,21 +22,21 @@ import top.katton.util.setCancel
 object ServerMobEffectEvent {
 
     @SubscribeEvent
-    private fun onMobEffectApplicable(e: MobEffectEvent.Applicable) {
+    private fun handleMobEffectApplicable(e: MobEffectEvent.Applicable) {
         onMobEffectApplicable(
             MobEffectApplicableArg(e.entity, e.effectInstance)
         )
     }
 
     @SubscribeEvent
-    private fun onMobEffectAdd(e: MobEffectEvent.Added) {
+    private fun handleMobEffectAdd(e: MobEffectEvent.Added) {
         onMobEffectAdd(
             MobEffectAddArg(e.entity, e.effectInstance, e.effectSource)
         )
     }
 
     @SubscribeEvent
-    private fun onMobEffectRemove(e: MobEffectEvent.Remove) {
+    private fun handleMobEffectRemove(e: MobEffectEvent.Remove) {
         onMobEffectRemove(
             MobEffectRemoveArg(e.entity, e.effectInstance)
         )
@@ -44,20 +44,20 @@ object ServerMobEffectEvent {
     }
 
     @SubscribeEvent
-    private fun onMobEffectExpire(e: MobEffectEvent.Expired) {
+    private fun handleMobEffectExpire(e: MobEffectEvent.Expired) {
         onMobEffectExpire(
             MobEffectExpireArg(e.entity, e.effectInstance)
         )
         setCancel(onMobEffectExpire, e)
     }
 
-    val onMobEffectApplicable = createUnit<MobEffectApplicableArg>()
+    val onMobEffectApplicable = createUnitEvent<MobEffectApplicableArg>()
 
-    val onMobEffectAdd = createUnit<MobEffectAddArg>()
+    val onMobEffectAdd = createUnitEvent<MobEffectAddArg>()
 
-    val onMobEffectRemove = createCancellableUnit<MobEffectRemoveArg>()
+    val onMobEffectRemove = createCancellableUnitEvent<MobEffectRemoveArg>()
 
-    val onMobEffectExpire = createCancellableUnit<MobEffectExpireArg>()
+    val onMobEffectExpire = createCancellableUnitEvent<MobEffectExpireArg>()
 
     data class MobEffectApplicableArg(
         val entity: LivingEntity,
@@ -79,5 +79,13 @@ object ServerMobEffectEvent {
         val entity: LivingEntity,
         val effect: MobEffectInstance?
     ): CancellableEventArg()
+
+    private fun <T> createUnitEvent() = DelegateEvent<T, Unit> { events ->
+        { arg -> events.forEach { handler -> handler(arg) } }
+    }
+
+    private fun <T : CancellableEventArg> createCancellableUnitEvent() = CancellableDelegateEvent<T, Unit> { events ->
+        { arg -> events.forEach { handler -> handler(arg) } }
+    }
 
 }

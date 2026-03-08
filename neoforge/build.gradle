@@ -8,6 +8,8 @@ plugins {
 version = mod_version
 group = mod_group_id
 
+def commonMainSourceSet = project(':common').sourceSets.main
+
 repositories {
     // Add here additional repositories if required by some of the dependencies below.
 }
@@ -81,6 +83,7 @@ neoForge {
         // multi mod projects should define one per mod
         "${mod_id}" {
             sourceSet(sourceSets.main)
+            sourceSet(commonMainSourceSet)
         }
     }
 }

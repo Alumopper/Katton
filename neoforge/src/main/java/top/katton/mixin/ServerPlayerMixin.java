@@ -21,6 +21,7 @@ import java.util.List;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.llamalad7.mixinextras.sugar.Cancellable;
+import com.llamalad7.mixinextras.sugar.Local;
 import com.mojang.datafixers.util.Either;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -81,7 +82,7 @@ abstract class ServerPlayerMixin extends LivingEntityMixin2 {
     }
 
     @SuppressWarnings("NullableProblems")
-    @WrapOperation(method = "startSleepInBed", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/level/block/state/BlockState;getValue(Lnet/minecraft/world/level/block/state/properties/Property;)Ljava/lang/Comparable;"))
+    @WrapOperation(method = "lambda$startSleepInBed$0", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/level/block/state/BlockState;getValue(Lnet/minecraft/world/level/block/state/properties/Property;)Ljava/lang/Comparable;"))
     private Comparable<?> redirectSleepDirection(BlockState instance, Property<Direction> property, Operation<Comparable<Direction>> original, BlockPos pos, @Cancellable CallbackInfoReturnable<Either<Player.BedSleepingProblem, Unit>> cir) {
         Direction initial = (Direction) (instance.hasProperty(property) ? original.call(instance, property) : null);
         var dir = LivingBehaviorEvent.onModifySleepingDirection.invoke(new ModifySleepingDirectionArg((LivingEntity) (Object) this, pos, initial)).getOrNull();
@@ -93,16 +94,16 @@ abstract class ServerPlayerMixin extends LivingEntityMixin2 {
         return dir;
     }
 
-    @WrapOperation(method = "startSleepInBed", at = @At(value = "INVOKE", target = "Lnet/minecraft/server/level/ServerPlayer;setRespawnPosition(Lnet/minecraft/server/level/ServerPlayer$RespawnConfig;Z)V"))
+    @WrapOperation(method = "lambda$startSleepInBed$0", at = @At(value = "INVOKE", target = "Lnet/minecraft/server/level/ServerPlayer;setRespawnPosition(Lnet/minecraft/server/level/ServerPlayer$RespawnConfig;Z)V"))
     private void onSetSpawnPoint(ServerPlayer player, ServerPlayer.RespawnConfig spawnPoint, boolean sendMessage, Operation<Void> original) {
         if (LivingBehaviorEvent.onAllowSettingSpawn.invoke(new AllowSettingSpawnArg(player, spawnPoint.respawnData().pos())).emptyOrTrue()) {
             original.call(player, spawnPoint, sendMessage);
         }
     }
 
-    @Redirect(method = "startSleepInBed", at = @At(value = "INVOKE", target = "Ljava/util/List;isEmpty()Z"))
-    private boolean hasNoMonstersNearby(List<Monster> monsters, BlockPos pos) {
-        boolean vanillaResult = monsters.isEmpty();
+    @WrapOperation(method = "lambda$startSleepInBed$0", at = @At(value = "INVOKE", target = "Ljava/util/List;isEmpty()Z"))
+    private boolean hasNoMonstersNearby(List<Monster> monsters, Operation<Boolean> operation, @Local(argsOnly = true) BlockPos pos) {
+        boolean vanillaResult = operation.call(monsters);
         var result = LivingBehaviorEvent.onAllowNearbyMonsters.invoke(new AllowNearbyMonstersArg((Player) (Object) this, pos, vanillaResult));
         return result.emptyOrMatch(e -> e.allowAction(vanillaResult));
     }

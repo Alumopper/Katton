@@ -12,7 +12,7 @@ import net.minecraft.world.effect.MobEffect
 import net.minecraft.world.item.Item
 import net.minecraft.world.level.block.Block
 import net.minecraft.world.level.block.state.BlockBehaviour
-import top.katton.mixin.CommonMappedRegistryAccessor
+import top.katton.util.ReflectUtil
 import java.util.*
 import java.util.concurrent.ConcurrentLinkedQueue
 
@@ -21,6 +21,14 @@ import java.util.concurrent.ConcurrentLinkedQueue
  * Handles receiving item sync packets and registering items on client.
  */
 abstract class ClientNetworking {
+
+    private fun isRegistryFrozen(registry: MappedRegistry<*>): Boolean {
+        return ReflectUtil.getT<Boolean>(registry, "frozen").getOrNull() ?: true
+    }
+
+    private fun setRegistryFrozen(registry: MappedRegistry<*>, frozen: Boolean) {
+        ReflectUtil.set(registry, "frozen", frozen)
+    }
 
     /**
      * Queue of items waiting to be registered.
@@ -102,7 +110,6 @@ abstract class ClientNetworking {
     protected fun registerNewBlock(blockData: BlockSyncPacket.BlockData) {
         @Suppress("UNCHECKED_CAST")
         val blockRegistry = BuiltInRegistries.BLOCK as MappedRegistry<Block>
-        val accessor = blockRegistry as CommonMappedRegistryAccessor
 
         // Inject unregisteredIntrusiveHolders if not present (same as item registration)
         val previousUnregistered = blockRegistry.unregisteredIntrusiveHolders
@@ -111,10 +118,10 @@ abstract class ClientNetworking {
             blockRegistry.unregisteredIntrusiveHolders = IdentityHashMap()
         }
 
-        val savedFrozen = accessor.isFrozen
+        val savedFrozen = isRegistryFrozen(blockRegistry)
 
         try {
-            accessor.setFrozen(false)
+            setRegistryFrozen(blockRegistry, false)
             val properties = BlockBehaviour.Properties.of()
                 .setId(ResourceKey.create(Registries.BLOCK, blockData.id))
                 .strength(blockData.destroyTime)
@@ -124,7 +131,7 @@ abstract class ClientNetworking {
             val block = Block(properties)
             Registry.register(BuiltInRegistries.BLOCK, blockData.id, block)
         } finally {
-            if (savedFrozen) accessor.setFrozen(true)
+            if (savedFrozen) setRegistryFrozen(blockRegistry, true)
             if (injectedUnregistered) blockRegistry.unregisteredIntrusiveHolders = previousUnregistered
         }
     }
@@ -149,15 +156,14 @@ abstract class ClientNetworking {
     protected fun registerNewEffect(effectData: EffectSyncPacket.EffectData) {
         @Suppress("UNCHECKED_CAST")
         val effectRegistry = BuiltInRegistries.MOB_EFFECT as MappedRegistry<MobEffect>
-        val accessor = effectRegistry as CommonMappedRegistryAccessor
-        val savedFrozen = accessor.isFrozen
+        val savedFrozen = isRegistryFrozen(effectRegistry)
 
         try {
-            accessor.setFrozen(false)
+            setRegistryFrozen(effectRegistry, false)
             val effect = object : MobEffect(effectData.category, effectData.color) {}
             Registry.register(BuiltInRegistries.MOB_EFFECT, effectData.id, effect)
         } finally {
-            if (savedFrozen) accessor.setFrozen(true)
+            if (savedFrozen) setRegistryFrozen(effectRegistry, true)
         }
     }
 
@@ -221,7 +227,6 @@ abstract class ClientNetworking {
     protected fun registerNewItem(itemData: ItemSyncPacket.ItemData) {
         @Suppress("UNCHECKED_CAST")
         val itemRegistry = BuiltInRegistries.ITEM as MappedRegistry<Item>
-        val accessor = itemRegistry as CommonMappedRegistryAccessor
 
         // Inject unregisteredIntrusiveHolders if not present
         val previousUnregistered = itemRegistry.unregisteredIntrusiveHolders
@@ -230,11 +235,11 @@ abstract class ClientNetworking {
             itemRegistry.unregisteredIntrusiveHolders = IdentityHashMap()
         }
 
-        val savedFrozen = accessor.isFrozen
+        val savedFrozen = isRegistryFrozen(itemRegistry)
 
         try {
             // Temporarily unfreeze registry
-            accessor.setFrozen(false)
+            setRegistryFrozen(itemRegistry, false)
 
             // Create item properties with ResourceKey set
             val props = Item.Properties()
@@ -255,7 +260,7 @@ abstract class ClientNetworking {
 
         } finally {
             // Restore registry state
-            if (savedFrozen) accessor.setFrozen(true)
+            if (savedFrozen) setRegistryFrozen(itemRegistry, true)
             if (injectedUnregistered) itemRegistry.unregisteredIntrusiveHolders = previousUnregistered
         }
     }

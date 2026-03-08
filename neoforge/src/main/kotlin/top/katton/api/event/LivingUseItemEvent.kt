@@ -5,8 +5,9 @@ import net.neoforged.bus.api.SubscribeEvent
 import net.neoforged.fml.common.EventBusSubscriber
 import net.neoforged.neoforge.event.entity.living.LivingEntityUseItemEvent
 import top.katton.Katton
-import top.katton.util.createCancellableUnit
-import top.katton.util.createUnit
+import top.katton.util.CancellableDelegateEvent
+import top.katton.util.CancellableEventArg
+import top.katton.util.DelegateEvent
 import top.katton.util.setCancel
 
 @Suppress("unused")
@@ -17,37 +18,45 @@ import top.katton.util.setCancel
 object LivingUseItemEvent {
 
     @SubscribeEvent
-    private fun onUseItemStart(e: LivingEntityUseItemEvent.Start) {
+    private fun handleUseItemStart(e: LivingEntityUseItemEvent.Start) {
         val arg = LivingUseItemStartArg(e.entity, e.item, e.hand, e.duration)
         onUseItemStart(arg)
         setCancel(onUseItemStart, e)
     }
 
     @SubscribeEvent
-    private fun onUseItemTick(e: LivingEntityUseItemEvent.Tick) {
+    private fun handleUseItemTick(e: LivingEntityUseItemEvent.Tick) {
         val arg = LivingUseItemTickArg(e.entity, e.item, e.duration)
         onUseItemTick(arg)
         setCancel(onUseItemTick, e)
     }
 
     @SubscribeEvent
-    private fun onUseItemStop(e: LivingEntityUseItemEvent.Stop) {
+    private fun handleUseItemStop(e: LivingEntityUseItemEvent.Stop) {
         val arg = LivingUseItemStopArg(e.entity, e.item, e.duration)
         onUseItemStop(arg)
         setCancel(onUseItemStop, e)
     }
 
     @SubscribeEvent
-    private fun onUseItemFinish(e: LivingEntityUseItemEvent.Finish) {
+    private fun handleUseItemFinish(e: LivingEntityUseItemEvent.Finish) {
         val arg = LivingUseItemFinishArg(e.entity, e.item, e.duration, e.resultStack)
         onUseItemFinish(arg)
     }
 
-    val onUseItemStart = createCancellableUnit<LivingUseItemStartArg>()
+    val onUseItemStart = createCancellableUnitEvent<LivingUseItemStartArg>()
 
-    val onUseItemTick = createCancellableUnit<LivingUseItemTickArg>()
+    val onUseItemTick = createCancellableUnitEvent<LivingUseItemTickArg>()
 
-    val onUseItemStop = createCancellableUnit<LivingUseItemStopArg>()
+    val onUseItemStop = createCancellableUnitEvent<LivingUseItemStopArg>()
 
-    val onUseItemFinish = createUnit<LivingUseItemFinishArg>()
+    val onUseItemFinish = createUnitEvent<LivingUseItemFinishArg>()
+
+    private fun <T> createUnitEvent() = DelegateEvent<T, Unit> { events ->
+        { arg -> events.forEach { handler -> handler(arg) } }
+    }
+
+    private fun <T : CancellableEventArg> createCancellableUnitEvent() = CancellableDelegateEvent<T, Unit> { events ->
+        { arg -> events.forEach { handler -> handler(arg) } }
+    }
 }

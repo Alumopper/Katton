@@ -3,20 +3,13 @@
   "package": "top.katton.mixin",
   "compatibilityLevel": "JAVA_21",
   "mixins": [
-    "BlockAccessor",
-    "BlockBehaviourPropertiesAccessor",
     "ChunkHolderMixin",
     "ClientConfigurationPacketListenerImplMixin",
     "DataComponentInitializersMixin",
     "EnchantmentBuilderAccessor",
     "EnchantmentBuilderMixin",
-    "EnderManMixin",
     "EntityMixin",
-    "EntityTeleportMixin",
-    "ExplosionMixin",
-    "ItemStackMixin",
     "LevelChunkMixin",
-    "LivingEntityFallMixin",
     "LivingEntityMixin",
     "LivingEntityMixin2",
     "LootPoolAccessor",
@@ -24,7 +17,6 @@
     "LootTableAccessor",
     "LootTableBuilderMixin",
     "LootTableMixin",
-    "MappedRegistryAccessor",
     "MinecraftServerMixin",
     "PlayerListMixin",
     "PlayerMixin",
@@ -33,8 +25,7 @@
     "ResourceManagerRegistryLoadTaskMixin",
     "ServerConfigurationPacketListenerImplMixin",
     "ServerGamePacketListenerImplMixin",
-    "ServerPlayerMixin",
-    "SimpleJsonResourceReloadListenerMixin"
+    "ServerPlayerMixin"
   ],
   "injectors": {
     "defaultRequire": 1

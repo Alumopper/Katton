@@ -1,8 +1,0 @@
-modLoader="neoforge"
-loaderVersion="[1.0,)"
-license="MIT"
-
-[[mods]]
-modId="kts4mc"
-version="1.0.0"
-displayName="Katton"

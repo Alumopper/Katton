@@ -5,12 +5,13 @@ package top.katton.api.mod
 import net.minecraft.core.registries.BuiltInRegistries
 import net.minecraft.resources.Identifier
 import net.minecraft.world.level.block.Block
+import net.minecraft.world.level.block.state.BlockBehaviour
 import net.minecraft.world.level.block.state.BlockState
 import net.minecraft.world.level.material.MapColor
 import org.jetbrains.annotations.ApiStatus
-import top.katton.mixin.CommonBlockBehaviourPropertiesAccessor
-import top.katton.mixin.CommonBlockAccessor
 import top.katton.registry.id
+import top.katton.util.ReflectUtil
+import java.util.function.ToIntFunction
 
 /**
  * Configuration for modifying existing block properties.
@@ -144,61 +145,70 @@ fun modifyBlock(blockId: Identifier, configure: BlockModificationConfig.() -> Un
 }
 
 private fun applyBlockModifications(block: Block, config: BlockModificationConfig) {
-    val blockAccessor = block as CommonBlockAccessor
-    val properties = blockAccessor.`katton$getProperties`()
-    val propsAccessor = properties as CommonBlockBehaviourPropertiesAccessor
-    
+    val properties = block.properties()
+
     config.hardness?.let { hardness ->
-        propsAccessor.`katton$setDestroyTime`(hardness)
+        properties.destroyTime(hardness)
     }
-    
+
     config.resistance?.let { resistance ->
-        propsAccessor.`katton$setExplosionResistance`(resistance)
+        properties.explosionResistance(resistance)
     }
-    
+
     config.requiresCorrectTool?.let { requiresTool ->
-        propsAccessor.`katton$setRequiresCorrectToolForDrops`(requiresTool)
+        setPropertyField(properties, "requiresCorrectToolForDrops", requiresTool)
     }
-    
+
     config.friction?.let { friction ->
-        propsAccessor.`katton$setFriction`(friction)
+        properties.friction(friction)
     }
-    
+
     config.speedFactor?.let { speedFactor ->
-        propsAccessor.`katton$setSpeedFactor`(speedFactor)
+        properties.speedFactor(speedFactor)
     }
-    
+
     config.jumpFactor?.let { jumpFactor ->
-        propsAccessor.`katton$setJumpFactor`(jumpFactor)
+        properties.jumpFactor(jumpFactor)
     }
-    
+
     config.lightEmission?.let { lightEmission ->
-        propsAccessor.`katton$setLightEmission`(lightEmission)
+        properties.lightLevel(ToIntFunction { lightEmission })
     }
-    
+
     config.mapColor?.let { mapColor ->
-        propsAccessor.`katton$setMapColor`(mapColor)
+        properties.mapColor(mapColor)
     }
-    
+
     config.canOcclude?.let { canOcclude ->
-        propsAccessor.`katton$setCanOcclude`(canOcclude)
+        setPropertyField(properties, "canOcclude", canOcclude)
     }
-    
+
     config.isAir?.let { isAir ->
-        propsAccessor.`katton$setIsAir`(isAir)
+        setPropertyField(properties, "isAir", isAir)
     }
-    
+
     config.hasCollision?.let { hasCollision ->
-        propsAccessor.`katton$setHasCollision`(hasCollision)
+        setPropertyField(properties, "hasCollision", hasCollision)
     }
-    
+
     config.isSuffocating?.let { isSuffocating ->
-        propsAccessor.`katton$setIsSuffocating`(isSuffocating)
+        properties.isSuffocating(statePredicate(isSuffocating))
     }
-    
+
     config.isViewBlocking?.let { isViewBlocking ->
-        propsAccessor.`katton$setIsViewBlocking`(isViewBlocking)
+        properties.isViewBlocking(statePredicate(isViewBlocking))
     }
+}
+
+private fun setPropertyField(properties: BlockBehaviour.Properties, fieldName: String, value: Any) {
+    val result = ReflectUtil.set(properties, fieldName, value)
+    if (result.isFailure) {
+        throw IllegalStateException("Failed to set BlockBehaviour.Properties.$fieldName")
+    }
+}
+
+private fun statePredicate(value: Boolean): BlockBehaviour.StatePredicate {
+    return BlockBehaviour.StatePredicate { _, _, _ -> value }
 }
 
 /**
