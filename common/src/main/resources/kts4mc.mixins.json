@@ -1,0 +1,16 @@
+{
+	"required": true,
+	"package": "top.katton.mixin",
+	"compatibilityLevel": "JAVA_21",
+	"mixins": [
+		"CommonBlockAccessor",
+		"CommonBlockBehaviourPropertiesAccessor",
+		"CommonMappedRegistryAccessor"
+	],
+	"injectors": {
+		"defaultRequire": 1
+	},
+	"overwrites": {
+		"requireAnnotations": true
+	}
+}

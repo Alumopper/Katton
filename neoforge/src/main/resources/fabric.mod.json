@@ -1,0 +1,43 @@
+{
+	"schemaVersion": 1,
+	"id": "katton",
+	"version": "${version}",
+	"name": "Katton",
+	"description": "Add hot-reloadable kotlin script support to Minecraft.",
+	"authors": [
+		"Alumopper"
+	],
+	"contact": {
+		"homepage": "https://fabricmc.net/",
+		"sources": "https://github.com/FabricMC/fabric-example-mod"
+	},
+	"license": "CC0-1.0",
+	"icon": "assets/kts4mc/logo.png",
+	"environment": "*",
+	"entrypoints": {
+		"main": [
+			{
+				"value": "top.katton.Katton"
+			}
+		],
+		"client": [
+			{
+				"value": "top.katton.KattonClient"
+			}
+		]
+	},
+	"mixins": [
+		"kts4mc.mixins.json",
+		{
+			"config": "kts4mc.client.mixins.json",
+			"environment": "client"
+		}
+	],
+	"depends": {
+		"fabricloader": ">=0.18.4",
+		"minecraft": ">=26.1-alpha.6",
+		"java": ">=25",
+		"fabric-api": "*"
+	},
+	"accessWidener": "katton.accesswidener"
+}

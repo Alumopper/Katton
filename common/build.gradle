@@ -1,0 +1,45 @@
+apply plugin: 'org.jetbrains.kotlin.jvm'
+apply plugin: 'maven-publish'
+apply plugin: 'net.fabricmc.fabric-loom'
+
+group = 'top.katton'
+version = '1.0.0'
+
+repositories {
+    mavenCentral()
+}
+
+loom {
+    accessWidenerPath = file("src/main/resources/katton.accesswidener")
+}
+
+dependencies {
+    compileOnly 'org.jetbrains.kotlin:kotlin-compiler-embeddable'
+    compileOnly 'org.jetbrains.kotlin:kotlin-daemon-embeddable'
+    compileOnly 'org.jetbrains.kotlin:kotlin-reflect'
+    compileOnly 'org.jetbrains.kotlin:kotlin-script-runtime'
+    compileOnly 'org.jetbrains.kotlin:kotlin-scripting-common'
+    compileOnly 'org.jetbrains.kotlin:kotlin-scripting-compiler-embeddable'
+    compileOnly 'org.jetbrains.kotlin:kotlin-scripting-compiler-impl-embeddable'
+    compileOnly 'org.jetbrains.kotlin:kotlin-scripting-jvm'
+    compileOnly 'org.jetbrains.kotlin:kotlin-scripting-jvm-host'
+    compileOnly 'org.jetbrains.kotlin:kotlin-stdlib'
+    compileOnly "org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm:1.8.0"
+    compileOnly "org.jetbrains.kotlinx:kotlinx-coroutines-jdk8:1.8.0"
+    compileOnly "net.bytebuddy:byte-buddy:1.17.8"
+    compileOnly "net.bytebuddy:byte-buddy-agent:1.17.8"
+    compileOnly "org.jetbrains:annotations:26.0.2"
+    compileOnly "org.ow2.asm:asm:9.9.1"
+
+    // To change the versions see the gradle.properties file
+    minecraft "com.mojang:minecraft:${project.minecraft_version}"
+    
+    // Fabric API for common module
+    compileOnly "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
+}
+
+
+java {
+    withJavadocJar()
+    withSourcesJar()
+}

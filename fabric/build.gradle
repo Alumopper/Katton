@@ -1,0 +1,73 @@
+buildscript {
+    repositories {
+        mavenCentral()
+        maven { url 'https://maven.fabricmc.net/' }
+    }
+    dependencies {
+        classpath "net.fabricmc:fabric-loom:${loom_version}"
+    }
+}
+
+apply plugin: 'net.fabricmc.fabric-loom'
+apply plugin: 'org.jetbrains.kotlin.jvm'
+
+version = project.mod_version
+group = project.maven_group
+
+repositories {
+    mavenCentral()
+    maven { url 'https://maven.fabricmc.net/' }
+}
+
+loom {
+    mods {
+        "kts4mc" {
+            sourceSet sourceSets.main
+        }
+    }
+    accessWidenerPath = file("src/main/resources/katton.accesswidener")
+}
+
+dependencies {
+    include(implementation('org.jetbrains.kotlin:kotlin-compiler-embeddable'))
+    include(implementation('org.jetbrains.kotlin:kotlin-daemon-embeddable'))
+    include(implementation('org.jetbrains.kotlin:kotlin-reflect'))
+    include(implementation('org.jetbrains.kotlin:kotlin-script-runtime'))
+    include(implementation('org.jetbrains.kotlin:kotlin-scripting-common'))
+    include(implementation('org.jetbrains.kotlin:kotlin-scripting-compiler-embeddable'))
+    include(implementation('org.jetbrains.kotlin:kotlin-scripting-compiler-impl-embeddable'))
+    include(implementation('org.jetbrains.kotlin:kotlin-scripting-jvm'))
+    include(implementation('org.jetbrains.kotlin:kotlin-scripting-jvm-host'))
+    include(implementation('org.jetbrains.kotlin:kotlin-stdlib'))
+    include(implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm:1.8.0"))
+    include(implementation("org.jetbrains.kotlinx:kotlinx-coroutines-jdk8:1.8.0"))
+    include(implementation("net.bytebuddy:byte-buddy:1.17.8"))
+    include(implementation("net.bytebuddy:byte-buddy-agent:1.17.8"))
+    include(implementation("org.jetbrains:annotations:26.0.2"))
+
+    implementation project(':common')
+
+    minecraft "com.mojang:minecraft:${project.minecraft_version}"
+    // 运行时：Fabric Loader / Fabric API
+    // 这些通过 loom 配置的依赖声明（minecraft, mappings）将由 loom 处理
+    implementation "net.fabricmc:fabric-loader:${project.loader_version}"
+
+    // Fabric API. This is technically optional, but you probably want it anyway.
+    implementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
+}
+
+processResources {
+    inputs.property "version", project.version
+
+    filesMatching("fabric.mod.json") {
+        expand "version": inputs.properties.version
+    }
+}
+
+java {
+    withJavadocJar()
+    withSourcesJar()
+}
+
+// 资源放置
+

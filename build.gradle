@@ -1,10 +1,10 @@
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 plugins {
-	id 'net.fabricmc.fabric-loom' version "${loom_version}"
 	id 'maven-publish'
 	id "org.jetbrains.kotlin.jvm" version "2.3.10"
 	id "org.jetbrains.dokka" version "2.1.0"
+    id 'net.fabricmc.fabric-loom' version "${loom_version}"
 }
 
 version = project.mod_version
@@ -14,116 +14,61 @@ base {
 	archivesName = project.archives_base_name
 }
 
-repositories {
-	// Add repositories to retrieve artifacts from in here.
-	// You should only use this when depending on other mods because
-	// Loom adds the essential maven repositories to download Minecraft and libraries from automatically.
-	// See https://docs.gradle.org/current/userguide/declaring_repositories.html
-	// for more information about repositories.
-}
-
-loom {
-	splitEnvironmentSourceSets()
-
-	mods {
-		"kts4mc" {
-			sourceSet sourceSets.main
-			sourceSet sourceSets.client
-		}
-	}
-
-	accessWidenerPath = file("src/main/resources/katton.accesswidener")
-
-}
-
 dependencies {
-	include(implementation('org.jetbrains.kotlin:kotlin-compiler-embeddable'))
-	include(implementation('org.jetbrains.kotlin:kotlin-daemon-embeddable'))
-	include(implementation('org.jetbrains.kotlin:kotlin-reflect'))
-	include(implementation('org.jetbrains.kotlin:kotlin-script-runtime'))
-	include(implementation('org.jetbrains.kotlin:kotlin-scripting-common'))
-	include(implementation('org.jetbrains.kotlin:kotlin-scripting-compiler-embeddable'))
-	include(implementation('org.jetbrains.kotlin:kotlin-scripting-compiler-impl-embeddable'))
-	include(implementation('org.jetbrains.kotlin:kotlin-scripting-jvm'))
-	include(implementation('org.jetbrains.kotlin:kotlin-scripting-jvm-host'))
-	include(implementation('org.jetbrains.kotlin:kotlin-stdlib'))
-	include(implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm:1.8.0"))
-	include(implementation("org.jetbrains.kotlinx:kotlinx-coroutines-jdk8:1.8.0"))
-	include(implementation("net.bytebuddy:byte-buddy:1.17.8"))
-	include(implementation("net.bytebuddy:byte-buddy-agent:1.17.8"))
-	include(implementation("org.jetbrains:annotations:26.0.2"))
-
-	// To change the versions see the gradle.properties file
-	minecraft "com.mojang:minecraft:${project.minecraft_version}"
-	implementation "net.fabricmc:fabric-loader:${project.loader_version}"
-
-	// Fabric API. This is technically optional, but you probably want it anyway.
-	implementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
+    minecraft "com.mojang:minecraft:${project.minecraft_version}"
 }
 
-processResources {
-	inputs.property "version", project.version
+// Root build will configure Architectury Loom for subprojects that apply it
+subprojects {
+    apply plugin: 'org.jetbrains.kotlin.jvm'
+    apply plugin: 'maven-publish'
 
-	filesMatching("fabric.mod.json") {
-		expand "version": inputs.properties.version
-	}
-}
-
-dokka {
-	pluginsConfiguration {
-		html {
-			customAssets.from("src/main/resources/assets/kts4mc/logo.png")
-			footerMessage.set("(c) Alumopper")
-		}
-	}
+    repositories {
+        mavenCentral()
+    }
 }
 
 tasks.withType(JavaCompile).configureEach {
-	it.options.release = 25
+    it.options.release = 25
 }
 
 tasks.withType(KotlinCompile).all {
-	kotlinOptions {
-		jvmTarget = 25
-	}
+    kotlinOptions {
+        jvmTarget = 25
+    }
 }
 
 java {
-	// Loom will automatically attach sourcesJar to a RemapSourcesJar task and to the "build" task
-	// if it is present.
-	// If you remove this line, sources will not be generated.
-	withSourcesJar()
+    // Loom will automatically attach sourcesJar to a RemapSourcesJar task and to the "build" task
+    // if it is present.
+    // If you remove this line, sources will not be generated.
+    withSourcesJar()
 
-	sourceCompatibility = JavaVersion.VERSION_25
-	targetCompatibility = JavaVersion.VERSION_25
+    sourceCompatibility = JavaVersion.VERSION_25
+    targetCompatibility = JavaVersion.VERSION_25
 }
 
 jar {
-	inputs.property "archivesName", project.base.archivesName
+    inputs.property "archivesName", project.base.archivesName
 
-	from("LICENSE") {
-		rename { "${it}_${inputs.properties.archivesName}"}
-	}
+    from("LICENSE") {
+        rename { "${it}_${inputs.properties.archivesName}"}
+    }
 }
 
-// configure the maven publication
-publishing {
-	publications {
-		create("mavenJava", MavenPublication) {
-			artifactId = project.archives_base_name
-			from components.java
-		}
-	}
 
-	// See https://docs.gradle.org/current/userguide/publishing_maven.html for information on how to set up publishing.
-	repositories {
-		// Add repositories to publish to here.
-		// Notice: This block does NOT have the same function as the block in the top level.
-		// The repositories here will be used for publishing your artifact, not for
-		// retrieving dependencies.
-	}
+// Fabric/Architectury/Loom 配置已移动到 fabric/build.gradle 中，fabric 模块自行应用和配置 loom 插件。
+// 这样避免在根项目配置阶段尝试加载 loom 插件导致的解析问题。
+// neoforge and common are regular JVM modules
+project(':common') {
+    // common 不应用 loom，作为纯 JVM 库编译，运行时由子模块提供 Minecraft
 }
 
+project(':neoforge') {
+    // NeoForge 模块保留为普通 JVM 模块，运行时依赖 NeoForge
+}
+
+// existing tasks kept for root project
 def datapackName = 'qwq'
 def worldName = 'test'
 def datapacksDir = layout.projectDirectory.dir("Katton-Example/${datapackName}")
