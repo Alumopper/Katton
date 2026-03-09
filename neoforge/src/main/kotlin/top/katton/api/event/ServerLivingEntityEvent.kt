@@ -65,16 +65,16 @@ object ServerLivingEntityEvent {
     val onLivingHurt = createCancellableUnit<LivingHurtArg>()
 
     @JvmField
-    val onAllowDamage = createAll<ServerLivingAllowDamageArg>()
+    val onAllowDamage = createAll<AllowDamageArg>()
 
     @JvmField
-    val onAfterDamage = createUnit<ServerLivingAfterDamageArg>()
+    val onAfterDamage = createUnit<AfterDamageArg>()
 
     @JvmField
-    val onAllowDeath = createAll<ServerLivingAllowDeathArg>()
+    val onAllowDeath = createAll<AllowDeathArg>()
 
     @JvmField
-    val onAfterDeath = createUnit<ServerLivingAfterDeathArg>()
+    val onAfterDeath = createUnit<AfterDeathArg>()
 
     val onLivingDrops = createCancellableUnit<LivingDropsArg>()
 

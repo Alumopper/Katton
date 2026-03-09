@@ -7,7 +7,7 @@ import net.neoforged.fml.common.EventBusSubscriber
 import net.neoforged.neoforge.event.entity.player.PlayerInteractEvent
 import net.neoforged.neoforge.event.entity.player.UseItemOnBlockEvent
 import top.katton.Katton
-import top.katton.util.DelegateEvent
+import top.katton.util.createReturnIfNot
 
 /**
  * Item interaction events (use / useOn)
@@ -44,18 +44,8 @@ object ItemEvent {
     }
 
     @JvmField
-    val onUseOn = createReturnIfNotEvent<ItemUseOnArg, InteractionResult>(InteractionResult.PASS, null)
+    val onUseOn = createReturnIfNot<ItemUseOnArg, InteractionResult>(InteractionResult.PASS, null)
 
     @JvmField
-    val onUse = createReturnIfNotEvent<ItemUseArg, InteractionResult>(InteractionResult.PASS, null)
-
-    private fun <T, R> createReturnIfNotEvent(unexpectedValue: R, returnValue: R?) =
-        DelegateEvent<T, R?> { events ->
-            { arg ->
-                events.firstNotNullOfOrNull { handler ->
-                    val result = handler(arg)
-                    if (result != unexpectedValue) result else null
-                } ?: returnValue
-            }
-        }
+    val onUse = createReturnIfNot<ItemUseArg, InteractionResult>(InteractionResult.PASS, null)
 }

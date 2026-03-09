@@ -10,9 +10,9 @@ import net.neoforged.bus.api.SubscribeEvent
 import net.neoforged.fml.common.EventBusSubscriber
 import net.neoforged.neoforge.event.entity.living.MobEffectEvent
 import top.katton.Katton
-import top.katton.util.CancellableDelegateEvent
 import top.katton.util.CancellableEventArg
-import top.katton.util.DelegateEvent
+import top.katton.util.createCancellableUnit
+import top.katton.util.createUnit
 import top.katton.util.setCancel
 
 @EventBusSubscriber(
@@ -51,13 +51,13 @@ object ServerMobEffectEvent {
         setCancel(onMobEffectExpire, e)
     }
 
-    val onMobEffectApplicable = createUnitEvent<MobEffectApplicableArg>()
+    val onMobEffectApplicable = createUnit<MobEffectApplicableArg>()
 
-    val onMobEffectAdd = createUnitEvent<MobEffectAddArg>()
+    val onMobEffectAdd = createUnit<MobEffectAddArg>()
 
-    val onMobEffectRemove = createCancellableUnitEvent<MobEffectRemoveArg>()
+    val onMobEffectRemove = createCancellableUnit<MobEffectRemoveArg>()
 
-    val onMobEffectExpire = createCancellableUnitEvent<MobEffectExpireArg>()
+    val onMobEffectExpire = createCancellableUnit<MobEffectExpireArg>()
 
     data class MobEffectApplicableArg(
         val entity: LivingEntity,
@@ -79,13 +79,5 @@ object ServerMobEffectEvent {
         val entity: LivingEntity,
         val effect: MobEffectInstance?
     ): CancellableEventArg()
-
-    private fun <T> createUnitEvent() = DelegateEvent<T, Unit> { events ->
-        { arg -> events.forEach { handler -> handler(arg) } }
-    }
-
-    private fun <T : CancellableEventArg> createCancellableUnitEvent() = CancellableDelegateEvent<T, Unit> { events ->
-        { arg -> events.forEach { handler -> handler(arg) } }
-    }
 
 }

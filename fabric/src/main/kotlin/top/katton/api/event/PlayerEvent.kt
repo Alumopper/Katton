@@ -22,7 +22,7 @@ object PlayerEvent {
         }
 
         BlockEvents.USE_WITHOUT_ITEM.register { a, b, c, d, e ->
-            onUseWithoutItem(UseWithoutItemArg(a, b, c, d, e)).getOrElse { InteractionResult.PASS }
+            onUseWithoutItem(UseWithoutItemOnArg(a, b, c, d, e)).getOrElse { InteractionResult.PASS }
         }
 
         AttackBlockCallback.EVENT.register { a, b, c, d, e ->
@@ -48,7 +48,7 @@ object PlayerEvent {
 
     val onUseItemOn = createReturnIfNot<UseItemOnArg, InteractionResult>(InteractionResult.PASS)
 
-    val onUseWithoutItem = createReturnIfNot<UseWithoutItemArg, InteractionResult>(InteractionResult.PASS)
+    val onUseWithoutItem = createReturnIfNot<UseWithoutItemOnArg, InteractionResult>(InteractionResult.PASS)
 
     val onAttackBlock = createReturnIfNot<PlayerAttackBlockArg, InteractionResult>(InteractionResult.PASS)
 

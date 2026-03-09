@@ -8,6 +8,8 @@ import top.katton.Katton
 import top.katton.util.CancellableDelegateEvent
 import top.katton.util.CancellableEventArg
 import top.katton.util.DelegateEvent
+import top.katton.util.createCancellableUnit
+import top.katton.util.createUnit
 import top.katton.util.setCancel
 
 @Suppress("unused")
@@ -44,19 +46,11 @@ object LivingUseItemEvent {
         onUseItemFinish(arg)
     }
 
-    val onUseItemStart = createCancellableUnitEvent<LivingUseItemStartArg>()
+    val onUseItemStart = createCancellableUnit<LivingUseItemStartArg>()
 
-    val onUseItemTick = createCancellableUnitEvent<LivingUseItemTickArg>()
+    val onUseItemTick = createCancellableUnit<LivingUseItemTickArg>()
 
-    val onUseItemStop = createCancellableUnitEvent<LivingUseItemStopArg>()
+    val onUseItemStop = createCancellableUnit<LivingUseItemStopArg>()
 
-    val onUseItemFinish = createUnitEvent<LivingUseItemFinishArg>()
-
-    private fun <T> createUnitEvent() = DelegateEvent<T, Unit> { events ->
-        { arg -> events.forEach { handler -> handler(arg) } }
-    }
-
-    private fun <T : CancellableEventArg> createCancellableUnitEvent() = CancellableDelegateEvent<T, Unit> { events ->
-        { arg -> events.forEach { handler -> handler(arg) } }
-    }
+    val onUseItemFinish = createUnit<LivingUseItemFinishArg>()
 }

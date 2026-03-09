@@ -16,7 +16,7 @@ import top.katton.network.ClientNetworkingFabric;
 @SuppressWarnings("UnstableApiUsage")
 @Mixin(ClientRegistrySyncHandler.class)
 public class ClientRegistrySyncHandlerMixin {
-    
+
     /**
      * Injects at the start of receivePacket method.
      * Processes any pending Katton item registrations before Fabric's sync check.

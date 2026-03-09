@@ -11,39 +11,39 @@ object ServerMessageEvent {
 
     fun initialize() {
         ServerMessageEvents.ALLOW_CHAT_MESSAGE.register { a, b, c ->
-            onAllowChatMessage(ServerAllowChatMessageArg(a, b, c)).getOrElse { true }
+            onAllowChatMessage(AllowChatMessageArg(a, b, c)).getOrElse { true }
         }
 
         ServerMessageEvents.ALLOW_GAME_MESSAGE.register { a, b, c ->
-            onAllowGameMessage(ServerAllowGameMessageArg(a, b, c)).getOrElse { true }
+            onAllowGameMessage(AllowGameMessageArg(a, b, c)).getOrElse { true }
         }
 
         ServerMessageEvents.ALLOW_COMMAND_MESSAGE.register { a, b, c ->
-            onAllowCommandMessage(ServerAllowCommandMessageArg(a, b, c)).getOrElse { true }
+            onAllowCommandMessage(AllowCommandMessageArg(a, b, c)).getOrElse { true }
         }
 
         ServerMessageEvents.CHAT_MESSAGE.register { a, b, c ->
-            onChatMessage(ServerChatMessageArg(a, b, c))
+            onChatMessage(ChatMessageArg(a, b, c))
         }
 
         ServerMessageEvents.GAME_MESSAGE.register { a, b, c ->
-            onGameMessage(ServerGameMessageArg(a, b, c))
+            onGameMessage(GameMessageArg(a, b, c))
         }
 
         ServerMessageEvents.COMMAND_MESSAGE.register { a, b, c ->
-            onCommandMessage(ServerCommandMessageArg(a, b, c))
+            onCommandMessage(CommandMessageArg(a, b, c))
         }
     }
 
-    val onAllowChatMessage = createAll<ServerAllowChatMessageArg>()
+    val onAllowChatMessage = createAll<AllowChatMessageArg>()
 
-    val onAllowGameMessage = createAll<ServerAllowGameMessageArg>()
+    val onAllowGameMessage = createAll<AllowGameMessageArg>()
 
-    val onAllowCommandMessage = createAll<ServerAllowCommandMessageArg>()
+    val onAllowCommandMessage = createAll<AllowCommandMessageArg>()
 
-    val onChatMessage = createUnit<ServerChatMessageArg>()
+    val onChatMessage = createUnit<ChatMessageArg>()
 
-    val onGameMessage = createUnit<ServerGameMessageArg>()
+    val onGameMessage = createUnit<GameMessageArg>()
 
-    val onCommandMessage = createUnit<ServerCommandMessageArg>()
+    val onCommandMessage = createUnit<CommandMessageArg>()
 }

@@ -154,3 +154,13 @@ idea {
         downloadJavadoc = true
     }
 }
+
+tasks.named('jar', Jar) {
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    from(commonMainSourceSet.output)
+}
+
+tasks.matching { it.name == 'sourcesJar' }.configureEach {
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    from(commonMainSourceSet.allSource)
+}

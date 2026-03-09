@@ -1,11 +1,75 @@
 package top.katton;
 
+import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.common.Mod;
+import net.neoforged.neoforge.common.NeoForge;
+import net.neoforged.neoforge.event.AddServerReloadListenersEvent;
+import net.neoforged.neoforge.event.RegisterCommandsEvent;
+import net.neoforged.neoforge.event.server.ServerStartedEvent;
+import net.neoforged.neoforge.event.server.ServerStoppedEvent;
+import net.minecraft.resources.Identifier;
+import top.katton.api.event.ChunkAndBlockEvent;
+import top.katton.api.event.ItemEvent;
+import top.katton.api.event.LivingBehaviorEvent;
+import top.katton.api.event.PlayerEvent;
+import top.katton.api.event.ServerEntityCombatEvent;
+import top.katton.api.event.ServerEntityEvent;
+import top.katton.api.event.ServerEvent;
+import top.katton.api.event.ServerLivingEntityEvent;
+import top.katton.api.event.ServerMessageEvent;
+import top.katton.api.event.ServerMobEffectEvent;
+import top.katton.api.event.ServerPlayerEvent;
+import top.katton.command.ScriptCommand;
+import top.katton.engine.ScriptLoader;
+import top.katton.platform.DynamicRegistryHooks;
+import top.katton.platform.NeoForgeDynamicRegistryHooks;
 
 @Mod(Katton.MOD_ID)
 public class KattonNeoForge {
 
-    public KattonNeoForge() {
+    public KattonNeoForge(IEventBus modEventBus) {
+        DynamicRegistryHooks.setAfterDynamicBlockRegistered(NeoForgeDynamicRegistryHooks::afterDynamicBlockRegistered);
         Katton.mainInitialize();
+
+        registerGameEventBridges();
+
+        NeoForge.EVENT_BUS.addListener(this::onAddReloadListener);
+        NeoForge.EVENT_BUS.addListener(this::onRegisterCommands);
+        NeoForge.EVENT_BUS.addListener(this::onServerStarted);
+        NeoForge.EVENT_BUS.addListener(this::onServerStopped);
+    }
+
+    private void registerGameEventBridges() {
+        NeoForge.EVENT_BUS.register(ChunkAndBlockEvent.INSTANCE);
+        NeoForge.EVENT_BUS.register(ItemEvent.INSTANCE);
+        NeoForge.EVENT_BUS.register(LivingBehaviorEvent.INSTANCE);
+        NeoForge.EVENT_BUS.register(PlayerEvent.INSTANCE);
+        NeoForge.EVENT_BUS.register(ServerEntityCombatEvent.INSTANCE);
+        NeoForge.EVENT_BUS.register(ServerEntityEvent.INSTANCE);
+        NeoForge.EVENT_BUS.register(ServerEvent.INSTANCE);
+        NeoForge.EVENT_BUS.register(ServerLivingEntityEvent.INSTANCE);
+        NeoForge.EVENT_BUS.register(ServerMessageEvent.INSTANCE);
+        NeoForge.EVENT_BUS.register(ServerMobEffectEvent.INSTANCE);
+        NeoForge.EVENT_BUS.register(ServerPlayerEvent.INSTANCE);
+    }
+
+    private void onAddReloadListener(AddServerReloadListenersEvent event) {
+        event.addListener(Identifier.fromNamespaceAndPath(Katton.MOD_ID, "scripts"), ScriptLoader.INSTANCE);
+    }
+
+    private void onRegisterCommands(RegisterCommandsEvent event) {
+        ScriptCommand.INSTANCE.register(event.getDispatcher());
+    }
+
+    private void onServerStarted(ServerStartedEvent event) {
+        Katton.server = event.getServer();
+        Katton.globalState = LoadState.SERVER_STARTED;
+        Katton.reloadScripts(event.getServer());
+        ScriptCommand.syncCommandTree(event.getServer());
+    }
+
+    private void onServerStopped(ServerStoppedEvent event) {
+        Katton.server = null;
+        Katton.globalState = LoadState.SERVER_STOPPED;
     }
 }

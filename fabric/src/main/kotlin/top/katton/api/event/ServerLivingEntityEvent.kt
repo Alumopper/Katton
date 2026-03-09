@@ -13,19 +13,19 @@ object ServerLivingEntityEvent {
 
     fun initialize() {
         ServerLivingEntityEvents.ALLOW_DAMAGE.register { a, b, c ->
-            onAllowDamage(ServerLivingAllowDamageArg(a, b, c)).getOrElse { true }
+            onAllowDamage(AllowDamageArg(a, b, c)).getOrElse { true }
         }
 
         ServerLivingEntityEvents.AFTER_DAMAGE.register { a, b, c, d, e ->
-            onAfterDamage(ServerLivingAfterDamageArg(a, b, c, d, e))
+            onAfterDamage(AfterDamageArg(a, b, c, d, e))
         }
 
         ServerLivingEntityEvents.ALLOW_DEATH.register { a, b, c ->
-            onAllowDeath(ServerLivingAllowDeathArg(a, b, c)).getOrElse { true }
+            onAllowDeath(AllowDeathArg(a, b, c)).getOrElse { true }
         }
 
         ServerLivingEntityEvents.AFTER_DEATH.register { a, b ->
-            onAfterDeath(ServerLivingAfterDeathArg(a, b))
+            onAfterDeath(AfterDeathArg(a, b))
         }
 
         ServerLivingEntityEvents.MOB_CONVERSION.register { a, b, c ->
@@ -36,13 +36,13 @@ object ServerLivingEntityEvent {
     @JvmField
     val onLivingHurt = createCancellableUnit<LivingHurtArg>()
 
-    val onAllowDamage = createAll<ServerLivingAllowDamageArg>()
+    val onAllowDamage = createAll<AllowDamageArg>()
 
-    val onAfterDamage = createUnit<ServerLivingAfterDamageArg>()
+    val onAfterDamage = createUnit<AfterDamageArg>()
 
-    val onAllowDeath = createAll<ServerLivingAllowDeathArg>()
+    val onAllowDeath = createAll<AllowDeathArg>()
 
-    val onAfterDeath = createUnit<ServerLivingAfterDeathArg>()
+    val onAfterDeath = createUnit<AfterDeathArg>()
 
     @JvmField
     val onLivingFall = createCancellableUnit<LivingFallArg>()

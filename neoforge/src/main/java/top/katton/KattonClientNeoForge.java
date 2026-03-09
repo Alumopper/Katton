@@ -13,7 +13,7 @@ import top.katton.network.ClientNetworkingNeoForge;
 public class KattonClientNeoForge {
 
     @SubscribeEvent
-    public static void onDisconnect(ClientPlayerNetworkEvent.LoggingOut event){
+    public static void onDisconnect(ClientPlayerNetworkEvent.LoggingOut event) {
         ClientNetworkingNeoForge.INSTANCE.reset();
     }
 

@@ -7,9 +7,8 @@ import net.neoforged.neoforge.event.entity.player.AttackEntityEvent
 import net.neoforged.neoforge.event.entity.player.PlayerDestroyItemEvent
 import net.neoforged.neoforge.event.entity.player.PlayerInteractEvent
 import top.katton.Katton
-import top.katton.util.CancellableDelegateEvent
-import top.katton.util.CancellableEventArg
-import top.katton.util.DelegateEvent
+import top.katton.util.createCancellableUnit
+import top.katton.util.createUnit
 import top.katton.util.setCancel
 
 @Suppress("unused")
@@ -59,23 +58,16 @@ object PlayerEvent {
         onDestroyItem(arg)
     }
 
-    val onAttackEntity = createCancellableUnitEvent<NeoPlayerAttackEntityArg>()
+    val onAttackEntity = createCancellableUnit<NeoPlayerAttackEntityArg>()
 
-    val onEntityInteract = createCancellableUnitEvent<NeoPlayerInteractEntityArg>()
+    val onEntityInteract = createCancellableUnit<NeoPlayerInteractEntityArg>()
 
-    val onBlockInteract = createCancellableUnitEvent<NeoPlayerInteractBlockArg>()
+    val onBlockInteract = createCancellableUnit<NeoPlayerInteractBlockArg>()
 
-    val onItemInteract = createCancellableUnitEvent<NeoPlayerInteractItemArg>()
+    val onItemInteract = createCancellableUnit<NeoPlayerInteractItemArg>()
 
-    val onLeftClickBlock = createCancellableUnitEvent<NeoPlayerLeftClickBlockArg>()
+    val onLeftClickBlock = createCancellableUnit<NeoPlayerLeftClickBlockArg>()
 
-    val onDestroyItem = createUnitEvent<PlayerDestroyItemArg>()
+    val onDestroyItem = createUnit<PlayerDestroyItemArg>()
 
-    private fun <T> createUnitEvent() = DelegateEvent<T, Unit> { events ->
-        { arg -> events.forEach { handler -> handler(arg) } }
-    }
-
-    private fun <T : CancellableEventArg> createCancellableUnitEvent() = CancellableDelegateEvent<T, Unit> { events ->
-        { arg -> events.forEach { handler -> handler(arg) } }
-    }
 }

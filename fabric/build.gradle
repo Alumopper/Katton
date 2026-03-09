@@ -14,6 +14,8 @@ apply plugin: 'org.jetbrains.kotlin.jvm'
 version = project.mod_version
 group = project.maven_group
 
+def commonMainSourceSet = project(':common').sourceSets.main
+
 repositories {
     mavenCentral()
     maven { url 'https://maven.fabricmc.net/' }
@@ -67,6 +69,23 @@ processResources {
 java {
     withJavadocJar()
     withSourcesJar()
+}
+
+tasks.named('jar', Jar) {
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    from(commonMainSourceSet.output)
+}
+
+tasks.named('sourcesJar', Jar) {
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    from(commonMainSourceSet.allSource)
+}
+
+tasks.named('javadoc', Javadoc) {
+    // Fabric entrypoints and mixins are internal wiring, not published API.
+    exclude 'top/katton/KattonFabric.java'
+    exclude 'top/katton/KattonClientFabric.java'
+    exclude 'top/katton/mixin/**'
 }
 
 // 资源放置

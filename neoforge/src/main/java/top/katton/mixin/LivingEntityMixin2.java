@@ -10,12 +10,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
-import net.minecraft.world.level.BlockGetter;
-import net.minecraft.world.level.Level;
-import net.minecraft.world.level.LevelReader;
-import net.minecraft.world.level.block.BedBlock;
 import net.minecraft.world.level.block.state.BlockState;
-import net.neoforged.neoforge.common.extensions.IBlockStateExtension;
 import org.jspecify.annotations.Nullable;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -51,17 +46,17 @@ public abstract class LivingEntityMixin2 {
 
     @Inject(method = "die", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/level/Level;broadcastEntityEvent(Lnet/minecraft/world/entity/Entity;B)V"))
     private void notifyDeath(DamageSource source, CallbackInfo ci) {
-        ServerLivingEntityEvent.onAfterDeath.invoke(new ServerLivingAfterDeathArg((LivingEntity) (Object) this, source));
+        ServerLivingEntityEvent.onAfterDeath.invoke(new AfterDeathArg((LivingEntity) (Object) this, source));
     }
 
     @Redirect(method = "hurtServer", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/entity/LivingEntity;isDeadOrDying()Z", ordinal = 1))
     boolean beforeEntityKilled(LivingEntity livingEntity, ServerLevel level, DamageSource source, float amount) {
-        return isDeadOrDying() && ServerLivingEntityEvent.onAllowDeath.invoke(new ServerLivingAllowDeathArg(livingEntity, source, amount)).emptyOrTrue();
+        return isDeadOrDying() && ServerLivingEntityEvent.onAllowDeath.invoke(new AllowDeathArg(livingEntity, source, amount)).emptyOrTrue();
     }
 
     @Inject(method = "hurtServer", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/entity/LivingEntity;isSleeping()Z"), cancellable = true)
     private void beforeDamage(ServerLevel level, DamageSource source, float amount, CallbackInfoReturnable<Boolean> cir) {
-        if (!ServerLivingEntityEvent.onAllowDamage.invoke(new ServerLivingAllowDamageArg((LivingEntity) (Object) this, source, amount)).notEmptyAndTrue()) {
+        if (!ServerLivingEntityEvent.onAllowDamage.invoke(new AllowDamageArg((LivingEntity) (Object) this, source, amount)).notEmptyAndTrue()) {
             cir.setReturnValue(false);
         }
     }
@@ -73,7 +68,7 @@ public abstract class LivingEntityMixin2 {
             if(cir.getReturnValue()) {
                  originalDamage = this.lastHurt;
             }
-            ServerLivingEntityEvent.onAfterDamage.invoke(new ServerLivingAfterDamageArg((LivingEntity) (Object) this, source, originalDamage, amount, blocked));
+            ServerLivingEntityEvent.onAfterDamage.invoke(new AfterDamageArg((LivingEntity) (Object) this, source, originalDamage, amount, blocked));
         }
     }
 

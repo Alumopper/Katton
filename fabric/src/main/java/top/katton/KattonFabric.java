@@ -1,21 +1,53 @@
 package top.katton;
 
 import net.fabricmc.api.ModInitializer;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
+import net.fabricmc.fabric.api.resource.v1.ResourceLoader;
+import net.minecraft.resources.Identifier;
+import net.minecraft.server.packs.PackType;
 import top.katton.api.dpcaller.EntityEvent;
 import top.katton.api.event.*;
+import top.katton.command.ScriptCommand;
+import top.katton.engine.ScriptLoader;
+import top.katton.network.Networking;
+import top.katton.network.ServerNetworking;
 
-import static top.katton.Katton.mainInitialize;
+import static top.katton.Katton.*;
 
 public class KattonFabric implements ModInitializer {
     @Override
     public void onInitialize() {
-        // Fabric 平台启动点：调用 common 的初始化适配器
+        //Entrance point for common initialization
         mainInitialize();
         eventInitialize();
-        // 在实体加载时，如果该实体有注册的 tick 事件，则在世界 tick 时调用
-//        ServerEntityEvent.INSTANCE.getOnAfterEntityLoad().plusAssign(entity ->
-//                EntityEvent.INSTANCE.getOnTickHandlers().get(entity.getEntity())
-//                        .getHandler().invoke(entity.getEntity(), entity.getWorld()));
+
+        Networking.initialize();
+
+        ResourceLoader.get(PackType.SERVER_DATA).registerReloadListener(
+                Identifier.fromNamespaceAndPath(MOD_ID, "scripts"),
+                ScriptLoader.INSTANCE
+        );
+
+        ServerLifecycleEvents.SERVER_STARTED.register(serverInstance -> {
+            server = serverInstance;
+            globalState = LoadState.SERVER_STARTED;
+            reloadScripts(serverInstance);
+            ScriptCommand.syncCommandTree(serverInstance);
+        });
+
+        ServerLifecycleEvents.SERVER_STOPPED.register(_ -> {
+            server = null;
+            globalState = LoadState.SERVER_STOPPED;
+        });
+
+        ServerLifecycleEvents.END_DATA_PACK_RELOAD.register((_, _, success) -> {
+            globalState = LoadState.END_DATA_PACK_RELOAD;
+            if (!success) {
+                return;
+            }
+            reloadScripts(server);
+            ScriptCommand.syncCommandTree(server);
+        });
     }
 
     private void eventInitialize() {

@@ -17,6 +17,7 @@ import net.minecraft.world.level.block.state.BlockBehaviour
 import top.katton.Katton
 import top.katton.Katton.MOD_ID
 import top.katton.LoadState
+import top.katton.platform.DynamicRegistryHooks
 import top.katton.util.Event
 import top.katton.util.ReflectUtil
 import java.util.*
@@ -627,6 +628,7 @@ object KattonRegistry {
                 val block = blockBuilder(props)
                 val registered = Registry.register(BuiltInRegistries.BLOCK, id, block)
                 registered.builtInRegistryHolder().tags = emptySet()
+                DynamicRegistryHooks.onDynamicBlockRegistered(registered)
                 hotReloadableBlocks[id] = registered
                 registered
             } finally {

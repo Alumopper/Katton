@@ -4,8 +4,11 @@ import com.mojang.logging.LogUtils
 import net.bytebuddy.ByteBuddy
 import net.bytebuddy.agent.ByteBuddyAgent
 import net.bytebuddy.asm.Advice
+import net.bytebuddy.dynamic.ClassFileLocator
 import net.bytebuddy.dynamic.loading.ClassReloadingStrategy
+import net.bytebuddy.implementation.bytecode.assign.Assigner
 import net.bytebuddy.matcher.ElementMatchers
+import java.lang.instrument.ClassDefinition
 import java.lang.reflect.Constructor
 import java.lang.reflect.Method
 import java.util.UUID
@@ -15,15 +18,13 @@ import java.util.concurrent.CopyOnWriteArrayList
 /**
  * Runtime method injection manager for `unsafe` APIs.
  *
- * Design (based on ByteBuddy Advice):
- * 1. When a method is injected for the first time, redefine its declaring class once.
- * 2. Weave a universal Advice bridge at method enter/exit.
- * 3. Route runtime calls to the manager's before/after handler registries.
+ * Method hooks are applied by rewriting the target bytecode with ASM and then
+ * redefining the declaring class in place. Constructor hooks still use
+ * ByteBuddy Advice because their current requirements are simpler.
  *
  * Notes:
  * - This is experimental and intentionally has no extra sandbox.
  * - The goal is dynamic hooks with rollback support across script reloads.
- *
  */
 internal object InjectionManager {
     private val logger = LogUtils.getLogger()
@@ -80,6 +81,7 @@ internal object InjectionManager {
         /** Mutates target argument at [index] for current invocation. */
         fun setArgument(index: Int, value: Any?) {
             arguments[index] = value
+            enterControl?.argumentsModified = true
         }
 
         /** Cancels current method execution. */
@@ -104,10 +106,21 @@ internal object InjectionManager {
         }
     }
 
+    data class MethodEnterResult(
+        val enterState: EnterState?,
+        val arguments: Array<Any?>
+    )
+
+    data class MethodExitResult(
+        val result: Any?,
+        val throwable: Throwable?
+    )
+
     internal data class EnterControl(
         var skip: Boolean = false,
         var overrideReturn: Boolean = false,
-        var returnValue: Any? = null
+        var returnValue: Any? = null,
+        var argumentsModified: Boolean = false
     )
 
     internal data class ExitControl(
@@ -213,6 +226,8 @@ internal object InjectionManager {
     )
 
     private val instrumentedTargets = ConcurrentHashMap.newKeySet<String>()
+    private val instrumentedMethodsByClass = ConcurrentHashMap<String, CopyOnWriteArrayList<Method>>()
+    private val instrumentedMethodRegistry = ConcurrentHashMap<String, Method>()
     private val beforeHandlers = ConcurrentHashMap<String, CopyOnWriteArrayList<BeforeEntry>>()
     private val afterHandlers = ConcurrentHashMap<String, CopyOnWriteArrayList<AfterEntry>>()
     private val replaceHandlers = ConcurrentHashMap<String, CopyOnWriteArrayList<ReplaceEntry>>()
@@ -225,6 +240,9 @@ internal object InjectionManager {
         val params = method.parameterTypes.joinToString(",") { it.name }
         return "${method.declaringClass.name}#${method.name}($params)"
     }
+
+    @JvmStatic
+    fun methodKeyForVisitor(method: Method): String = targetKey(method)
 
     private fun constructorKey(constructor: Constructor<*>): String {
         val params = constructor.parameterTypes.joinToString(",") { it.name }
@@ -287,27 +305,80 @@ internal object InjectionManager {
     @JvmStatic
     fun defaultReturnValueFor(type: Class<*>): Any? = defaultReturnValue(type)
 
+    @JvmStatic
+    fun dispatchMethodEnterByKey(methodKey: String, instance: Any?, args: Array<Any?>): MethodEnterResult {
+        val method = instrumentedMethodRegistry[methodKey] ?: error("Instrumented method not found: $methodKey")
+        val enterControl = createEnterControl()
+        dispatchBefore(method, instance, args, enterControl)
+        val enterState = if (enterControl.skip) {
+            val returnValue = if (enterControl.overrideReturn) {
+                enterControl.returnValue
+            } else {
+                defaultReturnValueFor(method.returnType)
+            }
+            EnterState(returnValue)
+        } else {
+            null
+        }
+        return MethodEnterResult(enterState, args)
+    }
+
+    @JvmStatic
+    fun methodEnterArguments(result: MethodEnterResult): Array<Any?> = result.arguments
+
+    @JvmStatic
+    fun methodEnterState(result: MethodEnterResult): EnterState? = result.enterState
+
+    @JvmStatic
+    fun dispatchMethodExitByKey(
+        methodKey: String,
+        instance: Any?,
+        args: Array<Any?>,
+        result: Any?,
+        throwable: Throwable?,
+        enterState: EnterState?
+    ): MethodExitResult {
+        val method = instrumentedMethodRegistry[methodKey] ?: error("Instrumented method not found: $methodKey")
+        var mutableResult = result
+        var mutableThrowable = throwable
+
+        if (enterState != null) {
+            mutableResult = enterState.returnValue
+            mutableThrowable = null
+        }
+
+        val exitControl = createExitControl()
+        dispatchAfter(method, instance, args, mutableResult, mutableThrowable, exitControl)
+
+        if (exitControl.overrideReturn) {
+            mutableResult = exitControl.returnValue
+            mutableThrowable = null
+        }
+
+        return MethodExitResult(mutableResult, mutableThrowable)
+    }
+
+    @JvmStatic
+    fun methodExitResult(result: MethodExitResult): Any? = result.result
+
+    @JvmStatic
+    fun methodExitThrowable(result: MethodExitResult): Throwable? = result.throwable
+
     private fun ensureInstrumented(targetClass: Class<*>, method: Method) {
         val key = targetKey(method)
         if (!instrumentedTargets.add(key)) return
 
+        val className = targetClass.name
+        val methods = instrumentedMethodsByClass.computeIfAbsent(className) { CopyOnWriteArrayList() }
+        methods.add(method)
+        instrumentedMethodRegistry[key] = method
+
         // Install agent lazily (reuses existing installation if present).
-        ByteBuddyAgent.install()
-
-        // Redefine target class and weave a universal Advice bridge.
-        // Runtime dispatch is narrowed by Method key, so matching any() is fine here.
-        ByteBuddy()
-            .redefine(targetClass)
-            .visit(
-                Advice.to(UnsafeMethodAdvice::class.java).on(
-                    ElementMatchers.not(ElementMatchers.isConstructor())
-                        .and(ElementMatchers.not(ElementMatchers.isTypeInitializer()))
-                )
-            )
-            .make()
-            .load(targetClass.classLoader, ClassReloadingStrategy.fromInstalledAgent())
-
-        logger.warn("[Katton Unsafe] Instrumented method: {}", key)
+        val instrumentation = ByteBuddyAgent.install()
+        val locator = ClassFileLocator.ForClassLoader.of(targetClass.classLoader)
+        val originalBytes = locator.locate(targetClass.name).resolve()
+        val transformedBytes = MethodInjectionTransformer.transform(originalBytes, methods)
+        instrumentation.redefineClasses(ClassDefinition(targetClass, transformedBytes))
     }
 
     private fun ensureConstructorInstrumented(targetClass: Class<*>, constructor: Constructor<*>) {
@@ -323,8 +394,6 @@ internal object InjectionManager {
             )
             .make()
             .load(targetClass.classLoader, ClassReloadingStrategy.fromInstalledAgent())
-
-        logger.warn("[Katton Unsafe] Instrumented constructor: {}", key)
     }
 
     @JvmStatic
@@ -677,7 +746,7 @@ internal object InjectionManager {
             fun onEnter(
                 @Advice.Origin constructor: Constructor<*>,
                 @Advice.This(optional = true) instance: Any?,
-                @Advice.AllArguments args: Array<Any?>
+                @Advice.AllArguments(readOnly = false, typing = Assigner.Typing.DYNAMIC) args: Array<Any?>
             ) {
                 dispatchConstructorBefore(constructor, instance, args)
             }
@@ -687,7 +756,7 @@ internal object InjectionManager {
             fun onExit(
                 @Advice.Origin constructor: Constructor<*>,
                 @Advice.This(optional = true) instance: Any?,
-                @Advice.AllArguments args: Array<Any?>
+                @Advice.AllArguments(readOnly = false, typing = Assigner.Typing.DYNAMIC) args: Array<Any?>
             ) {
                 dispatchConstructorAfter(constructor, instance, args)
             }

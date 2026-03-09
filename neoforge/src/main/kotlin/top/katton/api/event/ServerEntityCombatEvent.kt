@@ -6,7 +6,8 @@ import net.neoforged.fml.common.EventBusSubscriber
 import net.neoforged.neoforge.event.entity.living.LivingShieldBlockEvent
 import net.neoforged.neoforge.event.entity.player.CriticalHitEvent
 import top.katton.Katton
-import top.katton.util.DelegateEvent
+import top.katton.util.createAll
+import top.katton.util.createUnit
 
 /**
  * Server entity combat events (critical hits, shield blocking, and entity combat).
@@ -35,19 +36,11 @@ object ServerEntityCombatEvent {
 
     // === Entity Combat ===
     @JvmField
-    val onAfterKilledOtherEntity = createUnitEvent<AfterKilledOtherEntityArg>()
+    val onAfterKilledOtherEntity = createUnit<AfterKilledOtherEntityArg>()
 
     // === Critical Hits ===
-    val onCriticalHit = createUnitEvent<CriticalHitArg>()
+    val onCriticalHit = createUnit<CriticalHitArg>()
 
     // === Shield Block ===
-    val onShieldBlock = createAllEvent<ShieldBlockArg>()
-
-    private fun <T> createUnitEvent() = DelegateEvent<T, Unit> { events ->
-        { arg -> events.forEach { handler -> handler(arg) } }
-    }
-
-    private fun <T> createAllEvent() = DelegateEvent<T, Boolean> { events ->
-        { arg -> events.all { handler -> handler(arg) } }
-    }
+    val onShieldBlock = createAll<ShieldBlockArg>()
 }

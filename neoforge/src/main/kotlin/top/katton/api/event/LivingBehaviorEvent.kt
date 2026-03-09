@@ -8,10 +8,18 @@ import net.neoforged.neoforge.event.entity.player.PlayerWakeUpEvent
 import net.neoforged.neoforge.event.entity.living.AnimalTameEvent
 import net.neoforged.neoforge.event.entity.living.BabyEntitySpawnEvent
 import top.katton.Katton
+import top.katton.api.event.LivingBehaviorEvent.onPlayerWakeUp
 import top.katton.bridger.EventResult
 import top.katton.util.CancellableDelegateEvent
 import top.katton.util.CancellableEventArg
 import top.katton.util.DelegateEvent
+import top.katton.util.create
+import top.katton.util.createAll
+import top.katton.util.createAny
+import top.katton.util.createCancellableUnit
+import top.katton.util.createFirstNotNullOfOrNull
+import top.katton.util.createReturnIfNot
+import top.katton.util.createUnit
 import top.katton.util.setCancel
 
 /**
@@ -45,39 +53,39 @@ object LivingBehaviorEvent {
         onPlayerWakeUp(arg)
     }
 
-    val onAnimalTame = createCancellableUnitEvent<AnimalTameArg>()
+    val onAnimalTame = createCancellableUnit<AnimalTameArg>()
 
     // === Baby Spawning ===
-    val onBabySpawn = createCancellableUnitEvent<BabySpawnArg>()
+    val onBabySpawn = createCancellableUnit<BabySpawnArg>()
 
     // === Elytra Events ===
     @JvmField
-    val onElytraAllow = createAllEvent<EntityElytraAllowArg>()
+    val onElytraAllow = createAll<ElytraAllowArg>()
 
     @JvmField
-    val onElytraCustom = createAnyEvent<EntityElytraCustomArg>()
+    val onElytraCustom = createAny<ElytraCustomArg>()
 
     // === Sleep Events ===
     @JvmField
-    val onAllowSleeping = createFirstNotNullOfOrNullEvent<AllowSleepingArg, Player.BedSleepingProblem?>()
+    val onAllowSleeping = createFirstNotNullOfOrNull<AllowSleepingArg, Player.BedSleepingProblem?>()
 
     @JvmField
-    val onStartSleeping = createUnitEvent<SleepingArg>()
+    val onStartSleeping = createUnit<SleepingArg>()
 
     @JvmField
-    val onStopSleeping = createUnitEvent<SleepingArg>()
+    val onStopSleeping = createUnit<SleepingArg>()
 
     @JvmField
-    val onAllowBed = createReturnIfNotEvent<AllowBedArg, EventResult>(EventResult.PASS)
+    val onAllowBed = createReturnIfNot<AllowBedArg, EventResult>(EventResult.PASS)
 
     @JvmField
-    val onAllowNearbyMonsters = createReturnIfNotEvent<AllowNearbyMonstersArg, EventResult>(EventResult.PASS)
+    val onAllowNearbyMonsters = createReturnIfNot<AllowNearbyMonstersArg, EventResult>(EventResult.PASS)
 
     @JvmField
-    val onAllowResettingTime = createAllEvent<AllowResettingTimeArg>()
+    val onAllowResettingTime = createAll<AllowResettingTimeArg>()
 
     @JvmField
-    val onModifySleepingDirection = createEvent { events: Array<(ModifySleepingDirectionArg) -> net.minecraft.core.Direction?> ->
+    val onModifySleepingDirection = create { events: Array<(ModifySleepingDirectionArg) -> net.minecraft.core.Direction?> ->
         { arg: ModifySleepingDirectionArg ->
             var dir = arg.direction
             events.forEach {
@@ -88,13 +96,13 @@ object LivingBehaviorEvent {
     }
 
     @JvmField
-    val onAllowSettingSpawn = createAllEvent<AllowSettingSpawnArg>()
+    val onAllowSettingSpawn = createAll<AllowSettingSpawnArg>()
 
     @JvmField
-    val onSetBedOccupationState = createAnyEvent<SetBedOccupationStateArg>()
+    val onSetBedOccupationState = createAny<SetBedOccupationStateArg>()
 
     @JvmField
-    val onModifyWakeUpPosition = createEvent { events: Array<(ModifyWakeUpPositionArg) -> net.minecraft.world.phys.Vec3?> ->
+    val onModifyWakeUpPosition = create { events: Array<(ModifyWakeUpPositionArg) -> net.minecraft.world.phys.Vec3?> ->
         { arg: ModifyWakeUpPositionArg ->
             var p = arg.wakeUpPos
             events.forEach { handler -> p = handler(arg.copy(wakeUpPos = p)) }
@@ -102,41 +110,6 @@ object LivingBehaviorEvent {
         }
     }
 
-    val onPlayerWakeUp = createUnitEvent<PlayerWakeUpArg>()
+    val onPlayerWakeUp = createUnit<PlayerWakeUpArg>()
 
-    private fun <T, R> createEvent(invoker: (Array<(T) -> R>) -> (T) -> R) = DelegateEvent(invoker)
-
-    private fun <T> createUnitEvent() = DelegateEvent<T, Unit> { events ->
-        { arg -> events.forEach { handler -> handler(arg) } }
-    }
-
-    private fun <T : CancellableEventArg> createCancellableUnitEvent() = CancellableDelegateEvent<T, Unit> { events ->
-        { arg -> events.forEach { handler -> handler(arg) } }
-    }
-
-    private fun <T> createAllEvent() = DelegateEvent<T, Boolean> { events ->
-        { arg -> events.all { handler -> handler(arg) } }
-    }
-
-    private fun <T> createAnyEvent() = DelegateEvent<T, Boolean> { events ->
-        { arg -> events.any { handler -> handler(arg) } }
-    }
-
-    private fun <T, R> createReturnIfNotEvent(unexpectedValue: R) = DelegateEvent<T, R> { events ->
-        { arg ->
-            var finalResult = unexpectedValue
-            for (handler in events) {
-                val result = handler(arg)
-                if (result != unexpectedValue) {
-                    finalResult = result
-                    break
-                }
-            }
-            finalResult
-        }
-    }
-
-    private fun <T, R> createFirstNotNullOfOrNullEvent() = DelegateEvent<T, R?> { events ->
-        { arg -> events.firstNotNullOfOrNull { handler -> handler(arg) } }
-    }
 }

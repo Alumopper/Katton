@@ -20,6 +20,8 @@ import top.katton.Katton
 import top.katton.util.CancellableDelegateEvent
 import top.katton.util.CancellableEventArg
 import top.katton.util.DelegateEvent
+import top.katton.util.createCancellableUnit
+import top.katton.util.createUnit
 import top.katton.util.setCancel
 
 /**
@@ -122,36 +124,36 @@ object ChunkAndBlockEvent {
         }
     }
 
-    val onChunkLoad = createUnitEvent<ChunkLoadArg>()
+    val onChunkLoad = createUnit<ChunkLoadArg>()
 
-    val onChunkUnload = createUnitEvent<ChunkUnloadArg>()
+    val onChunkUnload = createUnit<ChunkUnloadArg>()
 
-    val onChunkDataLoad = createUnitEvent<NeoChunkDataLoadArg>()
+    val onChunkDataLoad = createUnit<NeoChunkDataLoadArg>()
 
-    val onChunkDataSave = createUnitEvent<NeoChunkDataSaveArg>()
+    val onChunkDataSave = createUnit<NeoChunkDataSaveArg>()
 
-    val onChunkWatch = createUnitEvent<NeoChunkWatchArg>()
+    val onChunkWatch = createUnit<NeoChunkWatchArg>()
 
-    val onChunkSent = createUnitEvent<NeoChunkWatchArg>()
+    val onChunkSent = createUnit<NeoChunkWatchArg>()
 
-    val onChunkUnWatch = createUnitEvent<NeoChunkUnWatchArg>()
-
-    @JvmField
-    val onChunkLevelTypeChange = createUnitEvent<ChunkStatusChangeArg>()
+    val onChunkUnWatch = createUnit<NeoChunkUnWatchArg>()
 
     @JvmField
-    val onBlockEntityLoad = createUnitEvent<BlockEntityLoadArg>()
+    val onChunkLevelTypeChange = createUnit<ChunkStatusChangeArg>()
 
     @JvmField
-    val onBlockEntityUnload = createUnitEvent<BlockEntityLoadArg>()
+    val onBlockEntityLoad = createUnit<BlockEntityLoadArg>()
 
-    val onBlockBreak = createCancellableUnitEvent<BlockBreakArg>()
+    @JvmField
+    val onBlockEntityUnload = createUnit<BlockEntityLoadArg>()
 
-    val onBlockPlace = createCancellableUnitEvent<BlockPlaceArg>()
+    val onBlockBreak = createCancellableUnit<BlockBreakArg>()
 
-    val onExplosionStart = createCancellableUnitEvent<ExplosionStartArg>()
+    val onBlockPlace = createCancellableUnit<BlockPlaceArg>()
 
-    val onExplosionDetonate = createUnitEvent<ExplosionDetonateArg>()
+    val onExplosionStart = createCancellableUnit<ExplosionStartArg>()
+
+    val onExplosionDetonate = createUnit<ExplosionDetonateArg>()
 
     data class NeoChunkDataLoadArg(
         val level: ServerLevel,
@@ -177,12 +179,4 @@ object ChunkAndBlockEvent {
         val level: ServerLevel,
         val pos: ChunkPos
     )
-
-    private fun <T> createUnitEvent() = DelegateEvent<T, Unit> { events ->
-        { arg -> events.forEach { handler -> handler(arg) } }
-    }
-
-    private fun <T : CancellableEventArg> createCancellableUnitEvent() = CancellableDelegateEvent<T, Unit> { events ->
-        { arg -> events.forEach { handler -> handler(arg) } }
-    }
 }

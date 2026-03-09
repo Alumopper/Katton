@@ -1,7 +1,7 @@
 package top.katton.mixin;
 
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.Explosion;
-import net.minecraft.world.level.Level;
 import net.minecraft.world.level.ServerExplosion;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
@@ -15,7 +15,7 @@ import top.katton.api.event.ExplosionStartArg;
 @Mixin(ServerExplosion.class)
 public class ExplosionMixin {
     
-    @Shadow @Final private Level level;
+    @Shadow @Final private ServerLevel level;
     
     @Inject(method = "explode", at = @At("HEAD"), cancellable = true)
     private void katton$onExplosionStart(CallbackInfoReturnable<Integer> cir) {

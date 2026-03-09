@@ -14,6 +14,7 @@ import net.neoforged.neoforge.event.tick.LevelTickEvent
 import net.neoforged.neoforge.event.tick.ServerTickEvent
 import top.katton.Katton
 import top.katton.util.DelegateEvent
+import top.katton.util.createUnit
 
 @Suppress("unused")
 @EventBusSubscriber(
@@ -95,50 +96,46 @@ object ServerEvent {
         onLevelSave(ServerLevelArg(level))
     }
 
-    val onServerStarting = createUnitEvent<ServerArg>()
+    val onServerStarting = createUnit<ServerArg>()
 
-    val onServerStarted = createUnitEvent<ServerArg>()
+    val onServerStarted = createUnit<ServerArg>()
 
-    val onServerStopped = createUnitEvent<ServerArg>()
+    val onServerStopped = createUnit<ServerArg>()
 
-    val onServerStopping = createUnitEvent<ServerArg>()
-
-    @JvmField
-    val onSyncDatapackContents = createUnitEvent<SyncDatapackContentsArg>()
+    val onServerStopping = createUnit<ServerArg>()
 
     @JvmField
-    val onStartDatapackReload = createUnitEvent<StartDatapackReloadArg>()
+    val onSyncDatapackContents = createUnit<SyncDatapackContentsArg>()
 
     @JvmField
-    val onEndDatapackReload = createUnitEvent<EndDatapackReloadArg>()
+    val onStartDatapackReload = createUnit<StartDatapackReloadArg>()
 
     @JvmField
-    val onBeforeSave = createUnitEvent<SaveArg>()
+    val onEndDatapackReload = createUnit<EndDatapackReloadArg>()
 
     @JvmField
-    val onAfterSave = createUnitEvent<SaveArg>()
-
-    val onStartServerTick = createUnitEvent<ServerTickArg>()
-
-    val onEndServerTick = createUnitEvent<ServerTickArg>()
-
-    val onStartWorldTick = createUnitEvent<WorldTickArg>()
-
-    val onEndWorldTick = createUnitEvent<WorldTickArg>()
+    val onBeforeSave = createUnit<ServerSaveArg>()
 
     @JvmField
-    val onLevelLoad = createUnitEvent<ServerLevelArg>()
+    val onAfterSave = createUnit<ServerSaveArg>()
+
+    val onStartServerTick = createUnit<ServerTickArg>()
+
+    val onEndServerTick = createUnit<ServerTickArg>()
+
+    val onStartWorldTick = createUnit<WorldTickArg>()
+
+    val onEndWorldTick = createUnit<WorldTickArg>()
 
     @JvmField
-    val onLevelUnload = createUnitEvent<ServerLevelArg>()
+    val onLevelLoad = createUnit<ServerLevelArg>()
 
     @JvmField
-    val onLevelSave = createUnitEvent<ServerLevelArg>()
+    val onLevelUnload = createUnit<ServerLevelArg>()
+
+    @JvmField
+    val onLevelSave = createUnit<ServerLevelArg>()
 
     @JvmInline
     value class ServerLevelArg(val level: ServerLevel)
-
-    private fun <T> createUnitEvent() = DelegateEvent<T, Unit> { events ->
-        { arg -> events.forEach { handler -> handler(arg) } }
-    }
 }

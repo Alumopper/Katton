@@ -26,7 +26,6 @@ public class Katton {
     public static void mainInitialize() {
         // Initialize KattonRegistry first to register custom DataComponentTypes
         KattonRegistry.INSTANCE.initialize();
-        // 注意：资源监听、命令和服务端生命周期由各 loader 在其运行时绑定
     }
 
     public static void reloadScripts(MinecraftServer server) {

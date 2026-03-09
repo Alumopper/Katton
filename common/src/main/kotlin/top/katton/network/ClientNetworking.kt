@@ -12,6 +12,7 @@ import net.minecraft.world.effect.MobEffect
 import net.minecraft.world.item.Item
 import net.minecraft.world.level.block.Block
 import net.minecraft.world.level.block.state.BlockBehaviour
+import top.katton.platform.DynamicRegistryHooks
 import top.katton.util.ReflectUtil
 import java.util.*
 import java.util.concurrent.ConcurrentLinkedQueue
@@ -130,6 +131,7 @@ abstract class ClientNetworking {
             }
             val block = Block(properties)
             Registry.register(BuiltInRegistries.BLOCK, blockData.id, block)
+            DynamicRegistryHooks.onDynamicBlockRegistered(block)
         } finally {
             if (savedFrozen) setRegistryFrozen(blockRegistry, true)
             if (injectedUnregistered) blockRegistry.unregisteredIntrusiveHolders = previousUnregistered

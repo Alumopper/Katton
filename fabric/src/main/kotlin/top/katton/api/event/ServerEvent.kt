@@ -17,8 +17,8 @@ object ServerEvent {
         ServerLifecycleEvents.SYNC_DATA_PACK_CONTENTS.register { a, b -> onSyncDatapackContents(SyncDatapackContentsArg(a,b)) }
         ServerLifecycleEvents.START_DATA_PACK_RELOAD.register { a, b -> onStartDatapackReload(StartDatapackReloadArg(a,b)) }
         ServerLifecycleEvents.END_DATA_PACK_RELOAD.register { a, b, c -> onEndDatapackReload(EndDatapackReloadArg(a,b,c)) }
-        ServerLifecycleEvents.BEFORE_SAVE.register { a, b, c -> onBeforeSave(SaveArg(a,b,c)) }
-        ServerLifecycleEvents.AFTER_SAVE.register { a, b, c -> onAfterSave(SaveArg(a,b,c)) }
+        ServerLifecycleEvents.BEFORE_SAVE.register { a, b, c -> onBeforeSave(ServerSaveArg(a,b,c)) }
+        ServerLifecycleEvents.AFTER_SAVE.register { a, b, c -> onAfterSave(ServerSaveArg(a,b,c)) }
         ServerTickEvents.START_SERVER_TICK.register { onStartServerTick(ServerTickArg(it)) }
         ServerTickEvents.END_SERVER_TICK.register { onEndServerTick(ServerTickArg(it)) }
         ServerTickEvents.START_LEVEL_TICK.register { onStartWorldTick(WorldTickArg(it)) }
@@ -39,9 +39,9 @@ object ServerEvent {
 
     val onEndDatapackReload = createUnit<EndDatapackReloadArg>()
 
-    val onBeforeSave = createUnit<SaveArg>()
+    val onBeforeSave = createUnit<ServerSaveArg>()
 
-    val onAfterSave = createUnit<SaveArg>()
+    val onAfterSave = createUnit<ServerSaveArg>()
 
     val onStartServerTick = createUnit<ServerTickArg>()
 

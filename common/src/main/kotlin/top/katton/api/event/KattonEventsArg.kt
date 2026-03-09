@@ -18,7 +18,6 @@ import net.minecraft.server.level.ServerPlayer
 import net.minecraft.server.packs.resources.ResourceManager
 import net.minecraft.world.InteractionHand
 import net.minecraft.world.damagesource.DamageSource
-import net.minecraft.world.effect.MobEffectInstance
 import net.minecraft.world.entity.AgeableMob
 import net.minecraft.world.entity.ConversionParams
 import net.minecraft.world.entity.Entity
@@ -44,7 +43,6 @@ import net.minecraft.world.phys.BlockHitResult
 import net.minecraft.world.phys.EntityHitResult
 import net.minecraft.world.phys.Vec3
 import top.katton.bridger.EnchantingContext
-import top.katton.bridger.EnchantmentSource
 import top.katton.util.CancellableEventArg
 
 
@@ -67,7 +65,7 @@ data class EndDatapackReloadArg(
     val success: Boolean
 )
 
-data class SaveArg(
+data class ServerSaveArg(
     val server: MinecraftServer,
     val flush: Boolean,
     val force: Boolean
@@ -146,7 +144,7 @@ data class UseItemOnArg(
     val hitResult: BlockHitResult
 )
 
-data class UseWithoutItemArg(
+data class UseWithoutItemOnArg(
     val state: BlockState,
     val world: Level,
     val pos: BlockPos,
@@ -165,9 +163,9 @@ data class ModifyEnchantmentArg(
     val builder: Enchantment.Builder
 )
 
-data class EntityElytraAllowArg(val entity: LivingEntity)
+data class ElytraAllowArg(val entity: LivingEntity)
 
-data class EntityElytraCustomArg(
+data class ElytraCustomArg(
     val entity: LivingEntity,
     val tickElytra: Boolean
 )
@@ -323,13 +321,13 @@ data class AfterPlayerChangeLevelArg(
     val destinationLevel: ServerLevel
 )
 
-data class ServerLivingAllowDamageArg(
+data class AllowDamageArg(
     val entity: LivingEntity,
     val source: DamageSource,
     val amount: Float
 )
 
-data class ServerLivingAfterDamageArg(
+data class AfterDamageArg(
     val entity: LivingEntity,
     val source: DamageSource,
     val initialDamage: Float,
@@ -337,13 +335,13 @@ data class ServerLivingAfterDamageArg(
     val handled: Boolean
 )
 
-data class ServerLivingAllowDeathArg(
+data class AllowDeathArg(
     val entity: LivingEntity,
     val source: DamageSource,
     val amount: Float
 )
 
-data class ServerLivingAfterDeathArg(
+data class AfterDeathArg(
     val entity: LivingEntity,
     val source: DamageSource
 )
@@ -354,37 +352,37 @@ data class MobConversionArg(
     val keepEquipment: ConversionParams?
 )
 
-data class ServerAllowChatMessageArg(
+data class AllowChatMessageArg(
     val message: PlayerChatMessage,
     val sender: ServerPlayer,
     val params: Bound
 )
 
-data class ServerAllowGameMessageArg(
+data class AllowGameMessageArg(
     val server: MinecraftServer,
     val message: Component,
     val overlay: Boolean
 )
 
-data class ServerAllowCommandMessageArg(
+data class AllowCommandMessageArg(
     val message: PlayerChatMessage,
     val source: CommandSourceStack,
     val params: Bound
 )
 
-data class ServerChatMessageArg(
+data class ChatMessageArg(
     val message: PlayerChatMessage,
     val sender: ServerPlayer,
     val params: Bound
 )
 
-data class ServerGameMessageArg(
+data class GameMessageArg(
     val server: MinecraftServer,
     val message: Component,
     val overlay: Boolean
 )
 
-data class ServerCommandMessageArg(
+data class CommandMessageArg(
     val message: PlayerChatMessage,
     val source: CommandSourceStack,
     val params: Bound
@@ -539,12 +537,6 @@ data class PlayerPickupXpArg(
     val player: Player,
     val orb: ExperienceOrb
 ): CancellableEventArg()
-
-@JvmInline
-value class RegisterArg(val registry: Registry<*>?)
-
-@JvmInline
-value class RegisterCommandsArg(val dispatcher: CommandDispatcher<CommandSourceStack>)
 
 data class LivingHurtArg(
     val entity: LivingEntity,

@@ -1,12 +1,11 @@
 package top.katton.api.event
 
-import java.io.File
-import net.minecraft.world.item.ItemStack
+import net.minecraft.server.level.ServerPlayer
+import net.minecraft.util.TriState
 import net.minecraft.world.Container
 import net.minecraft.world.entity.Entity
 import net.minecraft.world.entity.item.ItemEntity
-import net.minecraft.server.level.ServerPlayer
-import net.minecraft.util.TriState
+import net.minecraft.world.item.ItemStack
 import net.neoforged.api.distmarker.Dist
 import net.neoforged.bus.api.SubscribeEvent
 import net.neoforged.fml.common.EventBusSubscriber
@@ -16,10 +15,11 @@ import net.neoforged.neoforge.event.entity.player.PlayerEvent
 import net.neoforged.neoforge.event.entity.player.PlayerSpawnPhantomsEvent
 import net.neoforged.neoforge.event.entity.player.PlayerXpEvent
 import top.katton.Katton
-import top.katton.util.CancellableDelegateEvent
-import top.katton.util.CancellableEventArg
-import top.katton.util.DelegateEvent
+import top.katton.util.createCancellableUnit
+import top.katton.util.createFirstNotNullOfOrNull
+import top.katton.util.createUnit
 import top.katton.util.setCancel
+import java.io.File
 
 /**
  * Server player events and player XP events.
@@ -162,51 +162,51 @@ object ServerPlayerEvent {
 
     // === Player Lifecycle Events ===
     @JvmField
-    val onPlayerJoin = createUnitEvent<PlayerArg>()
+    val onPlayerJoin = createUnit<PlayerArg>()
 
     @JvmField
-    val onPlayerLeave =  createUnitEvent<PlayerArg>()
+    val onPlayerLeave =  createUnit<PlayerArg>()
 
     @JvmField
-    val onAfterPlayerRespawn =  createUnitEvent<ServerPlayerAfterRespawnArg>()
+    val onAfterPlayerRespawn =  createUnit<ServerPlayerAfterRespawnArg>()
 
     @JvmField
-    val onPlayerCopy = createUnitEvent<ServerPlayerCopyArg>()
+    val onPlayerCopy = createUnit<ServerPlayerCopyArg>()
 
     // === Player XP Events ===
-    val onPlayerXpChange = createCancellableUnitEvent<PlayerXpChangeArg>()
+    val onPlayerXpChange = createCancellableUnit<PlayerXpChangeArg>()
 
-    val onPlayerXpLevelChange = createCancellableUnitEvent<PlayerXpLevelChangeArg>()
+    val onPlayerXpLevelChange = createCancellableUnit<PlayerXpLevelChangeArg>()
 
-    val onPlayerPickupXp = createCancellableUnitEvent<PlayerPickupXpArg>()
+    val onPlayerPickupXp = createCancellableUnit<PlayerPickupXpArg>()
 
-    val onStartTracking = createUnitEvent<PlayerTrackingArg>()
+    val onStartTracking = createUnit<PlayerTrackingArg>()
 
-    val onStopTracking = createUnitEvent<PlayerTrackingArg>()
+    val onStopTracking = createUnit<PlayerTrackingArg>()
 
-    val onPlayerLoadFromFile = createUnitEvent<PlayerFileArg>()
+    val onPlayerLoadFromFile = createUnit<PlayerFileArg>()
 
-    val onPlayerSaveToFile = createUnitEvent<PlayerFileArg>()
+    val onPlayerSaveToFile = createUnit<PlayerFileArg>()
 
-    val onItemToss = createUnitEvent<ItemTossArg>()
+    val onItemToss = createUnit<ItemTossArg>()
 
-    val onItemPickupPre = createUnitEvent<PlayerItemPickupPreArg>()
+    val onItemPickupPre = createUnit<PlayerItemPickupPreArg>()
 
-    val onItemPickupPost = createUnitEvent<PlayerItemPickupPostArg>()
+    val onItemPickupPost = createUnit<PlayerItemPickupPostArg>()
 
-    val onPlayerItemCrafted = createUnitEvent<PlayerCraftedItemArg>()
+    val onPlayerItemCrafted = createUnit<PlayerCraftedItemArg>()
 
-    val onPlayerItemSmelted = createUnitEvent<PlayerSmeltedItemArg>()
+    val onPlayerItemSmelted = createUnit<PlayerSmeltedItemArg>()
 
-    val onPlayerSpawnPhantoms = createUnitEvent<PlayerSpawnPhantomsArg>()
+    val onPlayerSpawnPhantoms = createUnit<PlayerSpawnPhantomsArg>()
 
     // === Item Picking Events  ===
 
     @JvmField
-    val onPickFromBlock = createFirstNotNullOfOrNullEvent<PlayerPickFromBlockArg, ItemStack>()
+    val onPickFromBlock = createFirstNotNullOfOrNull<PlayerPickFromBlockArg, ItemStack>()
 
     @JvmField
-    val onPickFromEntity = createFirstNotNullOfOrNullEvent<PlayerPickFromEntityArg, ItemStack>()
+    val onPickFromEntity = createFirstNotNullOfOrNull<PlayerPickFromEntityArg, ItemStack>()
 
     data class PlayerTrackingArg(
         val player: ServerPlayer,
@@ -254,16 +254,4 @@ object ServerPlayerEvent {
         val oldPlayer: ServerPlayer,
         val alive: Boolean
     )
-
-    private fun <T> createUnitEvent() = DelegateEvent<T, Unit> { events ->
-        { arg -> events.forEach { handler -> handler(arg) } }
-    }
-
-    private fun <T : CancellableEventArg> createCancellableUnitEvent() = CancellableDelegateEvent<T, Unit> { events ->
-        { arg -> events.forEach { handler -> handler(arg) } }
-    }
-
-    private fun <T, R> createFirstNotNullOfOrNullEvent() = DelegateEvent<T, R?> { events ->
-        { arg -> events.firstNotNullOfOrNull { handler -> handler(arg) } }
-    }
 }

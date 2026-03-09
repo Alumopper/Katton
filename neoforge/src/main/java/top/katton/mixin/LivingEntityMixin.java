@@ -42,7 +42,7 @@ abstract class LivingEntityMixin extends Entity {
     void injectElytraTick(CallbackInfo info) {
         LivingEntity self = (LivingEntity) (Object) this;
 
-        var result = LivingBehaviorEvent.onElytraAllow.invoke(new EntityElytraAllowArg(self));
+        var result = LivingBehaviorEvent.onElytraAllow.invoke(new ElytraAllowArg(self));
 
         if (result.notEmptyAndFalse()) {
             // The entity is already fall flying by now, we just need to stop it.
@@ -53,7 +53,7 @@ abstract class LivingEntityMixin extends Entity {
             info.cancel();
         }
 
-        var result2 = LivingBehaviorEvent.onElytraCustom.invoke(new EntityElytraCustomArg(self, true));
+        var result2 = LivingBehaviorEvent.onElytraCustom.invoke(new ElytraCustomArg(self, true));
 
         if (result2.notEmptyAndTrue()) {
             // The entity is already fall flying by now, so all we need to do is an early return to bypass vanilla's own elytra check.
@@ -66,14 +66,14 @@ abstract class LivingEntityMixin extends Entity {
     void injectElytraCheck(CallbackInfoReturnable<Boolean> cir) {
         LivingEntity self = (LivingEntity) (Object) this;
 
-        var r = LivingBehaviorEvent.onElytraAllow.invoke(new EntityElytraAllowArg(self));
+        var r = LivingBehaviorEvent.onElytraAllow.invoke(new ElytraAllowArg(self));
 
         if (r.emptyOrFalse()) {
             cir.setReturnValue(false);
             return; // Return to prevent the rest of this injector from running.
         }
 
-        var r2 = LivingBehaviorEvent.onElytraCustom.invoke(new EntityElytraCustomArg(self, true));
+        var r2 = LivingBehaviorEvent.onElytraCustom.invoke(new ElytraCustomArg(self, true));
 
         if (r2.notEmptyAndTrue()) {
             cir.setReturnValue(true);

@@ -14,12 +14,12 @@ object LivingBehaviorEvent {
 
     fun initialize() {
         EntityElytraEvents.ALLOW.register {
-            onElytraAllow(EntityElytraAllowArg(it)).getOrElse { true }
+            onElytraAllow(ElytraAllowArg(it)).getOrElse { true }
         }
 
         EntityElytraEvents.CUSTOM.register {
             a, b ->
-            onElytraCustom(EntityElytraCustomArg(a, b)).getOrElse { false }
+            onElytraCustom(ElytraCustomArg(a, b)).getOrElse { false }
         }
 
         EntitySleepEvents.ALLOW_SLEEPING.register {
@@ -76,9 +76,9 @@ object LivingBehaviorEvent {
     }
 
     // === Elytra Events ===
-    val onElytraAllow = createAll<EntityElytraAllowArg>()
+    val onElytraAllow = createAll<ElytraAllowArg>()
 
-    val onElytraCustom = createAll<EntityElytraCustomArg>()
+    val onElytraCustom = createAll<ElytraCustomArg>()
 
     // === Sleep Events ===
     val onAllowSleeping = createFirstNotNullOfOrNull<AllowSleepingArg, Player.BedSleepingProblem?>()
