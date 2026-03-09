@@ -2,7 +2,7 @@
 
 # Katton
 
-Katton is a Minecraft Fabric mod that brings Kotlin scripting to datapacks. It lets you interact directly with Minecraft server internals and Fabric APIs from scripts, making it easy to build custom mechanics, commands, and items with Kotlin's concise syntax. Katton also supports hot reloading (similar to vanilla functions), so you can iterate quickly without restarting the server.
+Katton is a Minecraft Fabric mod that brings Kotlin scripting to datapacks. It lets you interact directly with Minecraft server internals and Fabric/NeoForge APIs from scripts, making it easy to build custom mechanics, commands, and items with Kotlin's concise syntax. Katton also supports hot reloading (similar to vanilla functions), so you can iterate quickly without restarting the server.
 
 ## Roadmap
 
@@ -19,13 +19,13 @@ Katton is a Minecraft Fabric mod that brings Kotlin scripting to datapacks. It l
 
 ### Getting Started
 
-Add Katton to your Fabric modpack, then create a datapack in your world's `datapacks` directory. Inside your datapack namespace folder, create a `scripts` subdirectory and place your Kotlin script files there. Katton compiles these scripts automatically when the datapack is loaded.
+Add Katton to your Fabric/NeoForge modpack, then create a datapack in your world's `datapacks` directory. Inside your datapack namespace folder, create a `scripts` subdirectory and place your Kotlin script files there. Katton compiles these scripts automatically when the datapack is loaded.
 
 A ready-to-use example project (with dependencies and basic configuration) is available at [Katton-Example](https://github.com/Alumopper/Katton-Example).
 
 ### IDE Support
 
-In IDEs such as IntelliJ IDEA, you may see unresolved references for Minecraft/Fabric classes because those types are provided by the game runtime. To fix this and enable completion, create a minimal Gradle project for script development.
+In IDEs such as IntelliJ IDEA, you may see unresolved references for Minecraft/Fabric/NeoForge classes because those types are provided by the game runtime. To fix this and enable completion, create a minimal Gradle project for script development.
 
 > [!NOTE]
 > Even though these are "Kotlin Script" files, using the `.kt` extension usually provides better IDE support. So Katton only processes `.kt` files as scripts, and you can use regular Kotlin syntax without worrying about script-specific limitations.
@@ -54,7 +54,7 @@ Katton supports debugging datapack Kotlin scripts through standard JVM remote de
 
 ## Registering Items
 
-Katton supports registering native Minecraft Items from scripts with hot-reload capability. Items registered this way have the same capabilities as items registered by regular Fabric mods.
+Katton supports registering native Minecraft Items from scripts with hot-reload capability. Items registered this way have the same capabilities as items registered by regular mods.
 
 ### Basic Item Registration
 
