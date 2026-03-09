@@ -13,9 +13,9 @@ public class KattonFabric implements ModInitializer {
         mainInitialize();
         eventInitialize();
         // 在实体加载时，如果该实体有注册的 tick 事件，则在世界 tick 时调用
-        ServerEntityEvent.INSTANCE.getOnAfterEntityLoad().plusAssign(entity ->
-                EntityEvent.INSTANCE.getOnTickHandlers().get(entity.getEntity())
-                        .getHandler().invoke(entity.getEntity(), entity.getWorld()));
+//        ServerEntityEvent.INSTANCE.getOnAfterEntityLoad().plusAssign(entity ->
+//                EntityEvent.INSTANCE.getOnTickHandlers().get(entity.getEntity())
+//                        .getHandler().invoke(entity.getEntity(), entity.getWorld()));
     }
 
     private void eventInitialize() {

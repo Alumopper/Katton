@@ -571,7 +571,7 @@ data class LivingDropsArg(
 
 data class LivingFallArg(
     val entity: LivingEntity,
-    val distance: Float,
+    val distance: Double,
     val damageMultiplier: Float
 ): CancellableEventArg()
 

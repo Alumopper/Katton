@@ -5,6 +5,7 @@
   "mixins": [
     "ClientRegistrySyncHandlerMixin",
     "EnderManMixin",
+    "ExperienceOrbMixin",
     "ExplosionMixin",
     "LivingEntityMixin",
     "PlayerMixin",

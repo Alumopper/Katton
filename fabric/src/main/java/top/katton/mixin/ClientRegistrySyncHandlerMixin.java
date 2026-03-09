@@ -20,7 +20,7 @@ public class ClientRegistrySyncHandlerMixin {
     /**
      * Injects at the start of receivePacket method.
      * Processes any pending Katton item registrations before Fabric's sync check.
-     * 
+     * <p>
      * Note: This injects into a static method, so the injector method must also be static.
      * The method descriptor must match the target method exactly.
      */

@@ -2,6 +2,7 @@ package top.katton.mixin;
 
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.ServerExplosion;
@@ -16,16 +17,16 @@ import java.util.List;
 @Mixin(ServerExplosion.class)
 public class ServerExplosionMixin {
     @WrapOperation(
-            method = "explode",
+            method = "hurtEntities",
             at = @At(
                     value = "INVOKE",
-                    target = "Lnet/minecraft/world/level/Level;getEntities(Lnet/minecraft/world/entity/Entity;Lnet/minecraft/world/phys/AABB;)Ljava/util/List;"
+                    target = "Lnet/minecraft/server/level/ServerLevel;getEntities(Lnet/minecraft/world/entity/Entity;Lnet/minecraft/world/phys/AABB;)Ljava/util/List;"
             )
     )
-    private List<Entity> onGetEntities(Level level, Entity source, AABB box, Operation<List<Entity>> original){
-        List<Entity> result = original.call(level, source, box);
+    private List<Entity> onGetEntities(ServerLevel instance, Entity entity, AABB aabb, Operation<List> original){
+        List<Entity> result = original.call(instance, entity, aabb);
         //noinspection DataFlowIssue
-        ChunkAndBlockEvent.onExplosionDetonate.invoke(new ExplosionDetonateArg(level, (ServerExplosion) (Object) this, result));
+        ChunkAndBlockEvent.onExplosionDetonate.invoke(new ExplosionDetonateArg(instance, (ServerExplosion) (Object) this, result));
         return result;
     }
 

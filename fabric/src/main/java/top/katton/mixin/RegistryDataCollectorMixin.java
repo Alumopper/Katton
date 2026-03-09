@@ -11,13 +11,13 @@ import top.katton.network.ClientNetworkingFabric;
 
 /**
  * Mixin to intercept RegistryDataCollector.collectGameRegistries().
- * 
+ * <p>
  * After collectGameRegistries() completes, it has called updateComponents()
  * which runs DataComponentInitializers.build(). This overwrites holder.components
  * for all items with values from their finalizeInitializer(), which always sets
  * ITEM_NAME to Component.translatable(descriptionId) and ITEM_MODEL to the
  * default model path.
- * 
+ * <p>
  * We need to re-apply our custom ITEM_NAME and ITEM_MODEL values after this.
  */
 @Mixin(RegistryDataCollector.class)

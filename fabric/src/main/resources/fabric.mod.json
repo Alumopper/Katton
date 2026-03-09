@@ -27,11 +27,7 @@
 		]
 	},
 	"mixins": [
-		"kts4mc.mixins.json",
-		{
-			"config": "kts4mc.client.mixins.json",
-			"environment": "client"
-		}
+		"kts4mc.mixins.json"
 	],
 	"depends": {
 		"fabricloader": ">=0.18.4",

@@ -18,7 +18,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import top.katton.api.event.*;
 
-@SuppressWarnings("DataFlowIssue")
+@SuppressWarnings({"DataFlowIssue", "DiscouragedShift"})
 @Mixin(LivingEntity.class)
 public abstract class LivingEntityMixin {
 
@@ -35,10 +35,9 @@ public abstract class LivingEntityMixin {
     protected abstract void updatingUsingItem();
     
     @Inject(method = "causeFallDamage", at = @At("HEAD"), cancellable = true)
-    private void katton$onFall(float distance, float damageMultiplier, 
-                               CallbackInfoReturnable<Boolean> cir) {
+    private void katton$onFall(double fallDistance, float damageModifier, DamageSource damageSource, CallbackInfoReturnable<Boolean> cir) {
         LivingEntity self = (LivingEntity)(Object)this;
-        ServerLivingEntityEvent.onLivingFall.invoke(new LivingFallArg(self, distance, damageMultiplier));
+        ServerLivingEntityEvent.onLivingFall.invoke(new LivingFallArg(self, fallDistance, damageModifier));
         if (ServerLivingEntityEvent.onLivingFall.isCanceled()) {
             cir.setReturnValue(false);
         }
@@ -54,7 +53,7 @@ public abstract class LivingEntityMixin {
                     shift = At.Shift.BEFORE
             ),
             cancellable = true)
-    private void beforeSetUseItem(InteractionHand hand, CallbackInfo ci, @Local ItemStack itemStack) {
+    private void beforeSetUseItem(InteractionHand hand, CallbackInfo ci, @Local(name = "itemStack") ItemStack itemStack) {
         LivingEntity self = (LivingEntity)(Object)this;
         LivingUseItemEvent.onUseItemStart.invoke(new LivingUseItemStartArg(self, itemStack, hand, itemStack.getUseDuration(self)));
         if(LivingUseItemEvent.onUseItemStart.isCanceled()) {
@@ -62,6 +61,7 @@ public abstract class LivingEntityMixin {
         }
     }
 
+    @SuppressWarnings("resource")
     @Inject(method = "updateUsingItem", at = @At("HEAD"), cancellable = true)
     protected void onUpdateUsingItem(ItemStack useItem, CallbackInfo ci) {
         LivingEntity self = (LivingEntity)(Object)this;
@@ -104,6 +104,7 @@ public abstract class LivingEntityMixin {
         ci.cancel();
     }
 
+    @SuppressWarnings("resource")
     @Inject(method = "completeUsingItem", at = @At("HEAD"), cancellable = true)
     protected void onCompleteUsingItem(CallbackInfo ci) {
         LivingEntity self = (LivingEntity)(Object)this;
@@ -131,19 +132,13 @@ public abstract class LivingEntityMixin {
 
     @Inject(
             method = "applyItemBlocking",
-            at = @At(
-                    value = "INVOKE_ASSIGN",
-                    target = "Lnet/minecraft/world/item/component;resolveBlockedDamage(Lnet/minecraft/world/damagesource/DamageSource;FD)F"
-            ),
+            at = @At(value = "INVOKE", target = "Lnet/minecraft/world/item/component/BlocksAttacks;hurtBlockingItem(Lnet/minecraft/world/level/Level;Lnet/minecraft/world/item/ItemStack;Lnet/minecraft/world/entity/LivingEntity;Lnet/minecraft/world/InteractionHand;F)V"),
             cancellable = true
     )
     private void afterResolveBlockedDamage(
-            DamageSource source,
-            float damage,
-            float angle,
+            ServerLevel level, DamageSource source, float damage,
             CallbackInfoReturnable<Float> cir,
-            @Local BlocksAttacks blocksAttacks,
-            @Local LocalFloatRef damageBlocked
+            @Local(name = "blocksAttacks") BlocksAttacks blocksAttacks, @Local(name="damageBlocked") LocalFloatRef damageBlocked
     ) {
         LivingEntity self = (LivingEntity) (Object) this;
 

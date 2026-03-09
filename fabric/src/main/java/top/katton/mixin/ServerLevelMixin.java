@@ -12,8 +12,8 @@ import top.katton.api.event.ExplosionStartArg;
 
 @Mixin(ServerLevel.class)
 public class ServerLevelMixin {
-    @Inject(method = "explode", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/level/ServerExplosion;explode()V"))
-    private void beforeExplode(CallbackInfo ci, @Local ServerExplosion explosion) {
+    @Inject(method = "explode", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/level/ServerExplosion;explode()I"), cancellable = true)
+    private void beforeExplode(CallbackInfo ci, @Local(name = "explosion") ServerExplosion explosion) {
         ChunkAndBlockEvent.onExplosionStart.invoke(new ExplosionStartArg(explosion.level(), explosion));
         if(ChunkAndBlockEvent.onExplosionStart.isCanceled()) ci.cancel();
     }

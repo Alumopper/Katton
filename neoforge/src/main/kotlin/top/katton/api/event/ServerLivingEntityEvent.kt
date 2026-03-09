@@ -45,7 +45,7 @@ object ServerLivingEntityEvent {
         onLivingFall(
             LivingFallArg(
                 e.entity,
-                e.distance.toFloat(),
+                e.distance,
                 e.damageMultiplier
             )
         )
