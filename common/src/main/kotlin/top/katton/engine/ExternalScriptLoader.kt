@@ -10,18 +10,33 @@ import java.util.stream.Collectors
  *
  * Expected structure:
  * <gameDir>/scripts/<pack>/server_scripts/**/*.kt
- * <gameDir>/scripts/<pack>/client_scripts/**/*.kt (reserved, currently ignored)
+ * <gameDir>/scripts/<pack>/client_scripts/**/*.kt
  */
 object ExternalScriptLoader {
 
     private val SCRIPT_DIR = "scripts"
     private val SERVER_SCRIPT = "server_scripts"
+    private val CLIENT_SCRIPT = "client_scripts"
 
     /**
      * Collects all server script file paths from the given game directory.
      */
     @JvmStatic
     fun collectServerScripts(gameDir: Path?): List<String> {
+        return collectScripts(gameDir, SERVER_SCRIPT, "server")
+    }
+
+    /**
+     * Collects all client script file paths from the given game directory.
+     *
+     * Expected structure: <gameDir>/scripts/<pack>/client_scripts/.kt
+     */
+    @JvmStatic
+    fun collectClientScripts(gameDir: Path?): List<String> {
+        return collectScripts(gameDir, CLIENT_SCRIPT, "client")
+    }
+
+    private fun collectScripts(gameDir: Path?, subfolder: String, label: String): List<String> {
         if (gameDir == null) return emptyList()
 
         val scriptsRoot = gameDir.resolve(SCRIPT_DIR)
@@ -33,10 +48,10 @@ object ExternalScriptLoader {
             namespaces
                 .filter { Files.isDirectory(it) }
                 .forEach { namespaceDir ->
-                    val serverScriptsDir = namespaceDir.resolve(SERVER_SCRIPT)
-                    if (!Files.isDirectory(serverScriptsDir)) return@forEach
+                    val scriptSubDir = namespaceDir.resolve(subfolder)
+                    if (!Files.isDirectory(scriptSubDir)) return@forEach
 
-                    Files.walk(serverScriptsDir).use { files ->
+                    Files.walk(scriptSubDir).use { files ->
                         val matched = files
                             .filter { Files.isRegularFile(it) }
                             .filter { it.fileName.toString().endsWith(".kt") }
@@ -49,7 +64,7 @@ object ExternalScriptLoader {
         }
 
         if (result.isNotEmpty()) {
-            LOGGER.info("Discovered {} external server scripts from runtime scripts folder", result.size)
+            LOGGER.info("Discovered {} external {} scripts from runtime scripts folder", result.size, label)
         }
         return result
     }

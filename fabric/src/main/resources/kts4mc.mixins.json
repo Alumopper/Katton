@@ -4,6 +4,8 @@
   "compatibilityLevel": "JAVA_21",
   "mixins": [
     "ClientRegistrySyncHandlerMixin",
+    "GuiRenderMixin",
+    "LevelRendererMixin",
     "EnderManMixin",
     "ExperienceOrbMixin",
     "ExplosionMixin",

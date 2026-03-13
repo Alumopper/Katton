@@ -3,6 +3,8 @@
   "package": "top.katton.mixin",
   "compatibilityLevel": "JAVA_21",
   "mixins": [
+    "GuiRenderMixin",
+    "LevelRendererMixin",
     "ChunkHolderMixin",
     "ClientConfigurationPacketListenerImplMixin",
     "DataComponentInitializersMixin",

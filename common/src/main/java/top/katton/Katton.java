@@ -4,8 +4,10 @@ package top.katton;
 import net.minecraft.server.MinecraftServer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import top.katton.api.KattonClientRenderApiKt;
 import top.katton.api.dpcaller.EntityEvent;
 import top.katton.registry.ScriptCommandRegistry;
+import top.katton.engine.ClientScriptLoader;
 import top.katton.engine.ExternalScriptLoader;
 import top.katton.engine.ScriptEngine;
 import top.katton.engine.ScriptLoader;
@@ -39,6 +41,27 @@ public class Katton {
 
     public static void setGameDirectory(Path gameDir) {
         gameDirectory = gameDir;
+    }
+
+    /**
+     * Reload client-side scripts from resource packs and the external scripts folder.
+     * This must be called on the client thread (e.g. from a resource reload callback).
+     *
+     * @return true if scripts were reloaded successfully.
+     */
+    public static boolean reloadClientScripts() {
+        if (!ClientScriptLoader.refreshFromLatestResourceManager()) {
+            logger.warn("Skipping client script reload because no client resource manager is available yet");
+            return false;
+        }
+
+        Event.clearHandlers();
+        InjectionManager.beginReload();
+        KattonClientRenderApiKt.clearClientRenderers();
+        Set<String> mergedScripts = new LinkedHashSet<>(ClientScriptLoader.getScripts().values());
+        mergedScripts.addAll(ExternalScriptLoader.collectClientScripts(gameDirectory));
+        ScriptEngine.compileAndExecuteAll(mergedScripts);
+        return true;
     }
 
     public static boolean reloadScripts(MinecraftServer server) {
