@@ -1,22 +1,17 @@
 package top.katton.platform
 
-import com.mojang.blaze3d.systems.RenderSystem
-import com.mojang.blaze3d.vertex.BufferUploader
-import com.mojang.blaze3d.vertex.DefaultVertexFormat
 import com.mojang.blaze3d.vertex.PoseStack
-import com.mojang.blaze3d.vertex.Tesselator
-import com.mojang.blaze3d.vertex.VertexFormat
 import net.minecraft.client.Camera
 import net.minecraft.client.Minecraft
 import net.minecraft.client.gui.GuiGraphics
 import net.minecraft.client.gui.components.toasts.SystemToast
 import net.minecraft.client.gui.screens.ChatScreen
-import net.minecraft.client.renderer.GameRenderer
+import net.minecraft.client.renderer.MultiBufferSource
+import net.minecraft.client.renderer.rendertype.RenderTypes
 import net.minecraft.core.particles.DustParticleOptions
 import net.minecraft.network.chat.Component
 import net.minecraft.resources.Identifier
 import net.minecraft.sounds.SoundEvent
-import org.joml.Matrix4f
 import org.joml.Vector3f
 
 object NeoForgeClientApiBridge : ClientApiHooks.Bridge {
@@ -206,46 +201,41 @@ object NeoForgeClientApiBridge : ClientApiHooks.Bridge {
         argbColor: Int,
         lineWidth: Float
     ): Boolean {
-        val mv = viewMatrix as? Matrix4f ?: return false
         val cam = camera as? Camera ?: return false
-        val camPos = cam.position
+        val camPos = cam.position()
 
         val a = ((argbColor ushr 24) and 0xFF)
         val r = ((argbColor ushr 16) and 0xFF)
         val g = ((argbColor ushr 8) and 0xFF)
         val b = (argbColor and 0xFF)
 
+        // Direction vector used as per-vertex normal for line rendering.
         val dx = (x2 - x1).toFloat()
         val dy = (y2 - y1).toFloat()
         val dz = (z2 - z1).toFloat()
         val len = Math.sqrt((dx * dx + dy * dy + dz * dz).toDouble()).toFloat().coerceAtLeast(1e-6f)
-        val nx = dx / len; val ny = dy / len; val nz = dz / len
+        val nx = dx / len
+        val ny = dy / len
+        val nz = dz / len
 
         val poseStack = PoseStack()
-        poseStack.last().pose().set(mv)
-        val matrix = poseStack.last().pose()
-        val normal = poseStack.last().normal()
+        poseStack.translate(-camPos.x, -camPos.y, -camPos.z)
+        val pose = poseStack.last()
 
-        RenderSystem.setShader(GameRenderer::getPositionColorShader)
-        RenderSystem.defaultBlendFunc()
-        RenderSystem.enableBlend()
-        RenderSystem.lineWidth(lineWidth.coerceAtLeast(1f))
-        RenderSystem.disableDepthTest()
+        val bufferSource: MultiBufferSource.BufferSource = mc.renderBuffers().bufferSource()
+        val vc = bufferSource.getBuffer(RenderTypes.linesTranslucent())
+        val width = lineWidth.coerceAtLeast(1f)
 
-        val tesselator = Tesselator.getInstance()
-        val buf = tesselator.begin(VertexFormat.Mode.LINES, DefaultVertexFormat.POSITION_COLOR_NORMAL)
-        buf.addVertex(matrix,
-            (x1 - camPos.x).toFloat(), (y1 - camPos.y).toFloat(), (z1 - camPos.z).toFloat())
-            .setColor(r, g, b, a).setNormal(normal, nx, ny, nz)
-        buf.addVertex(matrix,
-            (x2 - camPos.x).toFloat(), (y2 - camPos.y).toFloat(), (z2 - camPos.z).toFloat())
-            .setColor(r, g, b, a).setNormal(normal, nx, ny, nz)
+        vc.addVertex(pose, x1.toFloat(), y1.toFloat(), z1.toFloat())
+            .setColor(r, g, b, a)
+            .setNormal(nx, ny, nz)
+            .setLineWidth(width)
+        vc.addVertex(pose, x2.toFloat(), y2.toFloat(), z2.toFloat())
+            .setColor(r, g, b, a)
+            .setNormal(nx, ny, nz)
+            .setLineWidth(width)
 
-        BufferUploader.drawWithShader(buf.buildOrThrow())
-
-        RenderSystem.enableDepthTest()
-        RenderSystem.lineWidth(1f)
-        RenderSystem.disableBlend()
+        bufferSource.endBatch(RenderTypes.linesTranslucent())
         return true
     }
 
@@ -259,9 +249,8 @@ object NeoForgeClientApiBridge : ClientApiHooks.Bridge {
         argbColor: Int,
         size: Float
     ): Boolean {
-        val mv = viewMatrix as? Matrix4f ?: return false
         val cam = camera as? Camera ?: return false
-        val camPos = cam.position
+        val camPos = cam.position()
 
         val a = ((argbColor ushr 24) and 0xFF)
         val r = ((argbColor ushr 16) and 0xFF)
@@ -269,38 +258,40 @@ object NeoForgeClientApiBridge : ClientApiHooks.Bridge {
         val b = (argbColor and 0xFF)
         val h = size / 2f
 
-        val right = Vector3f(mv.m00(), mv.m10(), mv.m20())
-        val up    = Vector3f(mv.m01(), mv.m11(), mv.m21())
+        // Use camera basis vectors directly for a stable billboard orientation.
+        val right = Vector3f(cam.leftVector()).mul(-1f)
+        val up = Vector3f(cam.upVector())
 
         val poseStack = PoseStack()
-        poseStack.last().pose().set(mv)
-        val matrix = poseStack.last().pose()
+        poseStack.translate(-camPos.x, -camPos.y, -camPos.z)
+        val pose = poseStack.last()
 
+        // Camera-relative center
         val cx = (x - camPos.x).toFloat()
         val cy = (y - camPos.y).toFloat()
         val cz = (z - camPos.z).toFloat()
 
-        val v0x = cx - right.x * h - up.x * h; val v0y = cy - right.y * h - up.y * h; val v0z = cz - right.z * h - up.z * h
-        val v1x = cx + right.x * h - up.x * h; val v1y = cy + right.y * h - up.y * h; val v1z = cz + right.z * h - up.z * h
-        val v2x = cx + right.x * h + up.x * h; val v2y = cy + right.y * h + up.y * h; val v2z = cz + right.z * h + up.z * h
-        val v3x = cx - right.x * h + up.x * h; val v3y = cy - right.y * h + up.y * h; val v3z = cz - right.z * h + up.z * h
+        // Four corners: center ± right*h ± up*h
+        val v0x = cx - right.x * h - up.x * h
+        val v0y = cy - right.y * h - up.y * h
+        val v0z = cz - right.z * h - up.z * h
+        val v1x = cx + right.x * h - up.x * h
+        val v1y = cy + right.y * h - up.y * h
+        val v1z = cz + right.z * h - up.z * h
+        val v2x = cx + right.x * h + up.x * h
+        val v2y = cy + right.y * h + up.y * h
+        val v2z = cz + right.z * h + up.z * h
+        val v3x = cx - right.x * h + up.x * h
+        val v3y = cy - right.y * h + up.y * h
+        val v3z = cz - right.z * h + up.z * h
 
-        RenderSystem.setShader(GameRenderer::getPositionColorShader)
-        RenderSystem.defaultBlendFunc()
-        RenderSystem.enableBlend()
-        RenderSystem.disableDepthTest()
-
-        val tesselator = Tesselator.getInstance()
-        val buf = tesselator.begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_COLOR)
-        buf.addVertex(matrix, v0x, v0y, v0z).setColor(r, g, b, a)
-        buf.addVertex(matrix, v1x, v1y, v1z).setColor(r, g, b, a)
-        buf.addVertex(matrix, v2x, v2y, v2z).setColor(r, g, b, a)
-        buf.addVertex(matrix, v3x, v3y, v3z).setColor(r, g, b, a)
-
-        BufferUploader.drawWithShader(buf.buildOrThrow())
-
-        RenderSystem.enableDepthTest()
-        RenderSystem.disableBlend()
+        val bufferSource: MultiBufferSource.BufferSource = mc.renderBuffers().bufferSource()
+        val vc = bufferSource.getBuffer(RenderTypes.debugQuads())
+        vc.addVertex(pose, v0x, v0y, v0z).setColor(r, g, b, a)
+        vc.addVertex(pose, v1x, v1y, v1z).setColor(r, g, b, a)
+        vc.addVertex(pose, v2x, v2y, v2z).setColor(r, g, b, a)
+        vc.addVertex(pose, v3x, v3y, v3z).setColor(r, g, b, a)
+        bufferSource.endBatch(RenderTypes.debugQuads())
         return true
     }
 }
