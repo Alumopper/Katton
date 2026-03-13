@@ -1,16 +1,15 @@
 package top.katton;
 
 import net.fabricmc.api.ModInitializer;
+import net.fabricmc.loader.api.FabricLoader;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.resource.v1.ResourceLoader;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.packs.PackType;
-import top.katton.api.dpcaller.EntityEvent;
 import top.katton.api.event.*;
 import top.katton.command.ScriptCommand;
 import top.katton.engine.ScriptLoader;
 import top.katton.network.Networking;
-import top.katton.network.ServerNetworking;
 
 import static top.katton.Katton.*;
 
@@ -18,6 +17,7 @@ public class KattonFabric implements ModInitializer {
     @Override
     public void onInitialize() {
         //Entrance point for common initialization
+        setGameDirectory(FabricLoader.getInstance().getGameDir());
         mainInitialize();
         eventInitialize();
 

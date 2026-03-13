@@ -6,11 +6,16 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import top.katton.api.dpcaller.EntityEvent;
 import top.katton.registry.ScriptCommandRegistry;
+import top.katton.engine.ExternalScriptLoader;
 import top.katton.engine.ScriptEngine;
 import top.katton.engine.ScriptLoader;
 import top.katton.engine.InjectionManager;
 import top.katton.registry.KattonRegistry;
 import top.katton.util.Event;
+
+import java.nio.file.Path;
+import java.util.LinkedHashSet;
+import java.util.Set;
 
 public class Katton {
     public static final String MOD_ID = "katton";
@@ -21,17 +26,31 @@ public class Katton {
      */
     public static MinecraftServer server = null;
     public static LoadState globalState = LoadState.INIT;
+    public static Path gameDirectory = null;
 
     // common 初始化点
     public static void mainInitialize() {
         // Initialize KattonRegistry first to register custom DataComponentTypes
         KattonRegistry.INSTANCE.initialize();
+        Set<String> mergedScripts = new LinkedHashSet<>(ScriptLoader.getScripts().values());
+        mergedScripts.addAll(ExternalScriptLoader.collectServerScripts(gameDirectory));
+        ScriptEngine.compileAndExecuteAll(mergedScripts);
     }
 
-    public static void reloadScripts(MinecraftServer server) {
+    public static void setGameDirectory(Path gameDir) {
+        gameDirectory = gameDir;
+    }
+
+    public static boolean reloadScripts(MinecraftServer server) {
         if (server == null) {
-            return;
+            return false;
         }
+
+        if (!ScriptLoader.refreshFromLatestResourceManager()) {
+            logger.warn("Skipping /katton reload because no datapack resource manager is available yet");
+            return false;
+        }
+
         ScriptCommandRegistry.INSTANCE.beginReload(server);
         KattonRegistry.ITEMS.INSTANCE.beginReload();
         KattonRegistry.EFFECTS.INSTANCE.beginReload();
@@ -39,8 +58,8 @@ public class Katton {
         EntityEvent.INSTANCE.beginReload();
         Event.clearHandlers();
         InjectionManager.beginReload();
-        //TODO: reload scripts
         ScriptEngine.compileAndExecuteAll(ScriptLoader.getScripts().values());
         EntityEvent.INSTANCE.rebindLoadedEntities(server);
+        return true;
     }
 }

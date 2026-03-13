@@ -42,6 +42,23 @@ object ScriptLoader : PreparableReloadListener {
     }
 
     /**
+     * Re-scan datapack scripts from the latest known resource manager without
+     * triggering a full vanilla datapack reload.
+     *
+     * @return true if a resource manager was available and the script snapshot was refreshed.
+     */
+    @JvmStatic
+    @Synchronized
+    fun refreshFromLatestResourceManager(): Boolean {
+        val manager = latestResourceManager ?: return false
+        val loadedTags = tagsLoader.load(manager)
+        scripts = KT_LISTER.listMatchingResources(manager)
+            .mapValues { getResourceAbsolutePath(it.value, it.key) }
+        tags = tagsLoader.build(loadedTags)
+        return true
+    }
+
+    /**
      * Reload scripts and tags. Called when a datapack is reloading
      */
     override fun reload(

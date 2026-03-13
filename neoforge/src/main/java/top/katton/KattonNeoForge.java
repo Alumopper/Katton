@@ -2,6 +2,7 @@ package top.katton;
 
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.common.Mod;
+import net.neoforged.fml.loading.FMLPaths;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.AddServerReloadListenersEvent;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
@@ -29,6 +30,7 @@ public class KattonNeoForge {
 
     public KattonNeoForge(IEventBus modEventBus) {
         DynamicRegistryHooks.setAfterDynamicBlockRegistered(NeoForgeDynamicRegistryHooks::afterDynamicBlockRegistered);
+        Katton.setGameDirectory(FMLPaths.GAMEDIR.get());
         Katton.mainInitialize();
 
         registerGameEventBridges();
