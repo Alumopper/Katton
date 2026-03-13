@@ -18,11 +18,11 @@ object PlayerEvent {
 
     fun initialize(){
         BlockEvents.USE_ITEM_ON.register { a, b, c, d, e, f, g ->
-            onUseItemOn(UseItemOnArg(a, b, c, d, e, f, g)).getOrElse { InteractionResult.PASS }
+            onUseItemOn(UseItemOnArg(a, b, c, d, e, f, g)).getOrNull()
         }
 
         BlockEvents.USE_WITHOUT_ITEM.register { a, b, c, d, e ->
-            onUseWithoutItem(UseWithoutItemOnArg(a, b, c, d, e)).getOrElse { InteractionResult.PASS }
+            onUseWithoutItem(UseWithoutItemOnArg(a, b, c, d, e)).getOrNull()
         }
 
         AttackBlockCallback.EVENT.register { a, b, c, d, e ->

@@ -97,7 +97,8 @@ fun main() {
         object : Item(it) {
             override fun use(level: Level, player: Player, hand: InteractionHand): InteractionResult {
                 (player as? ServerPlayer)?.let { p -> tell(p , "Used the hello item!") }
-                return InteractionResult.SUCCESS
+                // Do not consume the click so block interactions can still run.
+                return InteractionResult.PASS
             }
         }
     }
