@@ -5,7 +5,10 @@ import top.katton.util.createAll
 import top.katton.util.createUnit
 
 /**
- * Server-side message events (chat/game/command allow and handlers).
+ * Server-side message events for Fabric platform.
+ *
+ * This object provides events related to chat messages, game messages, and command messages.
+ * Includes both allow events (can cancel) and handler events (notification only).
  */
 object ServerMessageEvent {
 
@@ -35,15 +38,39 @@ object ServerMessageEvent {
         }
     }
 
+    /**
+     * Event triggered to allow or deny a chat message from being sent.
+     *
+     * @return true to allow the message, false to cancel it.
+     */
     val onAllowChatMessage = createAll<AllowChatMessageArg>()
 
+    /**
+     * Event triggered to allow or deny a game message from being sent.
+     *
+     * @return true to allow the message, false to cancel it.
+     */
     val onAllowGameMessage = createAll<AllowGameMessageArg>()
 
+    /**
+     * Event triggered to allow or deny a command message from being sent.
+     *
+     * @return true to allow the message, false to cancel it.
+     */
     val onAllowCommandMessage = createAll<AllowCommandMessageArg>()
 
+    /**
+     * Event triggered when a chat message is sent (after being allowed).
+     */
     val onChatMessage = createUnit<ChatMessageArg>()
 
+    /**
+     * Event triggered when a game message is sent (after being allowed).
+     */
     val onGameMessage = createUnit<GameMessageArg>()
 
+    /**
+     * Event triggered when a command message is sent (after being allowed).
+     */
     val onCommandMessage = createUnit<CommandMessageArg>()
 }

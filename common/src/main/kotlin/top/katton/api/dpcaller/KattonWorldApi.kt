@@ -36,6 +36,20 @@ import top.katton.util.Result
 import kotlin.jvm.optionals.getOrDefault
 import kotlin.math.sqrt
 
+/**
+ * World management API for level operations.
+ *
+ * This module provides functions for working with Minecraft worlds including:
+ * - Level access and management
+ * - Block operations (get, set, fill)
+ * - Biome manipulation
+ * - Structure location
+ * - Sound playing
+ */
+
+/**
+ * Map-like access to all server levels by ResourceKey.
+ */
 class KattonLevelMap(
     private val server: MinecraftServer
 ) : Map<ResourceKey<Level>, ServerLevel> {
@@ -63,31 +77,58 @@ class KattonLevelMap(
         return server.getLevel(key)
     }
 
+    /**
+     * Quick access to the Overworld level.
+     */
     val overworld: ServerLevel
         get() = get(Level.OVERWORLD) ?: error("Overworld not found")
+    
+    /**
+     * Quick access to the Nether level.
+     */
     val nether: ServerLevel
         get() = get(Level.NETHER) ?: error("Nether not found")
+    
+    /**
+     * Quick access to the End level.
+     */
     val end: ServerLevel
         get() = get(Level.END) ?: error("End not found")
 }
 
+/**
+ * Map-like access to all server levels.
+ */
 val levels: KattonLevelMap
     get() = KattonLevelMap(requireServer())
 
-
-
+/**
+ * Access to players in a level.
+ */
 val ServerLevel.players: KattonLevelPlayerCollection
     get() = KattonLevelPlayerCollection(this)
 
+/**
+ * Access to block entities in a level.
+ */
 val ServerLevel.blockEntities: KattonLevelBlockEntityCollection
     get() = KattonLevelBlockEntityCollection(this)
 
+/**
+ * Access to entities in a level.
+ */
 val ServerLevel.entities: KattonLevelEntityCollection
     get() = KattonLevelEntityCollection(this)
 
+/**
+ * Access to blocks in a level.
+ */
 val Level.blocks: KattonLevelBlockCollection
     get() = KattonLevelBlockCollection(this)
 
+/**
+ * Access to block states in a level.
+ */
 val Level.blockStates: KattonLevelBlockStateCollection
     get() = KattonLevelBlockStateCollection(this)
 

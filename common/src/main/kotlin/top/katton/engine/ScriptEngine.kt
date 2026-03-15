@@ -71,7 +71,7 @@ object ScriptEngine {
             }
 
             is ResultWithDiagnostics.Failure -> {
-                LOGGER.error("Compile failed: ${compileResult.reports.joinToString("\n")}")
+                LOGGER.error("Compile failed.")
             }
         }
     }

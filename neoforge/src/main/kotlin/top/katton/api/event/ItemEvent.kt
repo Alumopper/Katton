@@ -10,7 +10,10 @@ import top.katton.Katton
 import top.katton.util.createReturnIfNot
 
 /**
- * Item interaction events (use / useOn)
+ * Item interaction events for NeoForge platform.
+ *
+ * This object provides events related to item usage including
+ * using items on blocks and general item use events.
  */
 @Suppress("unused")
 @EventBusSubscriber(
@@ -18,6 +21,7 @@ import top.katton.util.createReturnIfNot
     value = [Dist.DEDICATED_SERVER]
 )
 object ItemEvent {
+
     @SubscribeEvent
     private fun handleUseOn(e: UseItemOnBlockEvent) {
         if (e.level.isClientSide || e.usePhase != UseItemOnBlockEvent.UsePhase.ITEM_AFTER_BLOCK) {
@@ -39,7 +43,7 @@ object ItemEvent {
         val result = onUse(ItemUseArg(e.level, e.entity, e.hand)).getOrNull() ?: return
         if (result != InteractionResult.PASS) {
             e.setCancellationResult(result)
-            e.setCanceled(true)
+            e.isCanceled = true
         }
     }
 

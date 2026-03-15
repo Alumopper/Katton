@@ -14,8 +14,10 @@ import top.katton.util.createUnit
 import top.katton.util.setCancel
 
 /**
- * General server entity lifecycle events (load/unload/equipment changes).
- * Also includes entity level/world changes and teleportation events.
+ * Server entity lifecycle events for NeoForge platform.
+ *
+ * This object provides events related to entity lifecycle including
+ * loading, unloading, equipment changes, teleportation, and Enderman anger.
  */
 @Suppress("unused")
 @EventBusSubscriber(
@@ -63,21 +65,50 @@ object ServerEntityEvent {
     }
 
     // === Entity Lifecycle ===
+
+    /**
+     * Event triggered when an entity joins a level (server-side).
+     * Can be cancelled to prevent the entity from joining.
+     */
     val onEntityLoad = createCancellableUnit<EntityLoadArg>()
 
+    /**
+     * Event triggered when an entity leaves a level.
+     */
     val onEntityUnload = createUnit<EntityUnloadArg>()
 
+    /**
+     * Event triggered when an entity's equipment changes.
+     */
     val onEquipmentChange = createUnit<EquipmentChangeArg>()
 
     // === Entity Level Change ===
+
+    /**
+     * Event triggered after an entity changes levels/dimensions.
+     * Note: This is a placeholder for NeoForge compatibility.
+     */
     @JvmField
     val onAfterEntityChangeLevel = createUnit<AfterEntityChangeLevelArg>()
 
+    /**
+     * Event triggered after a player changes levels/dimensions.
+     * Note: This is a placeholder for NeoForge compatibility.
+     */
     @JvmField
     val onAfterPlayerChangeLevel = createUnit<AfterPlayerChangeLevelArg>()
 
     // === Entity Teleport ===
+
+    /**
+     * Event triggered when an entity teleports.
+     * Can be cancelled to prevent the teleport.
+     */
     val onEntityTeleport = createCancellableUnit<EntityTeleportArg>()
 
+    /**
+     * Event triggered when an Enderman is angered by a player.
+     * Can be cancelled to prevent the anger.
+     */
     val onEndermanAnger = createCancellableUnit<EndermanAngerArg>()
 }

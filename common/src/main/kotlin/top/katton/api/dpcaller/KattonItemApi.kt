@@ -20,6 +20,16 @@ import top.katton.api.requireServer
 import java.util.*
 
 /**
+ * Item management API for ItemStack operations.
+ *
+ * This module provides functions for working with items including:
+ * - NBT data access on ItemStacks
+ * - Container slot modification
+ * - Entity equipment modification
+ * - Loot function application
+ */
+
+/**
  * Extension property to get/set NBT data on an ItemStack.
  */
 var ItemStack.nbt: CompoundTag

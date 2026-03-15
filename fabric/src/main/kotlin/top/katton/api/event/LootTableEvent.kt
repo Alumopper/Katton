@@ -6,7 +6,10 @@ import top.katton.util.createFirstNotNullOfOrNull
 import top.katton.util.createUnit
 
 /**
- * Loot table related events (replace/modify/all loaded/modify drops).
+ * Loot table events for Fabric platform.
+ *
+ * This object provides events related to loot table manipulation including
+ * replacing, modifying, and reacting to loot table loading.
  */
 @Suppress("unused")
 object LootTableEvent {
@@ -29,11 +32,28 @@ object LootTableEvent {
         }
     }
 
+    /**
+     * Event triggered to replace a loot table entirely.
+     *
+     * @return The replacement LootTable, or null to keep the original.
+     */
     val onLootTableReplace = createFirstNotNullOfOrNull<LootTableReplaceArg, LootTable?>()
 
+    /**
+     * Event triggered to modify a loot table's contents.
+     * Use this to add or remove loot pool entries.
+     */
     val onLootTableModify = createUnit<LootTableModifyArg>()
 
+    /**
+     * Event triggered when all loot tables have been loaded.
+     * Use this for post-processing after all tables are available.
+     */
     val onLootTableAllLoad = createUnit<LootTableAllLoadArg>()
 
+    /**
+     * Event triggered to modify the drops from a loot table.
+     * Use this to customize what items are actually dropped.
+     */
     val onLootTableModifyDrops = createUnit<LootTableModifyDropsArg>()
 }

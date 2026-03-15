@@ -14,6 +14,22 @@ import net.minecraft.world.level.block.entity.BlockEntity
 import top.katton.api.requireServer
 import kotlin.jvm.optionals.getOrNull
 
+/**
+ * NBT data manipulation API.
+ *
+ * This module provides utilities for working with Minecraft's NBT (Named Binary Tag)
+ * data format, including:
+ * - Tag type conversion
+ * - Safe tag access with defaults
+ * - Entity and block entity NBT access
+ */
+
+/**
+ * Create a numeric Tag from a Number value.
+ *
+ * @param value The numeric value to convert
+ * @return The appropriate NumericTag subtype
+ */
 fun <T : Number> numericTagOf(value: T) {
     when (value) {
         is Byte -> ByteTag.valueOf(value)
@@ -25,6 +41,33 @@ fun <T : Number> numericTagOf(value: T) {
     }
 }
 
+
+/**
+ * Safely cast a Tag to a specific TagType.
+ *
+ * Performs automatic type conversion where possible:
+ * - Numeric tags can be converted between numeric types
+ * - String tags can be parsed into other types
+ * - Collection tags can be converted between array types
+ *
+ * @param tagType The target TagType
+ * @return The casted Tag or null if conversion is not possible
+ */
+fun <T : Tag> Tag?.getValue(tagType: TagType<T>): T? {
+    return this(tagType)
+}
+
+/**
+ * Safely cast a Tag to a specific TagType.
+ *
+ * Performs automatic type conversion where possible:
+ * - Numeric tags can be converted between numeric types
+ * - String tags can be parsed into other types
+ * - Collection tags can be converted between array types
+ *
+ * @param tagType The target TagType
+ * @return The casted Tag or null if conversion is not possible
+ */
 @Suppress("UNCHECKED_CAST")
 operator fun <T : Tag> Tag?.invoke(tagType: TagType<T>): T? {
     if (this == null) return null
@@ -70,6 +113,33 @@ operator fun <T : Tag> Tag?.invoke(tagType: TagType<T>): T? {
     return this as? T
 }
 
+
+/**
+ * Safely get a value from a Tag with a default fallback.
+ *
+ * Performs automatic type conversion where possible:
+ * - Numeric tags return numeric values
+ * - String tags return string values
+ * - Collection tags return lists
+ *
+ * @param default The default value to return if conversion fails
+ * @return The converted value or the default
+ */
+fun <V> Tag?.getOrValue(default: V): V {
+    return this(default)
+}
+
+/**
+ * Safely get a value from a Tag with a default fallback.
+ *
+ * Performs automatic type conversion where possible:
+ * - Numeric tags return numeric values
+ * - String tags return string values
+ * - Collection tags return lists
+ *
+ * @param default The default value to return if conversion fails
+ * @return The converted value or the default
+ */
 @Suppress("UNCHECKED_CAST")
 operator fun <V> Tag?.invoke(default: V): V {
     if (this == null) return default
@@ -111,7 +181,9 @@ operator fun <V> Tag?.invoke(default: V): V {
     return default
 }
 
-
+/**
+ * Convert a ByteTag to a Boolean value.
+ */
 fun ByteTag?.toBoolean(): Boolean = this?.asBoolean()?.getOrNull() ?: false
 
 fun CompoundTag.clear() {

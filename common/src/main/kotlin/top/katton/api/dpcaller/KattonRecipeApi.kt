@@ -5,6 +5,12 @@ package top.katton.api.dpcaller
 import net.minecraft.server.level.ServerPlayer
 import net.minecraft.world.item.crafting.RecipeHolder
 
+/**
+ * Recipe management API for player recipe operations.
+ *
+ * This module provides functions for managing player recipe knowledge,
+ * including awarding and revoking recipe advancements.
+ */
 
 /**
  * Give recipe advancements to players.
@@ -17,7 +23,6 @@ fun giveRecipes(players: Collection<ServerPlayer>, recipes: Collection<RecipeHol
         player.awardRecipes(recipes)
     }
 }
-
 
 /**
  * Take recipe advancements from players.

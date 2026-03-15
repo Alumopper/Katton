@@ -8,11 +8,14 @@ import top.katton.util.createCancellableUnit
 import top.katton.util.createUnit
 
 /**
- * Chunk, block entity, and block events (load/unload/break), plus explosion events.
+ * Chunk, block entity, and block events for Fabric platform.
+ *
+ * This object provides events related to chunk loading/unloading,
+ * block entity lifecycle, block breaking, and explosions.
  */
 @Suppress("unused")
 object ChunkAndBlockEvent {
-    // === Chunk Events ===
+
     fun initialize() {
         ServerChunkEvents.CHUNK_LOAD.register { a, b, c ->
             onChunkLoad(ChunkLoadArg(a, b, c))
@@ -47,28 +50,67 @@ object ChunkAndBlockEvent {
         }
     }
 
+    // === Chunk Events ===
+
+    /**
+     * Event triggered when a chunk is loaded.
+     */
     val onChunkLoad = createUnit<ChunkLoadArg>()
 
+    /**
+     * Event triggered when a chunk is unloaded.
+     */
     val onChunkUnload = createUnit<ChunkUnloadArg>()
 
+    /**
+     * Event triggered when a chunk's full status changes.
+     */
     val onChunkLevelTypeChange = createUnit<ChunkStatusChangeArg>()
 
     // === Block Entity Events ===
+
+    /**
+     * Event triggered when a block entity is loaded.
+     */
     val onBlockEntityLoad = createUnit<BlockEntityLoadArg>()
 
+    /**
+     * Event triggered when a block entity is unloaded.
+     */
     val onBlockEntityUnload = createUnit<BlockEntityLoadArg>()
 
     // === Block Break Events ===
+
+    /**
+     * Event triggered before a player breaks a block.
+     *
+     * @return true to allow the break, false to cancel it.
+     */
     val onBeforeBlockBreak = createAll<BlockBreakArg>()
 
+    /**
+     * Event triggered after a player breaks a block.
+     */
     val onAfterBlockBreak = createUnit<BlockBreakArg>()
 
+    /**
+     * Event triggered when a block break is canceled.
+     */
     val onCanceledBlockBreak = createUnit<BlockBreakArg>()
 
     // === Explosion Events ===
+
+    /**
+     * Event triggered when an explosion starts.
+     * Can be cancelled to prevent the explosion.
+     */
     @JvmField
     val onExplosionStart = createCancellableUnit<ExplosionStartArg>()
 
+    /**
+     * Event triggered when an explosion detonates.
+     * Use this to modify affected blocks/entities.
+     */
     @JvmField
     val onExplosionDetonate = createUnit<ExplosionDetonateArg>()
 }

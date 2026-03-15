@@ -10,8 +10,10 @@ import top.katton.util.createAll
 import top.katton.util.createUnit
 
 /**
- * Server entity combat events (critical hits, shield blocking, and entity combat).
- * Note: EntityCombat AFTER_KILLED event is placeholder for NeoForge.
+ * Server entity combat events for NeoForge platform.
+ *
+ * This object provides events related to entity combat including
+ * critical hits, shield blocking, and entity kills.
  */
 @Suppress("unused")
 @EventBusSubscriber(
@@ -35,12 +37,28 @@ object ServerEntityCombatEvent {
     }
 
     // === Entity Combat ===
+
+    /**
+     * Event triggered after an entity kills another entity.
+     * This is a notification event that cannot be cancelled.
+     */
     @JvmField
     val onAfterKilledOtherEntity = createUnit<AfterKilledOtherEntityArg>()
 
     // === Critical Hits ===
+
+    /**
+     * Event triggered when a critical hit is performed.
+     */
     val onCriticalHit = createUnit<CriticalHitArg>()
 
     // === Shield Block ===
+
+    /**
+     * Event triggered when an entity blocks with a shield.
+     * Can be used to modify the amount of damage blocked.
+     *
+     * @return The amount of damage that should be blocked.
+     */
     val onShieldBlock = createAll<ShieldBlockArg>()
 }

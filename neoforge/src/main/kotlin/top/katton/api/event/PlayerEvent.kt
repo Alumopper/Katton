@@ -11,6 +11,12 @@ import top.katton.util.createCancellableUnit
 import top.katton.util.createUnit
 import top.katton.util.setCancel
 
+/**
+ * Player interaction events for NeoForge platform.
+ *
+ * This object provides events related to player interactions including
+ * attacking entities, interacting with blocks/entities, and item destruction.
+ */
 @Suppress("unused")
 @EventBusSubscriber(
     modid = Katton.MOD_ID,
@@ -58,16 +64,39 @@ object PlayerEvent {
         onDestroyItem(arg)
     }
 
+    /**
+     * Event triggered when a player attacks (left-clicks) an entity.
+     * Can be cancelled to prevent the attack.
+     */
     val onAttackEntity = createCancellableUnit<NeoPlayerAttackEntityArg>()
 
+    /**
+     * Event triggered when a player interacts (right-clicks) with an entity.
+     * Can be cancelled to prevent the interaction.
+     */
     val onEntityInteract = createCancellableUnit<NeoPlayerInteractEntityArg>()
 
+    /**
+     * Event triggered when a player interacts (right-clicks) with a block.
+     * Can be cancelled to prevent the interaction.
+     */
     val onBlockInteract = createCancellableUnit<NeoPlayerInteractBlockArg>()
 
+    /**
+     * Event triggered when a player uses (right-clicks) an item.
+     * Can be cancelled to prevent item use.
+     */
     val onItemInteract = createCancellableUnit<NeoPlayerInteractItemArg>()
 
+    /**
+     * Event triggered when a player left-clicks a block.
+     * Can be cancelled to prevent the action.
+     */
     val onLeftClickBlock = createCancellableUnit<NeoPlayerLeftClickBlockArg>()
 
+    /**
+     * Event triggered when a player's item is destroyed (e.g., tool breaking).
+     */
     val onDestroyItem = createUnit<PlayerDestroyItemArg>()
 
 }

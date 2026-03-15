@@ -11,7 +11,10 @@ import top.katton.util.createReturnIfNot
 import top.katton.util.createUnit
 
 /**
- * Player interaction events (attack/use interactions).
+ * Player interaction events for Fabric platform.
+ *
+ * This object provides events related to player interactions including
+ * attacking blocks/entities, using items, and interacting with blocks/entities.
  */
 @Suppress("unused")
 object PlayerEvent {
@@ -46,20 +49,58 @@ object PlayerEvent {
         }
     }
 
+    /**
+     * Event triggered when a player uses an item on a block.
+     *
+     * @return InteractionResult.PASS to allow default behavior, or other result to override.
+     */
     val onUseItemOn = createReturnIfNot<UseItemOnArg, InteractionResult>(InteractionResult.PASS)
 
+    /**
+     * Event triggered when a player interacts with a block without holding an item.
+     *
+     * @return InteractionResult.PASS to allow default behavior, or other result to override.
+     */
     val onUseWithoutItem = createReturnIfNot<UseWithoutItemOnArg, InteractionResult>(InteractionResult.PASS)
 
+    /**
+     * Event triggered when a player attacks (left-clicks) a block.
+     *
+     * @return InteractionResult.PASS to allow default behavior, or other result to cancel/override.
+     */
     val onAttackBlock = createReturnIfNot<PlayerAttackBlockArg, InteractionResult>(InteractionResult.PASS)
 
+    /**
+     * Event triggered when a player attacks (left-clicks) an entity.
+     *
+     * @return InteractionResult.PASS to allow default behavior, or other result to cancel/override.
+     */
     val onAttackEntity = createReturnIfNot<PlayerAttackEntityArg, InteractionResult>(InteractionResult.PASS)
 
+    /**
+     * Event triggered when a player interacts (right-clicks) with a block.
+     *
+     * @return InteractionResult.PASS to allow default behavior, or other result to override.
+     */
     val onBlockInteract = createReturnIfNot<PlayerUseBlockArg, InteractionResult>(InteractionResult.PASS)
 
+    /**
+     * Event triggered when a player interacts (right-clicks) with an entity.
+     *
+     * @return InteractionResult.PASS to allow default behavior, or other result to override.
+     */
     val onEntityInteract = createReturnIfNot<PlayerUseEntityArg, InteractionResult>(InteractionResult.PASS)
 
+    /**
+     * Event triggered when a player uses (right-clicks) an item.
+     *
+     * @return InteractionResult.PASS to allow default behavior, or other result to override.
+     */
     val onItemInteract = createReturnIfNot<PlayerUseItemArg, InteractionResult>(InteractionResult.PASS)
 
+    /**
+     * Event triggered when a player's item is destroyed (e.g., tool breaking).
+     */
     @JvmField
     val onDestroyItem = createUnit<PlayerDestroyItemArg>()
 }

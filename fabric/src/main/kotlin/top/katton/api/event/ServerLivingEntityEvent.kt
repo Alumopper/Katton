@@ -6,7 +6,10 @@ import top.katton.util.createCancellableUnit
 import top.katton.util.createUnit
 
 /**
- * Server-side living entity events (allow damage, after damage, allow death, after death, conversion).
+ * Server-side living entity events for Fabric platform.
+ *
+ * This object provides events related to living entity lifecycle including
+ * damage, death, and mob conversion events.
  */
 @Suppress("unused")
 object ServerLivingEntityEvent {
@@ -33,19 +36,47 @@ object ServerLivingEntityEvent {
         }
     }
 
+    /**
+     * Event triggered when a living entity is hurt.
+     * Can be cancelled to prevent the damage.
+     */
     @JvmField
     val onLivingHurt = createCancellableUnit<LivingHurtArg>()
 
+    /**
+     * Event triggered to allow or deny damage to a living entity.
+     *
+     * @return true to allow the damage, false to cancel it.
+     */
     val onAllowDamage = createAll<AllowDamageArg>()
 
+    /**
+     * Event triggered after a living entity takes damage.
+     */
     val onAfterDamage = createUnit<AfterDamageArg>()
 
+    /**
+     * Event triggered to allow or deny death of a living entity.
+     *
+     * @return true to allow the death, false to cancel it.
+     */
     val onAllowDeath = createAll<AllowDeathArg>()
 
+    /**
+     * Event triggered after a living entity dies.
+     */
     val onAfterDeath = createUnit<AfterDeathArg>()
 
+    /**
+     * Event triggered when a living entity falls.
+     * Can be cancelled to prevent fall damage processing.
+     */
     @JvmField
     val onLivingFall = createCancellableUnit<LivingFallArg>()
 
+    /**
+     * Event triggered when a mob is converted to another type
+     * (e.g., zombie villager curing, piglin zombification).
+     */
     val onMobConversion = createUnit<MobConversionArg>()
 }

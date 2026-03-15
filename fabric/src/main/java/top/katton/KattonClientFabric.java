@@ -8,13 +8,10 @@ import net.minecraft.server.packs.PackType;
 import top.katton.engine.ClientScriptLoader;
 import top.katton.network.ClientNetworkingFabric;
 import top.katton.network.Networking;
-import top.katton.platform.ClientApiHooks;
-import top.katton.platform.FabricClientApiBridge;
 
 public class KattonClientFabric implements ClientModInitializer {
 	@Override
 	public void onInitializeClient() {
-		ClientApiHooks.setBridge(FabricClientApiBridge.INSTANCE);
 
 		// Initialize common networking (payload type registration)
 		Networking.initialize();

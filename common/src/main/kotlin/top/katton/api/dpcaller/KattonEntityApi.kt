@@ -33,6 +33,16 @@ import top.katton.util.ContextEvent
 import java.util.*
 
 /**
+ * Entity management API for entity operations.
+ *
+ * This module provides functions for working with entities including:
+ * - NBT data access
+ * - Attribute management
+ * - Entity tick events
+ * - Entity collections and queries
+ */
+
+/**
  * Get/Set the NBT data of an Entity.
  */
 var Entity.nbt: CompoundTag
@@ -41,8 +51,15 @@ var Entity.nbt: CompoundTag
         setEntityNbt(this, value)
     }
 
+/**
+ * Event handlers for entity lifecycle events.
+ */
 object EntityEvent {
     val onTickHandlers = mutableMapOf<Entity, ContextEvent.HandlerEntry<Entity.(Level) -> Unit>>()
+    
+    /**
+     * Context event for entity tick operations.
+     */
     class EntityOnTickEvent(entity: Entity): ContextEvent<Entity, Entity.(level: Level)-> Unit>(entity, onTickHandlers) {
         override fun invoker(): Entity.(level: Level) -> Unit {
             return { level ->
@@ -58,8 +75,6 @@ object EntityEvent {
      */
     val Entity.onTick: EntityOnTickEvent
         get() = EntityOnTickEvent(this)
-
-
 
     /**
      * Clear all script-owned entity handlers before scripts are reloaded.
@@ -83,55 +98,100 @@ object EntityEvent {
     }
 }
 
+/**
+ * Collection of all entities across all server levels.
+ *
+ * @property server The MinecraftServer instance
+ */
 class KattonServerEntityCollection(
     private val server: MinecraftServer
 ) {
+    /**
+     * All entities across all levels.
+     */
     val all
         get() = server.allLevels.flatMap { it.allEntities }
 
+    /**
+     * Get entity collection for a specific level.
+     */
     operator fun get(level: ServerLevel): KattonLevelEntityCollection {
         return KattonLevelEntityCollection(level)
     }
 
+    /**
+     * Find an entity by UUID across all levels.
+     */
     operator fun get(uuid: UUID): Entity? {
         return server.allLevels.map { it.getEntity(uuid) }.firstOrNull()
     }
 }
 
+/**
+ * Collection of entities within a specific level.
+ *
+ * @property level The ServerLevel containing the entities
+ */
 class KattonLevelEntityCollection(
     val level: ServerLevel
 ) : Iterable<Entity> by level.allEntities {
+    /**
+     * Get entities matching a type test and predicate.
+     */
     operator fun <T : Entity> get(
         entityTypeTest: EntityTypeTest<Entity, T>,
         predicate: (T) -> Boolean = { true }
     ): List<T> = level.getEntities(entityTypeTest, predicate)
 
+    /**
+     * Get entities within an AABB matching a type test and predicate.
+     */
     operator fun <T : Entity> get(
         entityTypeTest: EntityTypeTest<Entity, T>,
         aabb: AABB,
         predicate: (T) -> Boolean = { true }
     ): List<T> = level.getEntities(entityTypeTest, aabb, predicate)
 
+    /**
+     * Get entities using an entity selector.
+     */
     operator fun get(selector: EntitySelector): List<Entity> {
         return findEntities(level, selector)
     }
 
+    /**
+     * Find an entity by UUID in this level.
+     */
     operator fun get(uuid: UUID): Entity? {
         return level.getEntity(uuid)
     }
 }
 
+/**
+ * Map-like access to a living entity's attribute values.
+ *
+ * @property entity The LivingEntity whose attributes are being accessed
+ */
 class KattonEntityAttributeValueMap(
     val entity: LivingEntity
 ) {
+    /**
+     * Check if the entity has a given attribute.
+     */
     fun contains(holder: Holder<Attribute>): Boolean {
         return entity.getAttribute(holder) != null
     }
 
+    /**
+     * Get the current value of an attribute.
+     */
     operator fun get(holder: Holder<Attribute>): Double? {
         return entity.getAttributeValue(holder)
     }
 
+    /**
+     * Set the base value of an attribute and optionally add modifiers.
+     */
     fun set(holder: Holder<Attribute>, value: Double, vararg modifiers: AttributeModifier) {
         entity.getAttribute(holder)?.baseValue?.let {
             it != value
@@ -142,6 +202,9 @@ class KattonEntityAttributeValueMap(
     }
 }
 
+/**
+ * Access to a living entity's attribute values.
+ */
 val LivingEntity.attributeValues
     get() = KattonEntityAttributeValueMap(this)
 

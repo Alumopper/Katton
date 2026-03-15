@@ -29,6 +29,15 @@ import top.katton.api.requireServer
 import java.util.*
 import java.util.function.Consumer
 
+/**
+ * Miscellaneous utility API for common operations.
+ *
+ * This module provides various utility functions including:
+ * - Player messaging
+ * - Particle spawning
+ * - Waypoint management
+ * - Entity teleportation
+ */
 
 /**
  * Send a system message to a player.
@@ -50,7 +59,6 @@ fun tell(player: ServerPlayer, message: Component) {
     player.sendSystemMessage(message)
 }
 
-
 /**
  * Send a system message to a player.
  *
@@ -64,9 +72,6 @@ fun tell(player: ServerPlayer, message: Any) {
     }
     tell(player, message.toString())
 }
-
-
-
 
 /**
  * Send a system message to multiple players.

@@ -12,6 +12,12 @@ import top.katton.util.createCancellableUnit
 import top.katton.util.createUnit
 import top.katton.util.setCancel
 
+/**
+ * Living entity use item events for NeoForge platform.
+ *
+ * This object provides events related to living entities using items including
+ * start, tick, stop, and finish of item use.
+ */
 @Suppress("unused")
 @EventBusSubscriber(
     modid = Katton.MOD_ID,
@@ -46,11 +52,26 @@ object LivingUseItemEvent {
         onUseItemFinish(arg)
     }
 
+    /**
+     * Event triggered when a living entity starts using an item.
+     * Can be cancelled to prevent item use.
+     */
     val onUseItemStart = createCancellableUnit<LivingUseItemStartArg>()
 
+    /**
+     * Event triggered each tick while a living entity is using an item.
+     * Can be cancelled to stop item use.
+     */
     val onUseItemTick = createCancellableUnit<LivingUseItemTickArg>()
 
+    /**
+     * Event triggered when a living entity stops using an item.
+     * Can be cancelled to continue item use.
+     */
     val onUseItemStop = createCancellableUnit<LivingUseItemStopArg>()
 
+    /**
+     * Event triggered when a living entity finishes using an item.
+     */
     val onUseItemFinish = createUnit<LivingUseItemFinishArg>()
 }

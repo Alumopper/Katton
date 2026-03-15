@@ -19,26 +19,62 @@ import net.minecraft.world.phys.Vec2
 import top.katton.api.LOGGER
 import java.util.*
 
+/**
+ * Player management API for player operations.
+ *
+ * This module provides functions for working with players including:
+ * - Player list access
+ * - Inventory management
+ * - Item operations
+ * - Player teleportation
+ */
+
+/**
+ * List-like access to all online players.
+ *
+ * @property playerList The underlying PlayerList
+ */
 class KattonPlayerList(
     val playerList: PlayerList
 ) : List<ServerPlayer> by playerList.players {
+    /**
+     * Find a player by name.
+     */
     operator fun get(name: String): ServerPlayer? {
         return playerList.getPlayer(name)
     }
 
+    /**
+     * Find a player by UUID.
+     */
     operator fun get(uuid: UUID): ServerPlayer? {
         return playerList.getPlayer(uuid)
     }
 }
 
-
+/**
+ * Collection of players within a specific level.
+ *
+ * @property level The ServerLevel containing the players
+ */
 class KattonLevelPlayerCollection(
     val level: ServerLevel
 ) : List<ServerPlayer> by level.players {
+    /**
+     * Find a player by UUID in this level.
+     */
     operator fun get(uuid: UUID): Player? {
         return level.getPlayerByUUID(uuid)
     }
 }
+
+/**
+ * Add an item to a player's inventory.
+ *
+ * @param player the Player to receive the item
+ * @param item the Item type to add
+ * @param amount the quantity to add
+ */
 fun Player.addItem(item: Item, amount: Int) = giveItem(this, ItemStack(item, amount))
 
 /**
@@ -91,6 +127,13 @@ fun giveItem(player: Player, itemStack: ItemStack): Boolean {
 
 
 
+/**
+ * Check if a player has a specific item type in their inventory.
+ *
+ * @param player the Player to check
+ * @param item the Item type to search for
+ * @return true if the player has the item, false otherwise
+ */
 fun hasItem(player: Player, item: Item): Boolean {
     return player.inventory.hasAnyOf(setOf(item))
 }

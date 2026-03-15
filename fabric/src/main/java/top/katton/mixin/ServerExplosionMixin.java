@@ -16,6 +16,7 @@ import java.util.List;
 
 @Mixin(ServerExplosion.class)
 public class ServerExplosionMixin {
+    @SuppressWarnings({"rawtypes", "unchecked"})
     @WrapOperation(
             method = "hurtEntities",
             at = @At(

@@ -5,7 +5,10 @@ import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents
 import top.katton.util.createUnit
 
 /**
- * Server lifecycle related events: server start/stop, datapack reload, save hooks.
+ * Server lifecycle events for Fabric platform.
+ *
+ * This object provides events related to server lifecycle including
+ * server start/stop, datapack reload, save hooks, and tick events.
  */
 object ServerEvent {
 
@@ -25,29 +28,68 @@ object ServerEvent {
         ServerTickEvents.END_LEVEL_TICK.register { onEndWorldTick(WorldTickArg(it)) }
     }
 
+    /**
+     * Event triggered when the server is starting (before worlds are loaded).
+     */
     val onServerStarting = createUnit<ServerArg>()
 
+    /**
+     * Event triggered when the server has started (after worlds are loaded).
+     */
     val onServerStarted = createUnit<ServerArg>()
 
+    /**
+     * Event triggered when the server is stopping.
+     */
     val onServerStopping = createUnit<ServerArg>()
 
+    /**
+     * Event triggered when the server has stopped.
+     */
     val onServerStopped = createUnit<ServerArg>()
 
+    /**
+     * Event triggered when datapack contents are being synced to players.
+     */
     val onSyncDatapackContents = createUnit<SyncDatapackContentsArg>()
 
+    /**
+     * Event triggered when a datapack reload is starting.
+     */
     val onStartDatapackReload = createUnit<StartDatapackReloadArg>()
 
+    /**
+     * Event triggered when a datapack reload has completed.
+     */
     val onEndDatapackReload = createUnit<EndDatapackReloadArg>()
 
+    /**
+     * Event triggered before the server saves data.
+     */
     val onBeforeSave = createUnit<ServerSaveArg>()
 
+    /**
+     * Event triggered after the server has saved data.
+     */
     val onAfterSave = createUnit<ServerSaveArg>()
 
+    /**
+     * Event triggered at the start of each server tick.
+     */
     val onStartServerTick = createUnit<ServerTickArg>()
 
+    /**
+     * Event triggered at the end of each server tick.
+     */
     val onEndServerTick = createUnit<ServerTickArg>()
 
+    /**
+     * Event triggered at the start of each world/level tick.
+     */
     val onStartWorldTick = createUnit<WorldTickArg>()
 
+    /**
+     * Event triggered at the end of each world/level tick.
+     */
     val onEndWorldTick = createUnit<WorldTickArg>()
 }

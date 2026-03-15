@@ -11,30 +11,66 @@ import net.minecraft.world.scores.criteria.ObjectiveCriteria
 import top.katton.api.LOGGER
 import top.katton.api.requireServer
 
+/**
+ * Scoreboard management API for score operations.
+ *
+ * This module provides functions for working with the scoreboard including:
+ * - Score getting and setting
+ * - Objective management
+ * - Team operations
+ * - Score holder utilities
+ */
+
+/**
+ * Get a score value for a target in an objective.
+ */
 operator fun Scoreboard.get(target: ScoreHolder, objective: Objective): Int? =
     scoreboard.getPlayerScoreInfo(target, objective)?.value()
 
+/**
+ * Set a score value for a target in an objective.
+ */
 operator fun Scoreboard.set(target: ScoreHolder, objective: Objective, value: Int) =
     scoreboard.getOrCreatePlayerScore(target, objective).set(value)
 
+/**
+ * Create a fake score holder with a name.
+ *
+ * @param name The name for the fake score holder
+ * @return A ScoreHolder that only exists for scoreboard purposes
+ */
 fun fake(name: String): ScoreHolder = ScoreHolder.forNameOnly(name)
 
+/**
+ * Map-like access to a score holder's scores across objectives.
+ *
+ * @property scoreboard The Scoreboard instance
+ * @property scoreHolder The ScoreHolder whose scores are being accessed
+ */
 class KattonScoreHolderScoreCollection(
     val scoreboard: Scoreboard,
     val scoreHolder: ScoreHolder
 ) {
+    /**
+     * Get the score value for an objective.
+     */
     operator fun get(objective: Objective): Int? {
         return scoreboard.getPlayerScoreInfo(scoreHolder, objective)?.value()
     }
 
+    /**
+     * Set the score value for an objective.
+     */
     operator fun set(objective: Objective, value: Int) {
         scoreboard.getOrCreatePlayerScore(scoreHolder, objective).set(value)
     }
 }
 
+/**
+ * Extension property to access a score holder's scores.
+ */
 val ScoreHolder.scores: KattonScoreHolderScoreCollection
     get() = KattonScoreHolderScoreCollection(scoreboard, this)
-
 
 /**
  * Get an objective by name.
@@ -43,7 +79,6 @@ val ScoreHolder.scores: KattonScoreHolderScoreCollection
  * @return Objective or null if not found
  */
 fun getObjective(name: String): Objective? = scoreboard.getObjective(name)
-
 
 /**
  * Get or create a scoreboard Objective.

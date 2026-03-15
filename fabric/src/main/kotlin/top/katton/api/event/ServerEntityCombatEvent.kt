@@ -5,7 +5,10 @@ import top.katton.util.createAll
 import top.katton.util.createUnit
 
 /**
- * Server entity combat events (killed other entity, critical hits, shield blocking).
+ * Server entity combat events for Fabric platform.
+ *
+ * This object provides events related to entity combat including
+ * entity kills, critical hits, and shield blocking.
  */
 @Suppress("unused")
 object ServerEntityCombatEvent {
@@ -17,9 +20,21 @@ object ServerEntityCombatEvent {
     }
 
     // === Entity Combat ===
+
+    /**
+     * Event triggered after an entity kills another entity.
+     * This is a notification event that cannot be cancelled.
+     */
     val onAfterKilledOtherEntity = createUnit<AfterKilledOtherEntityArg>()
 
     // === Shield Block ===
+
+    /**
+     * Event triggered when an entity blocks with a shield.
+     * Can be used to modify the amount of damage blocked.
+     *
+     * @return The amount of damage that should be blocked.
+     */
     @JvmField
     val onShieldBlock = createAll<ShieldBlockArg>()
 }

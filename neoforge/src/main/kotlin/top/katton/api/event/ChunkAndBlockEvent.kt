@@ -25,7 +25,10 @@ import top.katton.util.createUnit
 import top.katton.util.setCancel
 
 /**
- * Chunk, block entity, and block events (load/unload/break), plus explosion events.
+ * Chunk, block, and explosion events for NeoForge platform.
+ *
+ * This object provides events related to chunk loading/unloading,
+ * block breaking/placing, and explosions.
  */
 @Suppress("unused")
 @EventBusSubscriber(
@@ -124,37 +127,94 @@ object ChunkAndBlockEvent {
         }
     }
 
+    /**
+     * Event triggered when a chunk is loaded.
+     */
     val onChunkLoad = createUnit<ChunkLoadArg>()
 
+    /**
+     * Event triggered when a chunk is unloaded.
+     */
     val onChunkUnload = createUnit<ChunkUnloadArg>()
 
+    /**
+     * Event triggered when chunk data is loaded from disk.
+     */
     val onChunkDataLoad = createUnit<NeoChunkDataLoadArg>()
 
+    /**
+     * Event triggered when chunk data is saved to disk.
+     */
     val onChunkDataSave = createUnit<NeoChunkDataSaveArg>()
 
+    /**
+     * Event triggered when a player starts watching a chunk.
+     */
     val onChunkWatch = createUnit<NeoChunkWatchArg>()
 
+    /**
+     * Event triggered when a chunk is sent to a player.
+     */
     val onChunkSent = createUnit<NeoChunkWatchArg>()
 
+    /**
+     * Event triggered when a player stops watching a chunk.
+     */
     val onChunkUnWatch = createUnit<NeoChunkUnWatchArg>()
 
+    /**
+     * Event triggered when a chunk's level type changes.
+     * Note: This is a placeholder for NeoForge compatibility.
+     */
     @JvmField
     val onChunkLevelTypeChange = createUnit<ChunkStatusChangeArg>()
 
+    /**
+     * Event triggered when a block entity is loaded.
+     * Note: This is a placeholder for NeoForge compatibility.
+     */
     @JvmField
     val onBlockEntityLoad = createUnit<BlockEntityLoadArg>()
 
+    /**
+     * Event triggered when a block entity is unloaded.
+     * Note: This is a placeholder for NeoForge compatibility.
+     */
     @JvmField
     val onBlockEntityUnload = createUnit<BlockEntityLoadArg>()
 
+    /**
+     * Event triggered when a player breaks a block.
+     * Can be cancelled to prevent the break.
+     */
     val onBlockBreak = createCancellableUnit<BlockBreakArg>()
 
+    /**
+     * Event triggered when a player places a block.
+     * Can be cancelled to prevent the placement.
+     */
     val onBlockPlace = createCancellableUnit<BlockPlaceArg>()
 
+    /**
+     * Event triggered when an explosion starts.
+     * Can be cancelled to prevent the explosion.
+     */
     val onExplosionStart = createCancellableUnit<ExplosionStartArg>()
 
+    /**
+     * Event triggered when an explosion detonates.
+     * Use this to modify affected blocks/entities.
+     */
     val onExplosionDetonate = createUnit<ExplosionDetonateArg>()
 
+    /**
+     * Argument class for NeoForge chunk data load events.
+     *
+     * @property level The server level
+     * @property chunk The chunk being loaded
+     * @property data The serializable chunk data
+     * @property type The chunk type
+     */
     data class NeoChunkDataLoadArg(
         val level: ServerLevel,
         val chunk: ChunkAccess,
@@ -162,18 +222,39 @@ object ChunkAndBlockEvent {
         val type: ChunkType
     )
 
+    /**
+     * Argument class for NeoForge chunk data save events.
+     *
+     * @property level The server level
+     * @property chunk The chunk being saved
+     * @property data The serializable chunk data
+     */
     data class NeoChunkDataSaveArg(
         val level: ServerLevel,
         val chunk: ChunkAccess,
         val data: SerializableChunkData
     )
 
+    /**
+     * Argument class for NeoForge chunk watch events.
+     *
+     * @property player The player watching the chunk
+     * @property level The server level
+     * @property chunk The level chunk being watched
+     */
     data class NeoChunkWatchArg(
         val player: ServerPlayer,
         val level: ServerLevel,
         val chunk: LevelChunk
     )
 
+    /**
+     * Argument class for NeoForge chunk unwatch events.
+     *
+     * @property player The player stopping watching the chunk
+     * @property level The server level
+     * @property pos The chunk position
+     */
     data class NeoChunkUnWatchArg(
         val player: ServerPlayer,
         val level: ServerLevel,

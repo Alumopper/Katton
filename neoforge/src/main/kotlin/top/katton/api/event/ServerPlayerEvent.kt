@@ -22,8 +22,10 @@ import top.katton.util.setCancel
 import java.io.File
 
 /**
- * Server player events and player XP events.
- * Note: Player lifecycle events are emulated for NeoForge compatibility, actual XP events available.
+ * Server player events for NeoForge platform.
+ *
+ * This object provides events related to server player lifecycle including
+ * join/leave/respawn, XP events, item pickup/toss, crafting, and more.
  */
 @Suppress("unused")
 @EventBusSubscriber(
@@ -161,70 +163,168 @@ object ServerPlayerEvent {
     }
 
     // === Player Lifecycle Events ===
+
+    /**
+     * Event triggered when a player joins the server.
+     */
     @JvmField
     val onPlayerJoin = createUnit<PlayerArg>()
 
+    /**
+     * Event triggered when a player leaves the server.
+     */
     @JvmField
     val onPlayerLeave =  createUnit<PlayerArg>()
 
+    /**
+     * Event triggered after a player respawns.
+     */
     @JvmField
     val onAfterPlayerRespawn =  createUnit<ServerPlayerAfterRespawnArg>()
 
+    /**
+     * Event triggered when player data is copied (e.g., on respawn or dimension change).
+     */
     @JvmField
     val onPlayerCopy = createUnit<ServerPlayerCopyArg>()
 
     // === Player XP Events ===
+
+    /**
+     * Event triggered when a player's XP changes.
+     * Can be cancelled to prevent the change.
+     */
     val onPlayerXpChange = createCancellableUnit<PlayerXpChangeArg>()
 
+    /**
+     * Event triggered when a player's XP level changes.
+     * Can be cancelled to prevent the change.
+     */
     val onPlayerXpLevelChange = createCancellableUnit<PlayerXpLevelChangeArg>()
 
+    /**
+     * Event triggered when a player picks up an XP orb.
+     * Can be cancelled to prevent pickup.
+     */
     val onPlayerPickupXp = createCancellableUnit<PlayerPickupXpArg>()
 
+    /**
+     * Event triggered when a player starts tracking an entity.
+     */
     val onStartTracking = createUnit<PlayerTrackingArg>()
 
+    /**
+     * Event triggered when a player stops tracking an entity.
+     */
     val onStopTracking = createUnit<PlayerTrackingArg>()
 
+    /**
+     * Event triggered when a player data is loaded from file.
+     */
     val onPlayerLoadFromFile = createUnit<PlayerFileArg>()
 
+    /**
+     * Event triggered when a player data is saved to file.
+     */
     val onPlayerSaveToFile = createUnit<PlayerFileArg>()
 
+    /**
+     * Event triggered when a player tosses an item.
+     */
     val onItemToss = createUnit<ItemTossArg>()
 
+    /**
+     * Event triggered before a player picks up an item.
+     * Can modify whether the pickup is allowed.
+     */
     val onItemPickupPre = createUnit<PlayerItemPickupPreArg>()
 
+    /**
+     * Event triggered after a player picks up an item.
+     */
     val onItemPickupPost = createUnit<PlayerItemPickupPostArg>()
 
+    /**
+     * Event triggered when a player crafts an item.
+     */
     val onPlayerItemCrafted = createUnit<PlayerCraftedItemArg>()
 
+    /**
+     * Event triggered when a player smelts an item.
+     */
     val onPlayerItemSmelted = createUnit<PlayerSmeltedItemArg>()
 
+    /**
+     * Event triggered when phantoms are about to spawn for a player.
+     * Can modify the number of phantoms and the spawn result.
+     */
     val onPlayerSpawnPhantoms = createUnit<PlayerSpawnPhantomsArg>()
 
     // === Item Picking Events  ===
 
+    /**
+     * Event triggered when a player picks an item from a block (middle-click).
+     *
+     * @return The ItemStack to be picked, or null for default behavior.
+     * Note: This is a placeholder for NeoForge compatibility.
+     */
     @JvmField
     val onPickFromBlock = createFirstNotNullOfOrNull<PlayerPickFromBlockArg, ItemStack>()
 
+    /**
+     * Event triggered when a player picks an item from an entity (middle-click).
+     *
+     * @return The ItemStack to be picked, or null for default behavior.
+     * Note: This is a placeholder for NeoForge compatibility.
+     */
     @JvmField
     val onPickFromEntity = createFirstNotNullOfOrNull<PlayerPickFromEntityArg, ItemStack>()
 
+    /**
+     * Argument class for player tracking events.
+     *
+     * @property player The player tracking the target
+     * @property target The entity being tracked
+     */
     data class PlayerTrackingArg(
         val player: ServerPlayer,
         val target: Entity
     )
 
+    /**
+     * Argument class for player file operations.
+     *
+     * @property player The player being loaded/saved
+     * @property playerDirectory The directory containing player data
+     * @property playerUUID The UUID of the player
+     */
     data class PlayerFileArg(
         val player: ServerPlayer,
         val playerDirectory: File,
         val playerUUID: String
     )
 
+    /**
+     * Argument class for item pickup pre events.
+     *
+     * @property player The player picking up the item
+     * @property item The item entity being picked up
+     * @property canPickup Whether the pickup is allowed (modifiable)
+     */
     data class PlayerItemPickupPreArg(
         val player: ServerPlayer,
         val item: ItemEntity,
         var canPickup: TriState
     )
 
+    /**
+     * Argument class for item pickup post events.
+     *
+     * @property player The player who picked up the item
+     * @property item The item entity that was picked up
+     * @property originalStack The original item stack
+     * @property currentStack The current item stack after pickup
+     */
     data class PlayerItemPickupPostArg(
         val player: ServerPlayer,
         val item: ItemEntity,
@@ -232,24 +332,51 @@ object ServerPlayerEvent {
         val currentStack: ItemStack
     )
 
+    /**
+     * Argument class for player crafted item events.
+     *
+     * @property player The player who crafted the item
+     * @property item The crafted item stack
+     * @property inventory The inventory where the item was crafted
+     */
     data class PlayerCraftedItemArg(
         val player: ServerPlayer,
         val item: ItemStack,
         val inventory: Container
     )
 
+    /**
+     * Argument class for player smelted item events.
+     *
+     * @property player The player who smelted the item
+     * @property item The smelted item stack
+     * @property amountRemoved The amount removed from the input
+     */
     data class PlayerSmeltedItemArg(
         val player: ServerPlayer,
         val item: ItemStack,
         val amountRemoved: Int
     )
 
+    /**
+     * Argument class for phantom spawn events.
+     *
+     * @property player The player for whom phantoms are spawning
+     * @property phantomsToSpawn The number of phantoms to spawn (modifiable)
+     * @property result The spawn result (modifiable)
+     */
     data class PlayerSpawnPhantomsArg(
         val player: ServerPlayer,
         var phantomsToSpawn: Int,
         var result: PlayerSpawnPhantomsEvent.Result
     )
 
+    /**
+     * Internal data class to track respawn state.
+     *
+     * @property oldPlayer The player before respawn
+     * @property alive Whether the respawn was due to death or dimension change
+     */
     private data class RespawnState(
         val oldPlayer: ServerPlayer,
         val alive: Boolean

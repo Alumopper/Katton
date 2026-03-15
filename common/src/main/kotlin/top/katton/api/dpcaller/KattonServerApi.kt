@@ -21,26 +21,54 @@ import top.katton.api.LOGGER
 import top.katton.api.requireServer
 import java.util.*
 
+/**
+ * Server management API providing access to server-level operations.
+ *
+ * This module provides functions for server administration including:
+ * - Player management (finding, banning, kicking, operator status)
+ * - Command execution
+ * - Game rules and difficulty
+ * - Server storage and scoreboard access
+ */
 
-
+/**
+ * Access to all online players.
+ */
 val players: KattonPlayerList
     get() = KattonPlayerList(requireServer().playerList)
 
+/**
+ * Access to all entities across all levels.
+ */
 val entities: KattonServerEntityCollection
     get() = KattonServerEntityCollection(requireServer())
 
+/**
+ * Server command storage for persistent data.
+ */
 val storage: CommandStorage
     get() = requireServer().commandStorage
 
+/**
+ * Server scoreboard instance.
+ */
 val scoreboard: Scoreboard
     get() = requireServer().scoreboard
 
+/**
+ * Current server difficulty setting.
+ */
 var difficulty: Difficulty
     get() = requireServer().overworld().difficulty
     set(value) {
         setDifficulty(difficulty, true)
     }
 
+/**
+ * Execute a command string.
+ *
+ * @param command the command string to execute
+ */
 fun execute(command: String) = executeCommandAsServer(command)
 
 /**
@@ -66,22 +94,43 @@ fun executeCommandAsServer(command: String) {
     srv.commands.performPrefixedCommand(source, command)
 }
 
-
+/**
+ * Find a player by name.
+ *
+ * @param player the player name to search for
+ * @return the ServerPlayer if found, null otherwise
+ */
 fun findPlayer(player: String): ServerPlayer?{
     return requireServer().playerList.getPlayerByName(player)
 }
 
-
+/**
+ * Find a player by UUID.
+ *
+ * @param uuid the player UUID to search for
+ * @return the ServerPlayer if found, null otherwise
+ */
 fun findPlayer(uuid: UUID): ServerPlayer?{
     return requireServer().playerList.getPlayer(uuid)
 }
 
-
+/**
+ * Find entities using an entity selector in a level.
+ *
+ * @param level the ServerLevel to search in
+ * @param selector the EntitySelector to use
+ * @return list of matching entities
+ */
 fun findEntities(level: ServerLevel, selector: EntitySelector): List<Entity> {
     return selector.findEntities(requireServer().createCommandSourceStack().withLevel(level))
 }
 
-
+/**
+ * Find an entity by UUID across all levels.
+ *
+ * @param uuid the entity UUID to search for
+ * @return the Entity if found, null otherwise
+ */
 fun findEntity(uuid: UUID): Entity?{
     return requireServer().allLevels.firstNotNullOfOrNull { it.getEntity(uuid) }
 }

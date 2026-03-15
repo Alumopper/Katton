@@ -9,8 +9,6 @@ import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
 import net.neoforged.neoforge.common.NeoForge;
 import top.katton.engine.ClientScriptLoader;
 import top.katton.network.ClientNetworkingNeoForge;
-import top.katton.platform.ClientApiHooks;
-import top.katton.platform.NeoForgeClientApiBridge;
 
 /**
  * Client-only event listeners for NeoForge.
@@ -26,7 +24,6 @@ public class KattonClientNeoForge {
     /** Registers client resource reload listener for client scripts (MOD bus). */
     @SubscribeEvent
     public static void onAddClientReloadListeners(AddClientReloadListenersEvent event) {
-        ClientApiHooks.setBridge(NeoForgeClientApiBridge.INSTANCE);
         ClientScriptLoader.onReloadComplete = Katton::reloadClientScripts;
         event.addListener(Identifier.fromNamespaceAndPath(Katton.MOD_ID, "client_scripts"), ClientScriptLoader.INSTANCE);
         // Also wire game-bus events that are client-only (runs once per client init)

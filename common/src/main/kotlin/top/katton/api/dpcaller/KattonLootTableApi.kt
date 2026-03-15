@@ -19,6 +19,15 @@ import top.katton.api.LOGGER
 import top.katton.api.requireServer
 import kotlin.math.min
 
+/**
+ * Loot table API for generating item drops.
+ *
+ * This module provides functions for working with loot tables including:
+ * - Block drop generation
+ * - Entity kill drops
+ * - Chest loot generation
+ * - Loot function application
+ */
 
 /**
  * Get drops for a block as if it were broken with a tool.
@@ -42,7 +51,6 @@ fun dropBlockLoot(pos: BlockPos, tool: ItemStack): List<ItemStack> {
         .withOptionalParameter(LootContextParams.BLOCK_ENTITY, blockEntity)
     return blockState.getDrops(builder)
 }
-
 
 /**
  * Get drops for an entity as if it were killed.
@@ -68,7 +76,6 @@ fun dropKillLoot(entity: Entity, killer: Entity?): List<ItemStack> {
     val lootTable = requireServer().reloadableRegistries().getLootTable(lootTableKey)
     return lootTable.getRandomItems(params)
 }
-
 
 /**
  * Generate chest loot from a LootTable.
