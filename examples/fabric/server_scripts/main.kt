@@ -22,6 +22,11 @@ import top.katton.api.dpcaller.getEntityNbt
 import top.katton.api.dpcaller.invoke
 import top.katton.api.dpcaller.nbt
 import top.katton.api.dpcaller.tell
+import top.katton.api.datapack.advancements
+import top.katton.api.datapack.blockTags
+import top.katton.api.datapack.itemTags
+import top.katton.api.datapack.recipes
+import top.katton.api.datapack.tagRef
 import top.katton.api.event.ChunkAndBlockEvent
 import top.katton.api.event.EntityLoadArg
 import top.katton.api.event.ServerEntityEvent
@@ -34,6 +39,60 @@ import top.katton.api.registry.registerNativeItem
 import top.katton.registry.RegisterMode
 
 fun main() {
+    recipes {
+        shaped("qwq:hello_block", "qwq:test_block") {
+            pattern(
+                "DD",
+                "DD"
+            )
+            define('D', "minecraft:diamond")
+        }
+
+        smelting("qwq:smelt_hello", "qwq:qwq") {
+            input("minecraft:diamond")
+            experience = 0.5f
+            cookingTime = 100
+        }
+
+        remove("minecraft:diamond_block")
+    }
+
+    advancements {
+        advancement("qwq:hello_progress") {
+            parent("minecraft:story/root")
+            display {
+                title = "Hello Progress"
+                description = "Craft the scripted hello block"
+                icon = "qwq:test_block"
+                frame = "task"
+            }
+            rewards {
+                experience = 50
+                recipe("qwq:hello_block")
+            }
+            recipeUnlocked("crafted_hello_block", "qwq:hello_block")
+            inventoryChanged("has_hello_block", "qwq:test_block")
+            requireAny()
+        }
+    }
+
+    itemTags {
+        tag("c:gems") {
+            add("minecraft:diamond")
+            add("qwq:qwq")
+        }
+    }
+
+    blockTags {
+        tag("minecraft:mineable/pickaxe") {
+            add("qwq:test_block")
+        }
+
+        tag("c:needs_hello_tool") {
+            add("qwq:test_block")
+        }
+    }
+
     // 示例：动态注册一个可热重载的方块
     registerNativeBlock(
         id = "qwq:test_block",
@@ -100,6 +159,13 @@ fun main() {
                 // Do not consume the click so block interactions can still run.
                 return InteractionResult.PASS
             }
+        }
+    }
+
+    recipes {
+        shapeless("qwq:hello_from_tag", "qwq:qwq", count = 2) {
+            input(tagRef("c:gems"))
+            input("minecraft:stick")
         }
     }
 
