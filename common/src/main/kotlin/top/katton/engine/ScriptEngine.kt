@@ -15,9 +15,6 @@ import kotlin.script.experimental.jvmhost.JvmScriptCompiler
 
 /**
  * ScriptEngine compiles and executes Kotlin script sources.
- *
- * It keeps caches for compiled scripts and loaded script classes to avoid
- * repeated compilation and class loading, improving execution performance.
  */
 object ScriptEngine {
 

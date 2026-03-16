@@ -1,6 +1,5 @@
 package top.katton.network
 
-import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry
 import net.fabricmc.fabric.impl.networking.PayloadTypeRegistryImpl
 import net.fabricmc.fabric.impl.networking.PayloadTypeRegistryImpl.CLIENTBOUND_PLAY
 
@@ -22,11 +21,20 @@ object Networking {
         if(PayloadTypeRegistryImpl.CLIENTBOUND_CONFIGURATION.get(ItemSyncPacket.TYPE.id) == null){
             PayloadTypeRegistryImpl.CLIENTBOUND_CONFIGURATION.register(ItemSyncPacket.TYPE, ItemSyncPacket.STREAM_CODEC)
         }
+        if(CLIENTBOUND_PLAY.get(ItemSyncPacket.TYPE.id) == null){
+            CLIENTBOUND_PLAY.register(ItemSyncPacket.TYPE, ItemSyncPacket.STREAM_CODEC)
+        }
         if(PayloadTypeRegistryImpl.CLIENTBOUND_CONFIGURATION.get(EffectSyncPacket.TYPE.id) == null){
             PayloadTypeRegistryImpl.CLIENTBOUND_CONFIGURATION.register(EffectSyncPacket.TYPE, EffectSyncPacket.STREAM_CODEC)
         }
+        if(CLIENTBOUND_PLAY.get(EffectSyncPacket.TYPE.id) == null){
+            CLIENTBOUND_PLAY.register(EffectSyncPacket.TYPE, EffectSyncPacket.STREAM_CODEC)
+        }
         if(PayloadTypeRegistryImpl.CLIENTBOUND_CONFIGURATION.get(BlockSyncPacket.TYPE.id) == null){
             PayloadTypeRegistryImpl.CLIENTBOUND_CONFIGURATION.register(BlockSyncPacket.TYPE, BlockSyncPacket.STREAM_CODEC)
+        }
+        if(CLIENTBOUND_PLAY.get(BlockSyncPacket.TYPE.id) == null){
+            CLIENTBOUND_PLAY.register(BlockSyncPacket.TYPE, BlockSyncPacket.STREAM_CODEC)
         }
     }
 }

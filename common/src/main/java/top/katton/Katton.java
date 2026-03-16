@@ -12,6 +12,7 @@ import top.katton.engine.ExternalScriptLoader;
 import top.katton.engine.ScriptEngine;
 import top.katton.engine.ScriptLoader;
 import top.katton.engine.InjectionManager;
+import top.katton.network.ServerNetworking;
 import top.katton.registry.KattonRegistry;
 import top.katton.util.Event;
 
@@ -83,6 +84,7 @@ public class Katton {
         InjectionManager.beginReload();
         ScriptEngine.compileAndExecuteAll(ScriptLoader.getScripts().values());
         EntityEvent.INSTANCE.rebindLoadedEntities(server);
+        ServerNetworking.INSTANCE.syncOnlinePlayers(server);
         return true;
     }
 }

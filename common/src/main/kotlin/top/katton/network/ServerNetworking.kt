@@ -3,6 +3,8 @@ package top.katton.network
 import net.minecraft.nbt.NbtOps
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload
 import net.minecraft.resources.RegistryOps
+import net.minecraft.server.MinecraftServer
+import net.minecraft.server.level.ServerPlayer
 import net.minecraft.server.network.ServerConfigurationPacketListenerImpl
 import net.minecraft.world.effect.MobEffect
 import net.minecraft.world.level.block.Block
@@ -13,11 +15,22 @@ fun interface ServerConfigurationNetworkingSender {
    operator fun invoke(handler: ServerConfigurationPacketListenerImpl, payload: CustomPacketPayload)
 }
 
+fun interface ServerPlayNetworkingSender {
+    operator fun invoke(player: ServerPlayer, payload: CustomPacketPayload)
+}
+
 /**
  * Server-side networking handler for Katton.
  * Handles sending item sync packets to connecting clients.
  */
 object ServerNetworking {
+
+    @Volatile
+    private var playSender: ServerPlayNetworkingSender? = null
+
+    fun setPlaySender(sender: ServerPlayNetworkingSender?) {
+        playSender = sender
+    }
 
     /**
      * Sends item sync packet to a connecting player.
@@ -26,12 +39,10 @@ object ServerNetworking {
      * @param handler The player's network handler
      */
     fun sendItemSyncPacket(handler: ServerConfigurationPacketListenerImpl, sender: ServerConfigurationNetworkingSender) {
-        val items = collectKattonItems()
-        if (items.isEmpty()) {
+        val packet = createItemSyncPacket()
+        if (packet.items.isEmpty()) {
             return
         }
-
-        val packet = ItemSyncPacket(items)
         sender(handler, packet)
     }
 
@@ -39,12 +50,10 @@ object ServerNetworking {
      * Sends effect sync packet to a connecting player.
      */
     fun sendEffectSyncPacket(handler: ServerConfigurationPacketListenerImpl, sender: ServerConfigurationNetworkingSender) {
-        val effects = collectKattonEffects()
-        if (effects.isEmpty()) {
+        val packet = createEffectSyncPacket()
+        if (packet.effects.isEmpty()) {
             return
         }
-
-        val packet = EffectSyncPacket(effects)
         sender(handler, packet)
     }
 
@@ -52,13 +61,42 @@ object ServerNetworking {
      * Sends block sync packet to a connecting player.
      */
     fun sendBlockSyncPacket(handler: ServerConfigurationPacketListenerImpl, sender: ServerConfigurationNetworkingSender) {
-        val blocks = collectKattonBlocks()
-        if (blocks.isEmpty()) {
+        val packet = createBlockSyncPacket()
+        if (packet.blocks.isEmpty()) {
             return
         }
-
-        val packet = BlockSyncPacket(blocks)
         sender(handler, packet)
+    }
+
+    fun syncOnlinePlayers(server: MinecraftServer) {
+        val sender = playSender ?: return
+        val itemPacket = createItemSyncPacket()
+        val effectPacket = createEffectSyncPacket()
+        val blockPacket = createBlockSyncPacket()
+
+        for (player in server.playerList.players) {
+            sender(player, itemPacket)
+            sender(player, effectPacket)
+            sender(player, blockPacket)
+        }
+    }
+
+    private fun createItemSyncPacket(): ItemSyncPacket {
+        return ItemSyncPacket(collectKattonItems())
+    }
+
+    /**
+     * Creates effect sync packet for the current registry snapshot.
+     */
+    private fun createEffectSyncPacket(): EffectSyncPacket {
+        return EffectSyncPacket(collectKattonEffects())
+    }
+
+    /**
+     * Creates block sync packet for the current registry snapshot.
+     */
+    private fun createBlockSyncPacket(): BlockSyncPacket {
+        return BlockSyncPacket(collectKattonBlocks())
     }
     
     /**

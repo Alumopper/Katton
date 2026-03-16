@@ -1,6 +1,7 @@
 package top.katton.network
 
 import net.fabricmc.fabric.api.client.networking.v1.ClientConfigurationNetworking
+import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking
 
 /**
  * Client-side networking handler for Katton.
@@ -16,24 +17,42 @@ object ClientNetworkingFabric: ClientNetworking() {
         ClientConfigurationNetworking.registerGlobalReceiver(ItemSyncPacket.TYPE) { packet, context ->
             if(context.client().isLocalServer) return@registerGlobalReceiver
             context.client().execute {
-                // Queue items for registration
-                pendingItems.addAll(packet.items)
+                queueItemSnapshot(packet.items)
             }
         }
 
         ClientConfigurationNetworking.registerGlobalReceiver(EffectSyncPacket.TYPE) { packet, context ->
             if (context.client().isLocalServer) return@registerGlobalReceiver
             context.client().execute {
-                // Queue effects for registration
-                pendingEffects.addAll(packet.effects)
+                queueEffectSnapshot(packet.effects)
             }
         }
 
         ClientConfigurationNetworking.registerGlobalReceiver(BlockSyncPacket.TYPE) { packet, context ->
             if (context.client().isLocalServer) return@registerGlobalReceiver
             context.client().execute {
-                // Queue blocks for registration
-                pendingBlocks.addAll(packet.blocks)
+                queueBlockSnapshot(packet.blocks)
+            }
+        }
+
+        ClientPlayNetworking.registerGlobalReceiver(ItemSyncPacket.TYPE) { packet, context ->
+            if (context.client().isLocalServer) return@registerGlobalReceiver
+            context.client().execute {
+                applyItemSnapshot(packet.items)
+            }
+        }
+
+        ClientPlayNetworking.registerGlobalReceiver(EffectSyncPacket.TYPE) { packet, context ->
+            if (context.client().isLocalServer) return@registerGlobalReceiver
+            context.client().execute {
+                applyEffectSnapshot(packet.effects)
+            }
+        }
+
+        ClientPlayNetworking.registerGlobalReceiver(BlockSyncPacket.TYPE) { packet, context ->
+            if (context.client().isLocalServer) return@registerGlobalReceiver
+            context.client().execute {
+                applyBlockSnapshot(packet.blocks)
             }
         }
     }

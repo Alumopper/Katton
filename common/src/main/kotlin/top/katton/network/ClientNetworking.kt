@@ -13,9 +13,9 @@ import net.minecraft.world.item.Item
 import net.minecraft.world.level.block.Block
 import net.minecraft.world.level.block.state.BlockBehaviour
 import top.katton.platform.DynamicRegistryHooks
+import top.katton.registry.RegistryMutationUtil
 import top.katton.util.ReflectUtil
 import java.util.*
-import java.util.concurrent.ConcurrentLinkedQueue
 
 /**
  * Client-side networking handler for Katton.
@@ -35,25 +35,25 @@ abstract class ClientNetworking {
      * Queue of items waiting to be registered.
      * Items are registered before Fabric's registry sync check.
      */
-    protected val pendingItems: Queue<ItemSyncPacket.ItemData> = ConcurrentLinkedQueue()
+    @Volatile
+    private var pendingItemSnapshot: List<ItemSyncPacket.ItemData>? = null
 
     /**
      * Queue of effects waiting to be registered.
      */
-    protected val pendingEffects: Queue<EffectSyncPacket.EffectData> = ConcurrentLinkedQueue()
+    @Volatile
+    private var pendingEffectSnapshot: List<EffectSyncPacket.EffectData>? = null
 
     /**
      * Queue of blocks waiting to be registered.
      */
-    protected val pendingBlocks: Queue<BlockSyncPacket.BlockData> = ConcurrentLinkedQueue()
+    @Volatile
+    private var pendingBlockSnapshot: List<BlockSyncPacket.BlockData>? = null
 
     /**
      * Stores registered item data for re-applying components after
      * RegistryDataCollector.collectGameRegistries() runs DataComponentInitializers.build(),
      * which overwrites holder.components with values from finalizeInitializer().
-     *
-     * This map is NOT cleared on disconnect - items persist in the registry across
-     * reconnections, so we need to keep the data to re-apply components each time.
      */
     protected val registeredItemData: MutableMap<Identifier, ItemSyncPacket.ItemData> = mutableMapOf()
 
@@ -67,28 +67,61 @@ abstract class ClientNetworking {
      */
     protected val registeredBlockData: MutableMap<Identifier, BlockSyncPacket.BlockData> = mutableMapOf()
 
+    fun queueItemSnapshot(items: List<ItemSyncPacket.ItemData>) {
+        pendingItemSnapshot = items
+    }
+
+    fun queueEffectSnapshot(effects: List<EffectSyncPacket.EffectData>) {
+        pendingEffectSnapshot = effects
+    }
+
+    fun queueBlockSnapshot(blocks: List<BlockSyncPacket.BlockData>) {
+        pendingBlockSnapshot = blocks
+    }
+
     /**
      * Processes all pending item registrations.
      * Called from mixin before Fabric's registry sync check.
      */
     fun processPendingRegistrations() {
-        var itemData: ItemSyncPacket.ItemData? = pendingItems.poll()
-        while (itemData != null) {
-            registerOrUpdateItemOnClient(itemData)
-            itemData = pendingItems.poll()
+        pendingItemSnapshot?.let {
+            pendingItemSnapshot = null
+            applyItemSnapshot(it)
         }
 
-        var effectData: EffectSyncPacket.EffectData? = pendingEffects.poll()
-        while (effectData != null) {
-            registerOrUpdateEffectOnClient(effectData)
-            effectData = pendingEffects.poll()
+        pendingEffectSnapshot?.let {
+            pendingEffectSnapshot = null
+            applyEffectSnapshot(it)
         }
 
-        var blockData: BlockSyncPacket.BlockData? = pendingBlocks.poll()
-        while (blockData != null) {
-            registerOrUpdateBlockOnClient(blockData)
-            blockData = pendingBlocks.poll()
+        pendingBlockSnapshot?.let {
+            pendingBlockSnapshot = null
+            applyBlockSnapshot(it)
         }
+    }
+
+    fun applyItemSnapshot(items: List<ItemSyncPacket.ItemData>) {
+        val incomingIds = items.asSequence().map { it.id }.toSet()
+        val removedIds = registeredItemData.keys.filter { it !in incomingIds }
+        removedIds.forEach(::unregisterItemOnClient)
+        items.forEach(::registerOrUpdateItemOnClient)
+        registeredItemData.keys.retainAll(incomingIds)
+    }
+
+    fun applyEffectSnapshot(effects: List<EffectSyncPacket.EffectData>) {
+        val incomingIds = effects.asSequence().map { it.id }.toSet()
+        val removedIds = registeredEffectData.keys.filter { it !in incomingIds }
+        removedIds.forEach(::unregisterEffectOnClient)
+        effects.forEach(::registerOrUpdateEffectOnClient)
+        registeredEffectData.keys.retainAll(incomingIds)
+    }
+
+    fun applyBlockSnapshot(blocks: List<BlockSyncPacket.BlockData>) {
+        val incomingIds = blocks.asSequence().map { it.id }.toSet()
+        val removedIds = registeredBlockData.keys.filter { it !in incomingIds }
+        removedIds.forEach(::unregisterBlockOnClient)
+        blocks.forEach(::registerOrUpdateBlockOnClient)
+        registeredBlockData.keys.retainAll(incomingIds)
     }
 
     /**
@@ -150,6 +183,14 @@ abstract class ClientNetworking {
         }
 
         registerNewEffect(effectData)
+    }
+
+    protected fun unregisterEffectOnClient(id: Identifier) {
+        registeredEffectData.remove(id)
+        RegistryMutationUtil.unregister(
+            BuiltInRegistries.MOB_EFFECT as MappedRegistry<MobEffect>,
+            ResourceKey.create(Registries.MOB_EFFECT, id)
+        )
     }
 
     /**
@@ -221,6 +262,14 @@ abstract class ClientNetworking {
         registerNewItem(itemData)
     }
 
+    protected fun unregisterItemOnClient(id: Identifier) {
+        registeredItemData.remove(id)
+        RegistryMutationUtil.unregister(
+            BuiltInRegistries.ITEM as MappedRegistry<Item>,
+            ResourceKey.create(Registries.ITEM, id)
+        )
+    }
+
     /**
      * Registers a new item on the client.
      *
@@ -268,21 +317,19 @@ abstract class ClientNetworking {
     }
 
     /**
-     * Checks if there are pending items to register.
-     *
-     * @return true if there are pending items
+     * Checks if there are pending effects to register.
      */
-    fun hasPendingItems(): Boolean = pendingItems.isNotEmpty()
+    fun hasPendingItems(): Boolean = pendingItemSnapshot != null
 
     /**
      * Checks if there are pending effects to register.
      */
-    fun hasPendingEffects(): Boolean = pendingEffects.isNotEmpty()
+    fun hasPendingEffects(): Boolean = pendingEffectSnapshot != null
 
     /**
      * Checks if there are pending blocks to register.
      */
-    fun hasPendingBlocks(): Boolean = pendingBlocks.isNotEmpty()
+    fun hasPendingBlocks(): Boolean = pendingBlockSnapshot != null
 
     /**
      * Checks if there are registered items that need component re-application.
@@ -300,15 +347,26 @@ abstract class ClientNetworking {
     fun hasRegisteredBlocks(): Boolean = registeredBlockData.isNotEmpty()
 
     /**
-     * Resets the pending queue.
-     * Note: registeredItemData is NOT cleared because items persist in the registry
-     * across reconnections and we need the data for reapplyCustomComponents().
+     * Clears pending snapshots and unregisters all client-side Katton content.
      * Called when disconnecting from server.
      */
     fun reset() {
-        pendingItems.clear()
-        pendingEffects.clear()
-        pendingBlocks.clear()
-        // Do NOT clear registeredItemData - items stay in registry across reconnections
+        pendingItemSnapshot = null
+        pendingEffectSnapshot = null
+        pendingBlockSnapshot = null
+        registeredItemData.keys.toList().forEach(::unregisterItemOnClient)
+        registeredEffectData.keys.toList().forEach(::unregisterEffectOnClient)
+        registeredBlockData.keys.toList().forEach(::unregisterBlockOnClient)
+        registeredItemData.clear()
+        registeredEffectData.clear()
+        registeredBlockData.clear()
+    }
+
+    protected fun unregisterBlockOnClient(id: Identifier) {
+        registeredBlockData.remove(id)
+        RegistryMutationUtil.unregister(
+            BuiltInRegistries.BLOCK as MappedRegistry<Block>,
+            ResourceKey.create(Registries.BLOCK, id)
+        )
     }
 }

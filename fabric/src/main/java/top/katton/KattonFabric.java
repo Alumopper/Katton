@@ -3,6 +3,7 @@ package top.katton;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.loader.api.FabricLoader;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
+import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.fabricmc.fabric.api.resource.v1.ResourceLoader;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.packs.PackType;
@@ -10,6 +11,7 @@ import top.katton.api.event.*;
 import top.katton.command.ScriptCommand;
 import top.katton.engine.ScriptLoader;
 import top.katton.network.Networking;
+import top.katton.network.ServerNetworking;
 
 import static top.katton.Katton.*;
 
@@ -22,6 +24,7 @@ public class KattonFabric implements ModInitializer {
         eventInitialize();
 
         Networking.initialize();
+        ServerNetworking.INSTANCE.setPlaySender(ServerPlayNetworking::send);
 
         ResourceLoader.get(PackType.SERVER_DATA).registerReloadListener(
                 Identifier.fromNamespaceAndPath(MOD_ID, "scripts"),

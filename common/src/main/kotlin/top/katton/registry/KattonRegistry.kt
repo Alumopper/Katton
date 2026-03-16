@@ -200,7 +200,6 @@ object KattonRegistry {
         private val managedIds = linkedSetOf<Identifier>()
         private val idsByOwner = ConcurrentHashMap<String, MutableSet<Identifier>>()
         private val pendingNativeRegistrations = mutableListOf<Pair<Identifier, () -> Item>>()
-        private val hotReloadableItems = ConcurrentHashMap<Identifier, Item>()
 
         /**
          * Registers an item in the global Minecraft registry.
@@ -228,10 +227,19 @@ object KattonRegistry {
          */
         @Synchronized
         fun beginReload() {
-            managedIds.forEach { remove(it) }
+            managedIds.forEach {
+                unregisterManagedItem(it)
+                remove(it)
+            }
             managedIds.clear()
             idsByOwner.clear()
-            hotReloadableItems.clear()
+        }
+
+        private fun unregisterManagedItem(id: Identifier) {
+            RegistryMutationUtil.unregister(
+                BuiltInRegistries.ITEM as MappedRegistry<Item>,
+                ResourceKey.create(Registries.ITEM, id)
+            )
         }
 
         /**
@@ -253,12 +261,8 @@ object KattonRegistry {
         ): Item {
             val existing = BuiltInRegistries.ITEM.getOptional(id)
             if (existing.isPresent) {
-                val item = existing.get()
-                properties?.let { updateHolderComponents(item, id, it) }
-                return item
+                return existing.get()
             }
-            
-            hotReloadableItems[id]?.let { return it }
 
             return registerNewItem(id, itemBuilder, properties)
         }
@@ -313,7 +317,6 @@ object KattonRegistry {
                 val registered = Registry.register(BuiltInRegistries.ITEM, id, item)
                 
                 bindHolderComponents(item, properties)
-                hotReloadableItems[id] = registered
                 registered
             } finally {
                 if (savedFrozen) setRegistryFrozen(itemRegistry, true)
@@ -437,7 +440,6 @@ object KattonRegistry {
 
         private val managedIds = linkedSetOf<Identifier>()
         private val idsByOwner = ConcurrentHashMap<String, MutableSet<Identifier>>()
-        private val hotReloadableEffects = ConcurrentHashMap<Identifier, MobEffect>()
 
         /**
          * Registers a mob effect in the global Minecraft registry.
@@ -455,10 +457,19 @@ object KattonRegistry {
          */
         @Synchronized
         fun beginReload() {
-            managedIds.forEach { remove(it) }
+            managedIds.forEach {
+                unregisterManagedEffect(it)
+                remove(it)
+            }
             managedIds.clear()
             idsByOwner.clear()
-            hotReloadableEffects.clear()
+        }
+
+        private fun unregisterManagedEffect(id: Identifier) {
+            RegistryMutationUtil.unregister(
+                BuiltInRegistries.MOB_EFFECT as MappedRegistry<MobEffect>,
+                ResourceKey.create(Registries.MOB_EFFECT, id)
+            )
         }
 
         /**
@@ -472,8 +483,6 @@ object KattonRegistry {
             if (existing.isPresent) {
                 return existing.get()
             }
-
-            hotReloadableEffects[id]?.let { return it }
 
             return registerNewEffect(id, effectBuilder)
         }
@@ -492,9 +501,7 @@ object KattonRegistry {
             return try {
                 setRegistryFrozen(effectRegistry, false)
                 val effect = effectBuilder()
-                val registered = Registry.register(BuiltInRegistries.MOB_EFFECT, id, effect)
-                hotReloadableEffects[id] = registered
-                registered
+                Registry.register(BuiltInRegistries.MOB_EFFECT, id, effect)
             } finally {
                 if (savedFrozen) setRegistryFrozen(effectRegistry, true)
             }
@@ -561,7 +568,6 @@ object KattonRegistry {
 
         private val managedIds = linkedSetOf<Identifier>()
         private val idsByOwner = ConcurrentHashMap<String, MutableSet<Identifier>>()
-        private val hotReloadableBlocks = ConcurrentHashMap<Identifier, Block>()
 
         /**
          * Registers a block in the global Minecraft registry.
@@ -579,10 +585,19 @@ object KattonRegistry {
          */
         @Synchronized
         fun beginReload() {
-            managedIds.forEach { remove(it) }
+            managedIds.forEach {
+                unregisterManagedBlock(it)
+                remove(it)
+            }
             managedIds.clear()
             idsByOwner.clear()
-            hotReloadableBlocks.clear()
+        }
+
+        private fun unregisterManagedBlock(id: Identifier) {
+            RegistryMutationUtil.unregister(
+                BuiltInRegistries.BLOCK as MappedRegistry<Block>,
+                ResourceKey.create(Registries.BLOCK, id)
+            )
         }
 
         /**
@@ -598,8 +613,6 @@ object KattonRegistry {
                 block.builtInRegistryHolder().tags = emptySet()
                 return block
             }
-
-            hotReloadableBlocks[id]?.let { return it }
 
             return registerNewBlock(id, blockBuilder)
         }
@@ -629,7 +642,6 @@ object KattonRegistry {
                 val registered = Registry.register(BuiltInRegistries.BLOCK, id, block)
                 registered.builtInRegistryHolder().tags = emptySet()
                 DynamicRegistryHooks.onDynamicBlockRegistered(registered)
-                hotReloadableBlocks[id] = registered
                 registered
             } finally {
                 if (savedFrozen) setRegistryFrozen(blockRegistry, true)

@@ -23,21 +23,42 @@ object ClientNetworkingNeoForge: ClientNetworking() {
         registrar.configurationToClient(ItemSyncPacket.TYPE, ItemSyncPacket.STREAM_CODEC) { packet, context ->
             if(context.connection().isMemoryConnection) return@configurationToClient
             context.enqueueWork {
-                pendingItems.addAll(packet.items)
+                queueItemSnapshot(packet.items)
             }
         }
 
         registrar.configurationToClient(EffectSyncPacket.TYPE, EffectSyncPacket.STREAM_CODEC) { packet, context ->
             if(context.connection().isMemoryConnection) return@configurationToClient
             context.enqueueWork {
-                pendingEffects.addAll(packet.effects)
+                queueEffectSnapshot(packet.effects)
             }
         }
 
         registrar.configurationToClient(BlockSyncPacket.TYPE, BlockSyncPacket.STREAM_CODEC) { packet, context ->
             if(context.connection().isMemoryConnection) return@configurationToClient
             context.enqueueWork {
-                pendingBlocks.addAll(packet.blocks)
+                queueBlockSnapshot(packet.blocks)
+            }
+        }
+
+        registrar.playToClient(ItemSyncPacket.TYPE, ItemSyncPacket.STREAM_CODEC) { packet, context ->
+            if(context.connection().isMemoryConnection) return@playToClient
+            context.enqueueWork {
+                applyItemSnapshot(packet.items)
+            }
+        }
+
+        registrar.playToClient(EffectSyncPacket.TYPE, EffectSyncPacket.STREAM_CODEC) { packet, context ->
+            if(context.connection().isMemoryConnection) return@playToClient
+            context.enqueueWork {
+                applyEffectSnapshot(packet.effects)
+            }
+        }
+
+        registrar.playToClient(BlockSyncPacket.TYPE, BlockSyncPacket.STREAM_CODEC) { packet, context ->
+            if(context.connection().isMemoryConnection) return@playToClient
+            context.enqueueWork {
+                applyBlockSnapshot(packet.blocks)
             }
         }
     }

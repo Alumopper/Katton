@@ -22,14 +22,17 @@ import top.katton.api.event.ServerMobEffectEvent;
 import top.katton.api.event.ServerPlayerEvent;
 import top.katton.command.ScriptCommand;
 import top.katton.engine.ScriptLoader;
+import top.katton.network.ServerNetworking;
 import top.katton.platform.DynamicRegistryHooks;
 import top.katton.platform.NeoForgeDynamicRegistryHooks;
+import net.neoforged.neoforge.network.PacketDistributor;
 
 @Mod(Katton.MOD_ID)
 public class KattonNeoForge {
 
     public KattonNeoForge(IEventBus modEventBus) {
         DynamicRegistryHooks.setAfterDynamicBlockRegistered(NeoForgeDynamicRegistryHooks::afterDynamicBlockRegistered);
+        ServerNetworking.INSTANCE.setPlaySender(PacketDistributor::sendToPlayer);
         Katton.setGameDirectory(FMLPaths.GAMEDIR.get());
         Katton.mainInitialize();
 
