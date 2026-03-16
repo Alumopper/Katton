@@ -157,7 +157,7 @@ object LivingBehaviorEvent {
      * @return true to allow setting spawn, false to prevent it.
      */
     @JvmField
-    val onAllowSettingSpawn = createAll<AllowSleepingArg>()
+    val onAllowSettingSpawn = createAll<AllowSettingSpawnArg>()
 
     /**
      * Event triggered to set the bed occupation state.

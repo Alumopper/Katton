@@ -32,6 +32,17 @@ private val player get() = mc.player
 private val level get() = mc.level
 private val gui get() = mc.gui
 
+private fun asComponent(text: Any?): Component = when (text) {
+    is Component -> text
+    else -> Component.literal(text.toString())
+}
+
+private fun asComponentNullable(text: Any?): Component? = when (text) {
+    null -> null
+    is Component -> text
+    else -> Component.literal(text.toString())
+}
+
 /**
  * Gets the raw Minecraft client instance.
  *
@@ -59,7 +70,9 @@ fun clientLevel(): ClientLevel? = level
  * @param message The message to display (will be converted to Component if not already)
  * @return true if the message was sent successfully, false otherwise
  */
-fun clientTell(message: Component, overlay: Boolean = true) = player?.displayClientMessage(message, overlay)?.let { true }?: false
+fun clientTell(message: Any?, overlay: Boolean = true) =
+    player?.displayClientMessage(asComponent(message), overlay)
+        ?.let { true }?: false
 
 /**
  * Executes an action on the client thread.
@@ -153,9 +166,9 @@ fun clientGameTime(): Long? = level?.gameTime
  * @param message The message to display
  * @return true if displayed successfully, false otherwise
  */
-fun clientActionBar(message: Component): Boolean {
+fun clientActionBar(message: Any): Boolean {
     val p = player ?: return false
-    p.displayClientMessage(message, true)
+    p.displayClientMessage(asComponent(message), true)
     return true
 }
 
@@ -166,8 +179,8 @@ fun clientActionBar(message: Component): Boolean {
  * @param tinted Whether to apply a background tint
  * @return true if displayed successfully, false otherwise
  */
-fun clientOverlay(message: Component, tinted: Boolean = false) =
-    gui.setOverlayMessage(message, tinted)
+fun clientOverlay(message: Any?, tinted: Boolean = false) =
+    gui.setOverlayMessage(asComponent(message), tinted)
 
 /**
  * Clears any active overlay message on the client.
@@ -183,7 +196,22 @@ fun clearClientOverlay() =
  * @param message The message to display
  * @return true if displayed successfully, false otherwise
  */
-fun clientNowPlaying(message: Component) = gui.setNowPlaying(message)
+fun clientNowPlaying(message: Any?) = gui.setNowPlaying(asComponent(message))
+
+/**
+ * Plays a sound on the client.
+ *
+ * @param soundId The sound identifier (e.g., "minecraft:block.note_block.pling")
+ * @param volume The volume (0.0 to 1.0+)
+ * @param pitch The pitch multiplier (0.5 to 2.0)
+ * @return true if the sound was played successfully, false if the sound ID was invalid
+ */
+fun playClientSound(soundId: String, volume: Float = 1.0f, pitch: Float = 1.0f): Boolean {
+    val id = Identifier.tryParse(soundId) ?: return false
+    val p = player ?: return false
+    p.playSound(SoundEvent.createVariableRangeEvent(id), volume, pitch)
+    return true
+}
 
 /**
  * Plays a sound on the client.
@@ -205,7 +233,7 @@ fun playClientSound(soundId: Identifier, volume: Float = 1.0f, pitch: Float = 1.
  * @param message The title message to display
  * @return true if displayed successfully, false otherwise
  */
-fun clientTitle(message: Component) = gui.setTitle(message)
+fun clientTitle(message: Any?) = gui.setTitle(asComponent(message))
 
 /**
  * Displays a subtitle on the client screen.
@@ -213,7 +241,7 @@ fun clientTitle(message: Component) = gui.setTitle(message)
  * @param message The subtitle message to display
  * @return true if displayed successfully, false otherwise
  */
-fun clientSubtitle(message: Component) = gui.setSubtitle(message)
+fun clientSubtitle(message: Any?) = gui.setSubtitle(asComponent(message))
 
 /**
  * Sets the timing for title display.
@@ -236,20 +264,20 @@ fun clientToast(toast: Toast) {
     Minecraft.getInstance().toastManager.addToast(toast)
 }
 
-fun clientAddSystemToast(id: SystemToast.SystemToastId, title: Component, description: Component?){
-    SystemToast.add(mc.toastManager, id, title, description)
+fun clientAddSystemToast(id: SystemToast.SystemToastId, title: Any?, description: Any?){
+    SystemToast.add(mc.toastManager, id, asComponent(title), asComponentNullable(description))
 }
 
-fun clientAddOrUpdateSystemToast(id: SystemToast.SystemToastId, title: Component, description: Component?){
-    SystemToast.addOrUpdate(mc.toastManager, id, title, description)
+fun clientAddOrUpdateSystemToast(id: SystemToast.SystemToastId, title: Any?, description: Any?){
+    SystemToast.addOrUpdate(mc.toastManager, id, asComponent(title), asComponentNullable(description))
 }
 
 fun clientHideSystemToast(id: SystemToast.SystemToastId){
     SystemToast.forceHide(mc.toastManager, id)
 }
 
-fun clientAddTutorialToast(font: Font = mc.font, icon: TutorialToast.Icons, title: Component, message: Component?, processable: Boolean = false, timeToDisplayMs: Int = 0): TutorialToast {
-    val t = TutorialToast(font, icon, title, message, processable, timeToDisplayMs)
+fun clientAddTutorialToast(font: Font = mc.font, icon: TutorialToast.Icons, title: Any?, description: Any?, processable: Boolean = false, timeToDisplayMs: Int = 0): TutorialToast {
+    val t = TutorialToast(font, icon, asComponent(title), asComponentNullable(description), processable, timeToDisplayMs)
     clientToast(t)
     return t
 }

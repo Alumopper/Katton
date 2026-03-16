@@ -15,19 +15,38 @@ The project includes a sample script showcasing the base API provided by Katton.
 
 ## Dependencies Setup
 
-While this project uses Gradle for structure, **Kotlin script dependencies are not managed by Gradle**. instead, you need to manually manage them to enable IDE support (code completion and error checking).
+This example now uses a hybrid setup:
 
-### How to configure dependencies for IDE support:
+- Katton comes from Gradle coordinates.
+- Minecraft development jars can still be placed manually in `lib/` for IDE support.
 
-1. Place the required `.jar` files into the `libs` folder.
-2. Declare them in your script files using the `@file:DependsOn` annotation.
+### Publish Katton to the local example repository
 
-**Base dependencies required:**
+From the repository root, run:
 
-- **Minecraft jar**: Locate it in your Minecraft installation directory (`versions/<version>/<version>.jar`). Copy it to `libs`.
-- **Katton jar**: Build it from source or download a release. Copy it to `libs`.
+```bash
+./gradlew publishApiToExampleRepo
+```
 
-You can add other mod jars to `libs` and declare them in your script to access their APIs. Just remember to keep these jars updated alongside your game and mods.
+On Windows:
 
-> [!TIP]
-> Some mods (like **fabric-api**) distribute multiple jars nested inside a single file. IDEs cannot read jars within jars. **You must extract these inner jar files** and place them individually into the `libs` folder.
+```powershell
+.\gradlew.bat publishApiToExampleRepo
+```
+
+This publishes the current `common` and `fabric` artifacts to:
+
+- `mavenLocal()`
+- `build/repo`
+
+The example build is already configured to resolve from both locations.
+
+### Provide the Minecraft development jar manually
+
+If your scripts import `net.minecraft.*` types directly, place the remapped Minecraft development jar in `examples/fabric/lib/`.
+
+This keeps the example lightweight while avoiding a local Katton jar workflow.
+
+### Add more dependencies
+
+If you want IDE support for additional Fabric mods, add their Maven repositories and coordinates in [examples/fabric/build.gradle.kts](g:\AST\kts4mc-template-1.21.11\examples\fabric\build.gradle.kts).

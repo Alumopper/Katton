@@ -9,12 +9,12 @@ import java.util.stream.Collectors
  * Loads script files from the game runtime directory.
  *
  * Expected structure:
- * <gameDir>/scripts/<pack>/server_scripts/**/*.kt
- * <gameDir>/scripts/<pack>/client_scripts/**/*.kt
+ * <gameDir>/katton/<pack>/server_scripts/**/*.kt
+ * <gameDir>/katton/<pack>/client_scripts/**/*.kt
  */
 object ExternalScriptLoader {
 
-    private val SCRIPT_DIR = "scripts"
+    private val SCRIPT_DIR = "katton"
     private val SERVER_SCRIPT = "server_scripts"
     private val CLIENT_SCRIPT = "client_scripts"
 
@@ -29,7 +29,7 @@ object ExternalScriptLoader {
     /**
      * Collects all client script file paths from the given game directory.
      *
-     * Expected structure: <gameDir>/scripts/<pack>/client_scripts/.kt
+     * Expected structure: <gameDir>/katton/<pack>/client_scripts/.kt
      */
     @JvmStatic
     fun collectClientScripts(gameDir: Path?): List<String> {

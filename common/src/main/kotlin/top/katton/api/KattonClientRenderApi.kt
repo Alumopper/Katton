@@ -101,8 +101,17 @@ private val player get() = mc.player
 private val level get() = mc.level
 private val gui get() = mc.gui
 
-private fun asComponent(message: Any): Component =
-    message as? Component ?: Component.literal(message.toString())
+
+private fun asComponent(text: Any?): Component = when (text) {
+    is Component -> text
+    else -> Component.literal(text.toString())
+}
+
+private fun asComponentNullable(text: Any?): Component? = when (text) {
+    null -> null
+    is Component -> text
+    else -> Component.literal(text.toString())
+}
 
 /**
  * Register (or replace) a HUD renderer by [id].
@@ -255,13 +264,13 @@ fun dispatchWorldRender(viewMatrix: Any, projectionMatrix: Any, camera: Camera?,
  */
 fun drawHudText(
     ctx: HudRenderContext,
-    message: Component,
+    message: Any?,
     x: Int,
     y: Int,
     color: Int = 0xFFFFFF,
     shadow: Boolean = true
 ) {
-    ctx.graphics.drawString(mc.font, message, x, y, color, shadow)
+    ctx.graphics.drawString(mc.font, asComponent(message), x, y, color, shadow)
 }
 
 /**

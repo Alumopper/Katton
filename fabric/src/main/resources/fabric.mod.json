@@ -8,10 +8,10 @@
 		"Alumopper"
 	],
 	"contact": {
-		"homepage": "https://fabricmc.net/",
-		"sources": "https://github.com/FabricMC/fabric-example-mod"
+		"homepage": "https://katton.mcfpp.top/",
+		"sources": "https://github.com/Alumopper/Katton"
 	},
-	"license": "CC0-1.0",
+	"license": "MIT",
 	"icon": "assets/kts4mc/logo.png",
 	"environment": "*",
 	"entrypoints": {

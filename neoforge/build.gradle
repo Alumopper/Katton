@@ -100,21 +100,22 @@ configurations {
 }
 
 dependencies {
-    implementation('org.jetbrains.kotlin:kotlin-compiler-embeddable')
-    implementation('org.jetbrains.kotlin:kotlin-daemon-embeddable')
-    implementation('org.jetbrains.kotlin:kotlin-reflect')
-    implementation('org.jetbrains.kotlin:kotlin-script-runtime')
-    implementation('org.jetbrains.kotlin:kotlin-scripting-common')
-    implementation('org.jetbrains.kotlin:kotlin-scripting-compiler-embeddable')
-    implementation('org.jetbrains.kotlin:kotlin-scripting-compiler-impl-embeddable')
-    implementation('org.jetbrains.kotlin:kotlin-scripting-jvm')
-    implementation('org.jetbrains.kotlin:kotlin-scripting-jvm-host')
-    implementation('org.jetbrains.kotlin:kotlin-stdlib')
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm:1.8.0")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-jdk8:1.8.0")
-    implementation("net.bytebuddy:byte-buddy:1.17.8")
-    implementation("net.bytebuddy:byte-buddy-agent:1.17.8")
-    implementation("org.jetbrains:annotations:26.0.2")
+    // Embed runtime libraries into the NeoForge mod jar.
+    jarJar(implementation('org.jetbrains.kotlin:kotlin-compiler-embeddable'))
+    jarJar(implementation('org.jetbrains.kotlin:kotlin-daemon-embeddable'))
+    jarJar(implementation('org.jetbrains.kotlin:kotlin-reflect'))
+    jarJar(implementation('org.jetbrains.kotlin:kotlin-script-runtime'))
+    jarJar(implementation('org.jetbrains.kotlin:kotlin-scripting-common'))
+    jarJar(implementation('org.jetbrains.kotlin:kotlin-scripting-compiler-embeddable'))
+    jarJar(implementation('org.jetbrains.kotlin:kotlin-scripting-compiler-impl-embeddable'))
+    jarJar(implementation('org.jetbrains.kotlin:kotlin-scripting-jvm'))
+    jarJar(implementation('org.jetbrains.kotlin:kotlin-scripting-jvm-host'))
+    jarJar(implementation('org.jetbrains.kotlin:kotlin-stdlib'))
+    jarJar(implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm:1.8.0"))
+    jarJar(implementation("org.jetbrains.kotlinx:kotlinx-coroutines-jdk8:1.8.0"))
+    jarJar(implementation("net.bytebuddy:byte-buddy:1.17.8"))
+    jarJar(implementation("net.bytebuddy:byte-buddy-agent:1.17.8"))
+    jarJar(implementation("org.jetbrains:annotations:26.0.2"))
 
     implementation project(':common')
 }

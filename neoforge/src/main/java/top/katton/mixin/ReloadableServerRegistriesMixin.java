@@ -60,6 +60,7 @@ abstract class ReloadableServerRegistriesMixin {
     /**
      * Due to possible cross-thread handling, this uses WeakHashMap instead of ThreadLocal.
      */
+    @SuppressWarnings("AddedMixinMembersNamePattern")
     @Unique
     private static final WeakHashMap<RegistryOps<JsonElement>, HolderLookup.Provider> WRAPPERS = new WeakHashMap<>();
 
@@ -79,10 +80,11 @@ abstract class ReloadableServerRegistriesMixin {
     }
 
     @Inject(method = "lambda$scheduleRegistryLoad$0", at = @At(value = "INVOKE", target = "Ljava/util/Map;forEach(Ljava/util/function/BiConsumer;)V"))
-    private static <T extends Validatable> void modifyLootTable(LootDataType<T> lootDataType, ResourceManager resourceManager, RegistryOps<JsonElement> registryOps, CallbackInfoReturnable<WritableRegistry<?>> cir, @Local(name = "elements") Map<Identifier, T> elements) {
+    private static <T extends Validatable> void modifyLootTable(LootDataType<T> lootDataType, RegistryOps<JsonElement> registryOps, ResourceManager resourceManager, CallbackInfoReturnable<WritableRegistry<?>> cir, @Local(name = "elements") Map<Identifier, T> elements) {
         elements.replaceAll((identifier, t) -> modifyLootTable(t, identifier, registryOps));
     }
 
+    @SuppressWarnings({"AddedMixinMembersNamePattern", "unchecked"})
     @Unique
     private static <T> T modifyLootTable(T value, Identifier id, RegistryOps<JsonElement> ops) {
         if (!(value instanceof LootTable table)) return value;
@@ -106,7 +108,7 @@ abstract class ReloadableServerRegistriesMixin {
 
     @SuppressWarnings("unchecked")
     @Inject(method = "lambda$scheduleRegistryLoad$0", at = @At("RETURN"))
-    private static <T extends Validatable> void onLootTablesLoaded(LootDataType<T> lootDataType, ResourceManager resourceManager, RegistryOps<JsonElement> registryOps, CallbackInfoReturnable<WritableRegistry<?>> cir) {
+    private static <T extends Validatable> void onLootTablesLoaded(LootDataType<T> lootDataType, RegistryOps<JsonElement> registryOps, ResourceManager resourceManager, CallbackInfoReturnable<WritableRegistry<?>> cir) {
         if (lootDataType != LootDataType.TABLE) return;
 
         Registry<LootTable> lootTableRegistry = (Registry<LootTable>) cir.getReturnValue();

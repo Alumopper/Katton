@@ -5,6 +5,7 @@ plugins {
 	id "org.jetbrains.kotlin.jvm" version "2.3.10"
 	id "org.jetbrains.dokka" version "2.1.0"
     id 'net.fabricmc.fabric-loom' version "${loom_version}"
+    id 'top.katton.api-doc-generator'
 }
 
 version = project.mod_version
@@ -25,6 +26,27 @@ subprojects {
 
     repositories {
         mavenCentral()
+        maven { url = uri('https://maven.fabricmc.net/') }
+    }
+
+    publishing {
+        repositories {
+            mavenLocal()
+            maven {
+                name = 'exampleRepo'
+                url = rootProject.layout.buildDirectory.dir('repo')
+            }
+        }
+
+        publications {
+            mavenJava(MavenPublication) {
+                if (components.findByName('java') != null) {
+                    from components.java
+                }
+
+                artifactId = "${rootProject.findProperty('archives_base_name')}-${project.name}"
+            }
+        }
     }
 }
 
@@ -53,6 +75,25 @@ jar {
 
     from("LICENSE") {
         rename { "${it}_${inputs.properties.archivesName}"}
+    }
+}
+
+kattonApiDocs {
+    outputDir = layout.buildDirectory.dir('docs')
+
+    module('common') {
+        displayName = 'Common'
+        sourceRoots.from(project(':common').file('src/main/kotlin/top/katton/api'))
+    }
+
+    module('fabric') {
+        displayName = 'Fabric'
+        sourceRoots.from(project(':fabric').file('src/main/kotlin/top/katton/api'))
+    }
+
+    module('neoforge') {
+        displayName = 'NeoForge'
+        sourceRoots.from(project(':neoforge').file('src/main/kotlin/top/katton/api'))
     }
 }
 
@@ -113,4 +154,15 @@ tasks.register('cleanDatapacks') {
             delete targetDir
         }
     }
+}
+
+tasks.register('publishApiToExampleRepo') {
+    group = 'publishing'
+    description = 'Publish common and fabric artifacts to mavenLocal and build/repo for the example projects.'
+    dependsOn(
+        ':common:publishToMavenLocal',
+        ':common:publishAllPublicationsToExampleRepoRepository',
+        ':fabric:publishToMavenLocal',
+        ':fabric:publishAllPublicationsToExampleRepoRepository'
+    )
 }
