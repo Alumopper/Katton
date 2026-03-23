@@ -1,6 +1,7 @@
 package top.katton.docgen
 
 import org.gradle.api.logging.Logger
+import org.jetbrains.kotlin.K1Deprecation
 import org.jetbrains.kotlin.cli.common.messages.MessageCollector
 import org.jetbrains.kotlin.cli.jvm.compiler.EnvironmentConfigFiles
 import org.jetbrains.kotlin.cli.jvm.compiler.KotlinCoreEnvironment
@@ -61,6 +62,7 @@ internal class ApiDocGenerator(
         }
     }
 
+    @OptIn(K1Deprecation::class)
     private fun createPsiFactory(disposable: org.jetbrains.kotlin.com.intellij.openapi.Disposable): KtPsiFactory {
         val configuration = CompilerConfiguration().apply {
             put(CommonConfigurationKeys.MESSAGE_COLLECTOR_KEY, MessageCollector.NONE)

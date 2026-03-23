@@ -5,117 +5,135 @@
 | Module | Supported Event Fields |
 | :--- | ---: |
 | Fabric | 93 |
-| NeoForge | 89 |
+| NeoForge | 107 |
 
 ## Detailed Event List
 
 | Event Category | Event Name | Fabric | NeoForge |
 | :--- | :--- | :---: | :---: |
-| **Chunk and Block** | onChunkLoad | ✅ | ✅ |
-| | onChunkUnload | ✅ | ✅ |
-| | onChunkLevelTypeChange | ✅ | ✅ |
+| **Chunk and Block** | onAfterBlockBreak | ✅ | - |
+| | onBeforeBlockBreak | ✅ | - |
+| | onBlockBreak | - | ✅ |
 | | onBlockEntityLoad | ✅ | ✅ |
 | | onBlockEntityUnload | ✅ | ✅ |
-| | onBeforeBlockBreak | ✅ | - |
-| | onAfterBlockBreak | ✅ | - |
-| | onCanceledBlockBreak | ✅ | - |
-| | onBlockBreak | - | ✅ |
 | | onBlockPlace | - | ✅ |
-| | onExplosionStart | ✅ | ✅ |
+| | onCanceledBlockBreak | ✅ | - |
+| | onChunkDataLoad | - | ✅ |
+| | onChunkDataSave | - | ✅ |
+| | onChunkLevelTypeChange | ✅ | ✅ |
+| | onChunkLoad | ✅ | ✅ |
+| | onChunkSent | - | ✅ |
+| | onChunkUnload | ✅ | ✅ |
+| | onChunkUnWatch | - | ✅ |
+| | onChunkWatch | - | ✅ |
 | | onExplosionDetonate | ✅ | ✅ |
-| **Item Component** | onModifyComponent | ✅ | ✅ |
-| | onAllowEnchanting | ✅ | ✅ |
+| | onExplosionStart | ✅ | ✅ |
+| **Item Component** | onAllowEnchanting | ✅ | ✅ |
+| | onModifyComponent | ✅ | ✅ |
 | | onModifyEnchantment | ✅ | ✅ |
-| **Item** | onUseOn | ✅ | ✅ |
-| | onUse | ✅ | ✅ |
-| **Living Behavior** | onAnimalTame | - | ✅ |
+| **Item** | onUse | ✅ | ✅ |
+| | onUseOn | ✅ | ✅ |
+| **Living Behavior** | onAllowBed | ✅ | ✅ |
+| | onAllowNearbyMonsters | ✅ | ✅ |
+| | onAllowResettingTime | ✅ | ✅ |
+| | onAllowSettingSpawn | ✅ | ✅ |
+| | onAllowSleeping | ✅ | ✅ |
+| | onAnimalTame | - | ✅ |
 | | onBabySpawn | - | ✅ |
 | | onElytraAllow | ✅ | ✅ |
 | | onElytraCustom | ✅ | ✅ |
-| | onAllowSleeping | ✅ | ✅ |
-| | onStartSleeping | ✅ | ✅ |
-| | onStopSleeping | ✅ | ✅ |
-| | onAllowBed | ✅ | ✅ |
-| | onAllowNearbyMonsters | ✅ | ✅ |
-| | onAllowResettingTime | ✅ | ✅ |
 | | onModifySleepingDirection | ✅ | ✅ |
-| | onAllowSettingSpawn | ✅ | ✅ |
-| | onSetBedOccupationState | ✅ | ✅ |
 | | onModifyWakeUpPosition | ✅ | ✅ |
 | | onPlayerWakeUp | ✅ | ✅ |
-| **Living Use Item** | onUseItemStart | ✅ | ✅ |
-| | onUseItemTick | ✅ | ✅ |
+| | onSetBedOccupationState | ✅ | ✅ |
+| | onStartSleeping | ✅ | ✅ |
+| | onStopSleeping | ✅ | ✅ |
+| **Living Use Item** | onUseItemFinish | ✅ | ✅ |
+| | onUseItemStart | ✅ | ✅ |
 | | onUseItemStop | ✅ | ✅ |
-| | onUseItemFinish | ✅ | ✅ |
-| **Loot Table** | onLootTableReplace | ✅ | ✅ |
+| | onUseItemTick | ✅ | ✅ |
+| **Loot Table** | onLootTableAllLoad | ✅ | ✅ |
 | | onLootTableModify | ✅ | ✅ |
-| | onLootTableAllLoad | ✅ | ✅ |
 | | onLootTableModifyDrops | ✅ | ✅ |
-| **Player** | onUseItemOn | ✅ | - |
-| | onUseWithoutItem | ✅ | - |
-| | onAttackBlock | ✅ | - |
+| | onLootTableReplace | ✅ | ✅ |
+| **Player** | onAttackBlock | ✅ | - |
 | | onAttackEntity | ✅ | ✅ |
 | | onBlockInteract | ✅ | ✅ |
+| | onDestroyItem | ✅ | ✅ |
 | | onEntityInteract | ✅ | ✅ |
 | | onItemInteract | ✅ | ✅ |
 | | onLeftClickBlock | - | ✅ |
-| | onDestroyItem | ✅ | ✅ |
+| | onUseItemOn | ✅ | - |
+| | onUseWithoutItem | ✅ | - |
 | **Server Entity Combat** | onAfterKilledOtherEntity | ✅ | ✅ |
 | | onCriticalHit | - | ✅ |
 | | onShieldBlock | ✅ | ✅ |
-| **Server Entity** | onAfterEntityLoad | ✅ | - |
+| **Server Entity** | onAfterEntityChangeLevel | ✅ | ✅ |
+| | onAfterEntityLoad | ✅ | - |
+| | onAfterPlayerChangeLevel | ✅ | ✅ |
+| | onEndermanAnger | ✅ | ✅ |
 | | onEntityLoad | - | ✅ |
+| | onEntityTeleport | - | ✅ |
 | | onEntityUnload | ✅ | ✅ |
 | | onEquipmentChange | ✅ | ✅ |
-| | onAfterEntityChangeLevel | ✅ | ✅ |
-| | onAfterPlayerChangeLevel | ✅ | ✅ |
-| | onEntityTeleport | - | ✅ |
-| | onEndermanAnger | ✅ | ✅ |
-| **Server** | onServerStarting | ✅ | ✅ |
-| | onServerStarted | ✅ | ✅ |
-| | onServerStopping | ✅ | ✅ |
-| | onServerStopped | ✅ | ✅ |
-| | onSyncDatapackContents | ✅ | ✅ |
-| | onStartDatapackReload | ✅ | ✅ |
-| | onEndDatapackReload | ✅ | ✅ |
+| **Server** | onAfterSave | ✅ | ✅ |
 | | onBeforeSave | ✅ | ✅ |
-| | onAfterSave | ✅ | ✅ |
-| | onStartServerTick | ✅ | ✅ |
+| | onEndDatapackReload | ✅ | ✅ |
 | | onEndServerTick | ✅ | ✅ |
-| | onStartWorldTick | ✅ | ✅ |
 | | onEndWorldTick | ✅ | ✅ |
-| **Server Living Entity** | onLivingHurt | ✅ | ✅ |
-| | onAllowDamage | ✅ | ✅ |
-| | onAfterDamage | ✅ | ✅ |
-| | onAllowDeath | ✅ | ✅ |
+| | onLevelLoad | - | ✅ |
+| | onLevelSave | - | ✅ |
+| | onLevelUnload | - | ✅ |
+| | onServerStarted | ✅ | ✅ |
+| | onServerStarting | ✅ | ✅ |
+| | onServerStopped | ✅ | ✅ |
+| | onServerStopping | ✅ | ✅ |
+| | onStartDatapackReload | ✅ | ✅ |
+| | onStartServerTick | ✅ | ✅ |
+| | onStartWorldTick | ✅ | ✅ |
+| | onSyncDatapackContents | ✅ | ✅ |
+| **Server Living Entity** | onAfterDamage | ✅ | ✅ |
 | | onAfterDeath | ✅ | ✅ |
+| | onAllowDamage | ✅ | ✅ |
+| | onAllowDeath | ✅ | ✅ |
 | | onLivingDrops | - | ✅ |
 | | onLivingFall | ✅ | ✅ |
+| | onLivingHurt | ✅ | ✅ |
 | | onLivingJump | - | ✅ |
 | | onMobConversion | ✅ | ✅ |
 | **Server Message** | onAllowChatMessage | ✅ | - |
-| | onAllowGameMessage | ✅ | - |
 | | onAllowCommandMessage | ✅ | - |
+| | onAllowGameMessage | ✅ | - |
 | | onChatMessage | ✅ | - |
-| | onGameMessage | ✅ | - |
 | | onCommandMessage | ✅ | - |
+| | onGameMessage | ✅ | - |
 | | onServerChat | - | ✅ |
-| **Server Mob Effect** | onAllowAdd | ✅ | - |
-| | onBeforeAdd | ✅ | - |
-| | onAfterAdd | ✅ | - |
-| | onAllowEarlyRemove | ✅ | - |
-| | onBeforeRemove | ✅ | - |
+| **Server Mob Effect** | onAfterAdd | ✅ | - |
 | | onAfterRemove | ✅ | - |
-| | onMobEffectApplicable | - | ✅ |
+| | onAllowAdd | ✅ | - |
+| | onAllowEarlyRemove | ✅ | - |
+| | onBeforeAdd | ✅ | - |
+| | onBeforeRemove | ✅ | - |
 | | onMobEffectAdd | - | ✅ |
-| | onMobEffectRemove | - | ✅ |
+| | onMobEffectApplicable | - | ✅ |
 | | onMobEffectExpire | - | ✅ |
-| **Server Player** | onPlayerJoin | ✅ | ✅ |
-| | onPlayerLeave | ✅ | ✅ |
-| | onAfterPlayerRespawn | ✅ | ✅ |
-| | onPlayerCopy | ✅ | ✅ |
-| | onPlayerXpChange | ✅ | ✅ |
-| | onPlayerXpLevelChange | ✅ | ✅ |
-| | onPlayerPickupXp | ✅ | ✅ |
+| | onMobEffectRemove | - | ✅ |
+| **Server Player** | onAfterPlayerRespawn | ✅ | ✅ |
+| | onItemPickupPost | - | ✅ |
+| | onItemPickupPre | - | ✅ |
+| | onItemToss | - | ✅ |
 | | onPickFromBlock | ✅ | ✅ |
 | | onPickFromEntity | ✅ | ✅ |
+| | onPlayerCopy | ✅ | ✅ |
+| | onPlayerItemCrafted | - | ✅ |
+| | onPlayerItemSmelted | - | ✅ |
+| | onPlayerJoin | ✅ | ✅ |
+| | onPlayerLeave | ✅ | ✅ |
+| | onPlayerLoadFromFile | - | ✅ |
+| | onPlayerPickupXp | ✅ | ✅ |
+| | onPlayerSaveToFile | - | ✅ |
+| | onPlayerSpawnPhantoms | - | ✅ |
+| | onPlayerXpChange | ✅ | ✅ |
+| | onPlayerXpLevelChange | ✅ | ✅ |
+| | onStartTracking | - | ✅ |
+| | onStopTracking | - | ✅ |

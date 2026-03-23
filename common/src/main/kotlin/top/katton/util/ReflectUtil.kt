@@ -49,6 +49,7 @@ object ReflectUtil {
     private val CONSTRUCTOR_MATCH_CACHE = ConcurrentHashMap<ConstructorArgsKey, Optional<List<Class<*>>>>()
     private val LAMBDA_CACHE = ConcurrentHashMap<LambdaKey, Optional<Any>>()
     private val CLASS_CACHE = ConcurrentHashMap<String, Optional<Class<*>>>()
+    @Suppress("PLATFORM_CLASS_MAPPED_TO_KOTLIN")
     private val PRIMITIVE_TO_WRAPPER: Map<Class<*>, Class<*>> = mapOf(
         Boolean::class.javaPrimitiveType!! to java.lang.Boolean::class.java,
         Byte::class.javaPrimitiveType!! to java.lang.Byte::class.java,
@@ -60,6 +61,8 @@ object ReflectUtil {
         Double::class.javaPrimitiveType!! to java.lang.Double::class.java,
         Void.TYPE to Void::class.java
     )
+    private val INTERFACE_CACHE = ConcurrentHashMap<Class<*>, MethodHandle>()
+
 
     private fun failure(message: String): Result<Nothing> =
         Result.failure(IllegalStateException(message))
@@ -522,7 +525,6 @@ object ReflectUtil {
         }
     }
 
-
     fun <T> methodAsFunctional(
         funcInterface: Class<T>,
         target: Class<*>,
@@ -652,5 +654,24 @@ object ReflectUtil {
             }
         }
         return failure("Class not found: ${names.contentToString()}")
+    }
+
+    fun invokeFunctionalInterface(func: Any, vararg args: Any?): Any? {
+        val clazz = func::class.java
+        var handle = INTERFACE_CACHE[clazz]
+        if(handle == null){
+            val method = findSingleAbstractMethod(clazz)
+            handle = PUBLIC_LOOKUP.unreflect(method).bindTo(func)
+            INTERFACE_CACHE[clazz] = handle
+        }
+
+        return handle.invokeWithArguments(*args)
+    }
+
+    private fun findSingleAbstractMethod(clazz: Class<*>): Method?{
+        if(clazz.isInterface){
+            return clazz.methods.singleOrNull { Modifier.isAbstract(it.modifiers) }
+        }
+        return clazz.declaredMethods.find { it.name == "invoke" }
     }
 }
