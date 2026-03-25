@@ -1,4 +1,4 @@
-import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
+ import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 plugins {
 	id 'maven-publish'
@@ -13,6 +13,17 @@ group = project.maven_group
 
 base {
 	archivesName = project.archives_base_name
+}
+
+def isSnapshotVersion = provider { project.version.toString().endsWith('-SNAPSHOT') }
+def nexusBaseUrl = providers.gradleProperty('nexusBaseUrl').orElse('https://nexus.mcfpp.top')
+def nexusReleasesRepository = providers.gradleProperty('nexusReleasesRepository').orElse('maven-releases')
+def nexusSnapshotsRepository = providers.gradleProperty('nexusSnapshotsRepository').orElse('maven-snapshots')
+// Keep secrets out of the repository: provide nexusUsername/nexusPassword in ~/.gradle/gradle.properties
+// or via ORG_GRADLE_PROJECT_nexusUsername / ORG_GRADLE_PROJECT_nexusPassword.
+def nexusRepositoryUrl = provider {
+    def repositoryName = isSnapshotVersion.get() ? nexusSnapshotsRepository.get() : nexusReleasesRepository.get()
+    "${nexusBaseUrl.get().replaceAll('/+$', '')}/repository/${repositoryName}/"
 }
 
 dependencies {
@@ -35,6 +46,19 @@ subprojects {
             maven {
                 name = 'exampleRepo'
                 url = rootProject.layout.buildDirectory.dir('repo')
+            }
+            maven {
+                name = 'privateNexus'
+                url = uri(nexusRepositoryUrl.get())
+                allowInsecureProtocol = false
+                credentials {
+                    username = providers.gradleProperty('nexusUsername')
+                        .orElse(providers.environmentVariable('NEXUS_USERNAME'))
+                        .orNull
+                    password = providers.gradleProperty('nexusPassword')
+                        .orElse(providers.environmentVariable('NEXUS_PASSWORD'))
+                        .orNull
+                }
             }
         }
 
@@ -165,4 +189,10 @@ tasks.register('publishApiToExampleRepo') {
         ':fabric:publishToMavenLocal',
         ':fabric:publishAllPublicationsToExampleRepoRepository'
     )
+}
+
+tasks.register('publishAllToPrivateNexus') {
+    group = 'publishing'
+    description = "Publish all subprojects to ${nexusRepositoryUrl.get()}."
+    dependsOn(subprojects.collect { ":${it.name}:publishAllPublicationsToPrivateNexusRepository" })
 }
