@@ -7,6 +7,7 @@ plugins {
 
 version = mod_version
 group = mod_group_id
+ext.useLeanMavenPublication = true
 
 def commonMainSourceSet = project(':common').sourceSets.main
 
@@ -19,6 +20,10 @@ base {
 }
 
 java.toolchain.languageVersion = JavaLanguageVersion.of(25)
+java {
+    withSourcesJar()
+    withJavadocJar()
+}
 
 neoForge {
     // Specify the version of NeoForge to use.
@@ -117,7 +122,7 @@ dependencies {
     jarJar(implementation("net.bytebuddy:byte-buddy-agent:1.17.8"))
     jarJar(implementation("org.jetbrains:annotations:26.0.2"))
 
-    implementation project(':common')
+    api project(':common')
 }
 
 // This block of code expands all declared replace properties in the specified resource targets.
@@ -164,4 +169,76 @@ tasks.named('jar', Jar) {
 tasks.matching { it.name == 'sourcesJar' }.configureEach {
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
     from(commonMainSourceSet.allSource)
+}
+
+def mavenJar = tasks.register('mavenJar', Jar) {
+    group = 'build'
+    description = 'Assembles the plain library jar used for Maven publication.'
+    archiveBaseName = project.name
+    archiveVersion = project.version.toString()
+    destinationDirectory = layout.buildDirectory.dir('maven-libs').get().asFile
+    from(sourceSets.main.output)
+}
+
+def mavenSourcesJar = tasks.register('mavenSourcesJar', Jar) {
+    group = 'build'
+    description = 'Assembles the plain sources jar used for Maven publication.'
+    archiveBaseName = project.name
+    archiveVersion = project.version.toString()
+    archiveClassifier = 'sources'
+    destinationDirectory = layout.buildDirectory.dir('maven-libs').get().asFile
+    from(sourceSets.main.allSource)
+}
+
+publishing {
+    publications.withType(MavenPublication).configureEach {
+        setArtifacts([
+            mavenJar.get(),
+            mavenSourcesJar.get(),
+            tasks.named('javadocJar').get()
+        ])
+        pom.withXml {
+            def root = asNode()
+            def dependencySections = root.children().findAll { it instanceof Node && it.name() == 'dependencies' }
+            if (dependencySections.size() <= 1) {
+                return
+            }
+
+            def mergedDependencies = [:]
+            dependencySections.each { section ->
+                section.children()
+                    .findAll { it instanceof Node && it.name() == 'dependency' }
+                    .each { dependency ->
+                        def groupId = dependency.get('groupId')?.text()
+                        def artifactId = dependency.get('artifactId')?.text()
+                        def version = dependency.get('version')?.text()
+                        def scope = dependency.get('scope')?.text()
+                        def key = "${groupId}:${artifactId}"
+                        def existing = mergedDependencies[key]
+
+                        if (existing == null || (existing.scope == 'runtime' && scope == 'compile')) {
+                            mergedDependencies[key] = [groupId: groupId, artifactId: artifactId, version: version, scope: scope]
+                        }
+                    }
+            }
+
+            dependencySections.each { root.remove(it) }
+            def mergedSection = root.appendNode('dependencies')
+            mergedDependencies.values().each { dependency ->
+                def dependencyNode = mergedSection.appendNode('dependency')
+                dependencyNode.appendNode('groupId', dependency.groupId)
+                dependencyNode.appendNode('artifactId', dependency.artifactId)
+                if (dependency.version) {
+                    dependencyNode.appendNode('version', dependency.version)
+                }
+                if (dependency.scope) {
+                    dependencyNode.appendNode('scope', dependency.scope)
+                }
+            }
+        }
+    }
+}
+
+tasks.withType(GenerateModuleMetadata).configureEach {
+    enabled = false
 }

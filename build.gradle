@@ -44,10 +44,6 @@ subprojects {
         repositories {
             mavenLocal()
             maven {
-                name = 'exampleRepo'
-                url = rootProject.layout.buildDirectory.dir('repo')
-            }
-            maven {
                 name = 'privateNexus'
                 url = uri(nexusRepositoryUrl.get())
                 allowInsecureProtocol = false
@@ -61,14 +57,19 @@ subprojects {
                 }
             }
         }
+    }
 
-        publications {
-            mavenJava(MavenPublication) {
-                if (components.findByName('java') != null) {
-                    from components.java
+    afterEvaluate {
+        publishing {
+            publications {
+                mavenJava(MavenPublication) {
+                    def publicationComponent = project.findProperty('useLeanMavenPublication') ? null : components.findByName('java')
+                    if (publicationComponent != null) {
+                        from publicationComponent
+                    }
+
+                    artifactId = "${rootProject.findProperty('archives_base_name')}-${project.name}"
                 }
-
-                artifactId = "${rootProject.findProperty('archives_base_name')}-${project.name}"
             }
         }
     }

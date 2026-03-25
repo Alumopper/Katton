@@ -176,7 +176,7 @@ class ExecutionContext(
         return ConditionResult.FAILED
     }
 
-    inline fun <reified T: BlockEntity> ifBlock(condition: (T) -> Boolean, block: () -> Unit): ConditionResult {
+    inline fun <reified T: BlockEntity> ifBlockEntity(condition: (T) -> Boolean, block: () -> Unit): ConditionResult {
         val s = blockEntity
         if(s != null && s is T && condition(s)){
             block()
@@ -185,7 +185,7 @@ class ExecutionContext(
         return ConditionResult.FAILED
     }
 
-    inline fun <reified T: BlockEntity> unlessBlock(condition: (T) -> Boolean, block: () -> Unit): ConditionResult {
+    inline fun <reified T: BlockEntity> unlessBlockEntity(condition: (T) -> Boolean, block: () -> Unit): ConditionResult {
         val s = blockEntity
         if(s == null || s !is T || !condition(s)){
             block()
@@ -203,14 +203,6 @@ class ExecutionContext(
         return ConditionResult.FAILED
     }
 
-    inline fun ifBlockEntity(condition: (BlockEntity) -> Boolean, block: () -> Unit): ConditionResult {
-        val s = blockEntity
-        if(s != null && condition(s)){
-            block()
-            return ConditionResult.PASS
-        }
-        return ConditionResult.FAILED
-    }
 
     inline fun unlessBlockEntity(block: () -> Unit): ConditionResult {
         if(blockEntity == null){

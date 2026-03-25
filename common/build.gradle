@@ -2,8 +2,8 @@ apply plugin: 'org.jetbrains.kotlin.jvm'
 apply plugin: 'maven-publish'
 apply plugin: 'net.fabricmc.fabric-loom'
 
-group = 'top.katton'
-version = '1.0.0'
+group = project.maven_group
+version = project.mod_version
 
 repositories {
     mavenCentral()
