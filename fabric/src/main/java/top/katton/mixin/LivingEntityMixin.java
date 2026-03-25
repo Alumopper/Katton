@@ -142,7 +142,7 @@ public abstract class LivingEntityMixin {
     ) {
         LivingEntity self = (LivingEntity) (Object) this;
 
-        var arg = new ShieldBlockArg(self, source, damage, !blocksAttacks.bypassedBy().map(source::is).orElse(false));
+        var arg = new ShieldBlockArg(self, source, damage, !blocksAttacks.bypassedBy().map((x) -> x.contains(source.typeHolder())).orElse(false));
         var blocked = ServerEntityCombatEvent.onShieldBlock.invoke(arg).getOrDefault(arg.getOriginalBlockedState());
         if(!blocked){
             cir.setReturnValue(0.0f);

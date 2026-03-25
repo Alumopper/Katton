@@ -70,9 +70,15 @@ fun clientLevel(): ClientLevel? = level
  * @param message The message to display (will be converted to Component if not already)
  * @return true if the message was sent successfully, false otherwise
  */
-fun clientTell(message: Any?, overlay: Boolean = true) =
-    player?.displayClientMessage(asComponent(message), overlay)
-        ?.let { true }?: false
+fun clientTell(message: Any?, overlay: Boolean = true): Boolean {
+    player?: return false
+    if(overlay){
+        player!!.sendOverlayMessage(asComponent(message))
+    }else {
+        player!!.sendSystemMessage(asComponent(message))
+    }
+    return true
+}
 
 /**
  * Executes an action on the client thread.
@@ -168,7 +174,7 @@ fun clientGameTime(): Long? = level?.gameTime
  */
 fun clientActionBar(message: Any): Boolean {
     val p = player ?: return false
-    p.displayClientMessage(asComponent(message), true)
+    p.sendOverlayMessage(asComponent(message))
     return true
 }
 

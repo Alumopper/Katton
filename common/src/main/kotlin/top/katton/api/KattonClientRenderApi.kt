@@ -5,7 +5,7 @@ package top.katton.api
 import com.mojang.blaze3d.vertex.PoseStack
 import net.minecraft.client.Camera
 import net.minecraft.client.Minecraft
-import net.minecraft.client.gui.GuiGraphics
+import net.minecraft.client.gui.GuiGraphicsExtractor
 import net.minecraft.client.renderer.MultiBufferSource
 import net.minecraft.client.renderer.rendertype.RenderTypes
 import net.minecraft.network.chat.Component
@@ -37,7 +37,7 @@ import java.util.concurrent.ConcurrentHashMap
  * @property tickDelta The partial tick time for smooth animations
  */
 data class HudRenderContext(
-    val graphics: GuiGraphics,
+    val graphics: GuiGraphicsExtractor,
     val tickDelta: Float
 )
 
@@ -212,7 +212,7 @@ fun clearClientRenderers() {
  * @param tickDelta The partial tick time
  */
 @JvmName("dispatchHudRender")
-fun dispatchHudRender(graphics: GuiGraphics, tickDelta: Float) {
+fun dispatchHudRender(graphics: GuiGraphicsExtractor, tickDelta: Float) {
     val ctx = HudRenderContext(graphics, tickDelta)
     val ordered = hudRenderers.values
         .sortedWith(compareBy({ it.layer.ordinal }, { it.priority }))
@@ -270,7 +270,7 @@ fun drawHudText(
     color: Int = 0xFFFFFF,
     shadow: Boolean = true
 ) {
-    ctx.graphics.drawString(mc.font, asComponent(message), x, y, color, shadow)
+    ctx.graphics.text(mc.font, asComponent(message), x, y, color, shadow)
 }
 
 /**
