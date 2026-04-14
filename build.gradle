@@ -181,17 +181,6 @@ tasks.register('cleanDatapacks') {
     }
 }
 
-tasks.register('publishApiToExampleRepo') {
-    group = 'publishing'
-    description = 'Publish common and fabric artifacts to mavenLocal and build/repo for the example projects.'
-    dependsOn(
-        ':common:publishToMavenLocal',
-        ':common:publishAllPublicationsToExampleRepoRepository',
-        ':fabric:publishToMavenLocal',
-        ':fabric:publishAllPublicationsToExampleRepoRepository'
-    )
-}
-
 tasks.register('publishAllToPrivateNexus') {
     group = 'publishing'
     description = "Publish all subprojects to ${nexusRepositoryUrl.get()}."

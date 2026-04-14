@@ -6,8 +6,10 @@ import net.minecraft.commands.arguments.EntityAnchorArgument
 import net.minecraft.commands.arguments.selector.EntitySelector
 import net.minecraft.core.BlockPos
 import net.minecraft.core.Holder
+import net.minecraft.core.Registry
 import net.minecraft.core.registries.Registries
 import net.minecraft.nbt.CompoundTag
+import net.minecraft.resources.Identifier
 import net.minecraft.resources.ResourceKey
 import net.minecraft.server.MinecraftServer
 import net.minecraft.server.commands.SpreadPlayersCommand
@@ -31,6 +33,7 @@ import top.katton.api.LOGGER
 import top.katton.api.requireServer
 import top.katton.util.ContextEvent
 import java.util.*
+import kotlin.jvm.optionals.getOrNull
 
 /**
  * Entity management API for entity operations.
@@ -536,11 +539,18 @@ fun spreadPlayers(
  */
 fun summon(
     level: ServerLevel,
-    reference: Holder.Reference<EntityType<*>>,
+    id: String,
     vec3: Vec3,
     entityData: CompoundTag? = null
 ): Entity? {
     val blockPos = BlockPos.containing(vec3)
+    //try get entity
+    val key = ResourceKey.create(Registries.ENTITY_TYPE, Identifier.parse(id))
+    val reference = level.registryAccess().get(key).getOrNull()
+    if(reference == null){
+        LOGGER.error("EntityType $id not found")
+        return null
+    }
     if (!Level.isInSpawnableBounds(blockPos)) {
         LOGGER.error("Invalid postion for summon")
         return null

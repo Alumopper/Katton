@@ -1,20 +1,9 @@
-import net.minecraft.client.gui.components.toasts.SystemToast
-import top.katton.api.clearClientOverlay
-import top.katton.api.clientActionBar
-import top.katton.api.clientAddSystemToast
-import top.katton.api.clientNowPlaying
-import top.katton.api.clientOverlay
-import top.katton.api.clientSubtitle
-import top.katton.api.clientTell
-import top.katton.api.clientTitle
-import top.katton.api.clientTitleTimes
-import top.katton.api.clientToast
-import top.katton.api.isClientInMenu
-import top.katton.api.isInClientWorld
-import top.katton.api.once
-import top.katton.api.playClientSound
-import top.katton.api.runOnClient
+package qwq
 
+import net.minecraft.client.gui.components.toasts.SystemToast
+import top.katton.api.*
+
+@ClientScriptEntrypoint
 fun clientUiSmokeTestMain(){
     runOnClient {
         clientTell("[Katton] Client UI smoke test start")
@@ -35,5 +24,3 @@ fun clientUiSmokeTestMain(){
         clearClientOverlay()
     }
 }
-
-val clientUiSmokeTestEntryPoint = clientUiSmokeTestMain()

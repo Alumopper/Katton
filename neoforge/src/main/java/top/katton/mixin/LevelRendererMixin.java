@@ -1,8 +1,15 @@
 package top.katton.mixin;
 
+import com.mojang.blaze3d.buffers.GpuBufferSlice;
+import com.mojang.blaze3d.resource.GraphicsResourceAllocator;
 import net.minecraft.client.Camera;
+import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.renderer.LevelRenderer;
+import net.minecraft.client.renderer.chunk.ChunkSectionsToRender;
+import net.minecraft.client.renderer.state.level.CameraRenderState;
 import org.joml.Matrix4f;
+import org.joml.Matrix4fc;
+import org.joml.Vector4f;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -13,7 +20,7 @@ import top.katton.api.KattonClientRenderApiKt;
 public class LevelRendererMixin {
 
     @Inject(method = "renderLevel", at = @At("TAIL"))
-    private void katton$renderWorld(Object deltaTracker, boolean renderBlockOutline, Camera camera, Object gameRenderer, Matrix4f matrix4f, Matrix4f matrix4f2, CallbackInfo ci) {
-        KattonClientRenderApiKt.dispatchWorldRender(matrix4f, matrix4f2, camera, 0.0f);
+    private void katton$renderWorld(GraphicsResourceAllocator resourceAllocator, DeltaTracker deltaTracker, boolean renderOutline, CameraRenderState cameraState, Matrix4fc modelViewMatrix, GpuBufferSlice terrainFog, Vector4f fogColor, boolean shouldRenderSky, ChunkSectionsToRender chunkSectionsToRender, CallbackInfo ci) {
+        KattonClientRenderApiKt.dispatchWorldRender(cameraState,  0.0f);
     }
 }

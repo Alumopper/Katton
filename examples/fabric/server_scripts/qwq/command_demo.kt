@@ -1,11 +1,15 @@
+package qwq
+
 import com.mojang.brigadier.arguments.IntegerArgumentType.getInteger
 import com.mojang.brigadier.arguments.IntegerArgumentType.integer
 import com.mojang.brigadier.arguments.StringArgumentType.getString
 import com.mojang.brigadier.arguments.StringArgumentType.word
 import net.minecraft.commands.SharedSuggestionProvider.suggest
 import net.minecraft.network.chat.Component
+import top.katton.api.ServerScriptEntrypoint
 import top.katton.registry.registerCommand
 
+@ServerScriptEntrypoint
 fun commandTest() {
     registerCommand("demo") {
         literal("ping") {
@@ -51,5 +55,3 @@ fun commandTest() {
         }
     }
 }
-
-private val commandTest = commandTest()

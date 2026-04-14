@@ -11,6 +11,7 @@ import top.katton.registry.ScriptCommandRegistry;
 import top.katton.engine.ClientScriptLoader;
 import top.katton.engine.ExternalScriptLoader;
 import top.katton.engine.ScriptEngine;
+import top.katton.engine.ScriptEnvironment;
 import top.katton.engine.ScriptLoader;
 import top.katton.engine.InjectionManager;
 import top.katton.network.ServerNetworking;
@@ -38,7 +39,7 @@ public class Katton {
         KattonRegistry.INSTANCE.initialize();
         Set<String> mergedScripts = new LinkedHashSet<>(ScriptLoader.getScripts().values());
         mergedScripts.addAll(ExternalScriptLoader.collectServerScripts(gameDirectory));
-        ScriptEngine.compileAndExecuteAll(mergedScripts);
+        ScriptEngine.compileAndExecuteAll(mergedScripts, ScriptEnvironment.SERVER);
     }
 
     public static void setGameDirectory(Path gameDir) {
@@ -62,7 +63,7 @@ public class Katton {
         KattonClientRenderApiKt.clearClientRenderers();
         Set<String> mergedScripts = new LinkedHashSet<>(ClientScriptLoader.getScripts().values());
         mergedScripts.addAll(ExternalScriptLoader.collectClientScripts(gameDirectory));
-        ScriptEngine.compileAndExecuteAll(mergedScripts);
+        ScriptEngine.compileAndExecuteAll(mergedScripts, ScriptEnvironment.CLIENT);
         return true;
     }
 
@@ -84,7 +85,7 @@ public class Katton {
         EntityEvent.INSTANCE.beginReload();
         Event.clearHandlers();
         InjectionManager.beginReload();
-        ScriptEngine.compileAndExecuteAll(ScriptLoader.getScripts().values());
+        ScriptEngine.compileAndExecuteAll(ScriptLoader.getScripts().values(), ScriptEnvironment.SERVER);
         ServerDatapackManager.INSTANCE.apply(server);
         EntityEvent.INSTANCE.rebindLoadedEntities(server);
         ServerNetworking.INSTANCE.syncOnlinePlayers(server);

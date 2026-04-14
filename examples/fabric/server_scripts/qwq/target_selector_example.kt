@@ -1,11 +1,15 @@
+package qwq
+
 import net.minecraft.world.effect.MobEffects
 import net.minecraft.world.entity.EntityType
 import net.minecraft.world.entity.LivingEntity
 import net.minecraft.world.phys.Vec3
+import top.katton.api.ServerScriptEntrypoint
 import top.katton.api.dpcaller.addEffect
 import top.katton.api.requireServer
 import top.katton.util.EntitySelectorBuilder
 
+@ServerScriptEntrypoint
 fun targetSelectorExample(){
 
     // Build a target selector
@@ -38,6 +42,3 @@ fun targetSelectorExample(){
         }
     }
 }
-
-// Remember to call the function
-val targetSelectorExample = targetSelectorExample()

@@ -8,6 +8,7 @@ import net.minecraft.client.Minecraft
 import net.minecraft.client.gui.GuiGraphicsExtractor
 import net.minecraft.client.renderer.MultiBufferSource
 import net.minecraft.client.renderer.rendertype.RenderTypes
+import net.minecraft.client.renderer.state.level.CameraRenderState
 import net.minecraft.network.chat.Component
 import net.minecraft.resources.Identifier
 import org.joml.Vector3f
@@ -46,15 +47,11 @@ data class HudRenderContext(
  *
  * Contains matrix and camera information for 3D world rendering.
  *
- * @property viewMatrix The current view transformation matrix
- * @property projectionMatrix The current projection matrix
  * @property camera The current camera instance (may be null)
  * @property tickDelta The partial tick time for smooth animations
  */
 data class WorldRenderContext(
-    val viewMatrix: Any,
-    val projectionMatrix: Any,
-    val camera: Camera?,
+    val camera: CameraRenderState?,
     val tickDelta: Float
 )
 
@@ -230,14 +227,12 @@ fun dispatchHudRender(graphics: GuiGraphicsExtractor, tickDelta: Float) {
 /**
  * Internal dispatcher: called by platform render hooks to invoke all world renderers.
  *
- * @param viewMatrix The view transformation matrix
- * @param projectionMatrix The projection matrix
  * @param camera The camera instance
  * @param tickDelta The partial tick time
  */
 @JvmName("dispatchWorldRender")
-fun dispatchWorldRender(viewMatrix: Any, projectionMatrix: Any, camera: Camera?, tickDelta: Float) {
-    val ctx = WorldRenderContext(viewMatrix, projectionMatrix, camera, tickDelta)
+fun dispatchWorldRender(camera: CameraRenderState?, tickDelta: Float) {
+    val ctx = WorldRenderContext(camera, tickDelta)
     val ordered = worldRenderers.values
         .sortedWith(compareBy({ it.layer.ordinal }, { it.priority }))
     for (entry in ordered) {
@@ -304,10 +299,10 @@ fun fillHudRect(
  * @param y The Y position on screen
  * @param width The width to draw
  * @param height The height to draw
- * @param u The U coordinate in the texture (default: 0)
- * @param v The V coordinate in the texture (default: 0)
- * @param textureWidth The total texture width (default: same as width)
- * @param textureHeight The total texture height (default: same as height)
+ * @param u0 The U coordinate of the texture region (default: 0)
+ * @param u1 The U coordinate of the texture region (default: 1)
+ * @param v0 The V coordinate of the texture region (default: 0)
+ * @param v1 The V coordinate of the texture region (default: 1)
  * @return true if drawing succeeded, false if texture ID was invalid
  */
 fun drawHudTexture(
@@ -317,13 +312,13 @@ fun drawHudTexture(
     y: Int,
     width: Int,
     height: Int,
-    u: Float = 0f,
-    v: Float = 0f,
-    textureWidth: Int = width,
-    textureHeight: Int = height
+    u0: Float = 0f,
+    u1: Float = 1f,
+    v0: Float = 0f,
+    v1: Float = 1f
 ): Boolean {
     val id = runCatching { Identifier.parse(texture) }.getOrNull() ?: return false
-    ctx.graphics.blit(id, x, y, width, height, u, v, textureWidth.toFloat(), textureHeight.toFloat())
+    ctx.graphics.blit(id, x, y, x+width, y+height, u0, u1, v0, v1)
     return true
 }
 
@@ -355,7 +350,7 @@ fun drawLine3D(
     lineWidth: Float = 1.0f
 ): Boolean {
     val cam = ctx.camera ?: return false
-    val camPos = cam.position()
+    val camPos = cam.pos
 
     val a = ((argbColor ushr 24) and 0xFF)
     val r = ((argbColor ushr 16) and 0xFF)
@@ -391,71 +386,71 @@ fun drawLine3D(
     bufferSource.endBatch(RenderTypes.linesTranslucent())
     return true
 }
-
-/**
- * Draw a colored quad billboard at world position.
- *
- * Uses real GPU mesh rendering via VertexConsumer+RenderType.
- * Billboards always face the camera.
- *
- * @param ctx The world render context
- * @param x The X coordinate in world space
- * @param y The Y coordinate in world space
- * @param z The Z coordinate in world space
- * @param argbColor The color in ARGB format
- * @param size The size of the billboard (default: 1.0)
- * @return true if drawing succeeded, false otherwise
- */
-fun drawBillboard3D(
-    ctx: WorldRenderContext,
-    x: Double,
-    y: Double,
-    z: Double,
-    argbColor: Int,
-    size: Float = 1.0f
-): Boolean {
-    val cam = ctx.camera ?: return false
-    val camPos = cam.position()
-
-    val a = ((argbColor ushr 24) and 0xFF)
-    val r = ((argbColor ushr 16) and 0xFF)
-    val g = ((argbColor ushr 8) and 0xFF)
-    val b = (argbColor and 0xFF)
-    val h = size / 2f
-
-    // Use camera basis vectors directly for a stable billboard orientation.
-    val right = Vector3f(cam.leftVector()).mul(-1f)
-    val up = Vector3f(cam.upVector())
-
-    val poseStack = PoseStack()
-    poseStack.translate(-camPos.x, -camPos.y, -camPos.z)
-    val pose = poseStack.last()
-
-    // Camera-relative center
-    val cx = (x - camPos.x).toFloat()
-    val cy = (y - camPos.y).toFloat()
-    val cz = (z - camPos.z).toFloat()
-
-    // Four corners: center ± right*h ± up*h
-    val v0x = cx - right.x * h - up.x * h
-    val v0y = cy - right.y * h - up.y * h
-    val v0z = cz - right.z * h - up.z * h
-    val v1x = cx + right.x * h - up.x * h
-    val v1y = cy + right.y * h - up.y * h
-    val v1z = cz + right.z * h - up.z * h
-    val v2x = cx + right.x * h + up.x * h
-    val v2y = cy + right.y * h + up.y * h
-    val v2z = cz + right.z * h + up.z * h
-    val v3x = cx - right.x * h + up.x * h
-    val v3y = cy - right.y * h + up.y * h
-    val v3z = cz - right.z * h + up.z * h
-
-    val bufferSource: MultiBufferSource.BufferSource = mc.renderBuffers().bufferSource()
-    val vc = bufferSource.getBuffer(RenderTypes.debugQuads())
-    vc.addVertex(pose, v0x, v0y, v0z).setColor(r, g, b, a)
-    vc.addVertex(pose, v1x, v1y, v1z).setColor(r, g, b, a)
-    vc.addVertex(pose, v2x, v2y, v2z).setColor(r, g, b, a)
-    vc.addVertex(pose, v3x, v3y, v3z).setColor(r, g, b, a)
-    bufferSource.endBatch(RenderTypes.debugQuads())
-    return true
-}
+//
+///**
+// * Draw a colored quad billboard at world position.
+// *
+// * Uses real GPU mesh rendering via VertexConsumer+RenderType.
+// * Billboards always face the camera.
+// *
+// * @param ctx The world render context
+// * @param x The X coordinate in world space
+// * @param y The Y coordinate in world space
+// * @param z The Z coordinate in world space
+// * @param argbColor The color in ARGB format
+// * @param size The size of the billboard (default: 1.0)
+// * @return true if drawing succeeded, false otherwise
+// */
+//fun drawBillboard3D(
+//    ctx: WorldRenderContext,
+//    x: Double,
+//    y: Double,
+//    z: Double,
+//    argbColor: Int,
+//    size: Float = 1.0f
+//): Boolean {
+//    val cam = ctx.camera ?: return false
+//    val camPos = cam.pos
+//
+//    val a = ((argbColor ushr 24) and 0xFF)
+//    val r = ((argbColor ushr 16) and 0xFF)
+//    val g = ((argbColor ushr 8) and 0xFF)
+//    val b = (argbColor and 0xFF)
+//    val h = size / 2f
+//
+//    // Use camera basis vectors directly for a stable billboard orientation.
+//    val right = Vector3f(cam.leftVector()).mul(-1f)
+//    val up = Vector3f(cam.upVector())
+//
+//    val poseStack = PoseStack()
+//    poseStack.translate(-camPos.x, -camPos.y, -camPos.z)
+//    val pose = poseStack.last()
+//
+//    // Camera-relative center
+//    val cx = (x - camPos.x).toFloat()
+//    val cy = (y - camPos.y).toFloat()
+//    val cz = (z - camPos.z).toFloat()
+//
+//    // Four corners: center ± right*h ± up*h
+//    val v0x = cx - right.x * h - up.x * h
+//    val v0y = cy - right.y * h - up.y * h
+//    val v0z = cz - right.z * h - up.z * h
+//    val v1x = cx + right.x * h - up.x * h
+//    val v1y = cy + right.y * h - up.y * h
+//    val v1z = cz + right.z * h - up.z * h
+//    val v2x = cx + right.x * h + up.x * h
+//    val v2y = cy + right.y * h + up.y * h
+//    val v2z = cz + right.z * h + up.z * h
+//    val v3x = cx - right.x * h + up.x * h
+//    val v3y = cy - right.y * h + up.y * h
+//    val v3z = cz - right.z * h + up.z * h
+//
+//    val bufferSource: MultiBufferSource.BufferSource = mc.renderBuffers().bufferSource()
+//    val vc = bufferSource.getBuffer(RenderTypes.debugQuads())
+//    vc.addVertex(pose, v0x, v0y, v0z).setColor(r, g, b, a)
+//    vc.addVertex(pose, v1x, v1y, v1z).setColor(r, g, b, a)
+//    vc.addVertex(pose, v2x, v2y, v2z).setColor(r, g, b, a)
+//    vc.addVertex(pose, v3x, v3y, v3z).setColor(r, g, b, a)
+//    bufferSource.endBatch(RenderTypes.debugQuads())
+//    return true
+//}

@@ -30,7 +30,16 @@ In IDEs such as IntelliJ IDEA, you may see unresolved references for Minecraft/F
 > [!NOTE]
 > Even though these are "Kotlin Script" files, using the `.kt` extension usually provides better IDE support. So Katton only processes `.kt` files as scripts, and you can use regular Kotlin syntax without worrying about script-specific limitations.
 >
-> Some IDE inspections may complain about top-level statements in `.kt` files. In that case, use `fun main()` as the script entry point, move your top-level logic into `main`, and invoke it at the end of the file with `val __entrypoint__ = main()`.
+> Some IDE inspections may complain about top-level statements in `.kt` files. In that case, move your script logic into a top-level no-argument function annotated with the environment-specific entrypoint annotation.
+>
+> ```kotlin
+> import top.katton.api.ServerScriptEntrypoint
+>
+> @ServerScriptEntrypoint
+> fun main() {
+>     // script logic
+> }
+> ```
 
 ### Script Debugging (Remote)
 

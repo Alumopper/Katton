@@ -1,8 +1,12 @@
+package qwq
+
+import top.katton.api.ServerScriptEntrypoint
 import top.katton.api.dpcaller.tell
 import top.katton.api.event.PlayerArg
 import top.katton.api.event.ServerPlayerEvent
 import top.katton.api.once
 
+@ServerScriptEntrypoint
 fun eventPlayerLifecycleDemo() {
     ServerPlayerEvent.onPlayerJoin += join@ fun(arg: PlayerArg) {
         val player = arg.player
@@ -19,6 +23,4 @@ fun eventPlayerLifecycleDemo() {
         tell(arg.player, "[event-demo] 你已离开服务器，下次加入将继续触发生命周期事件")
     }
 }
-
-@Suppress("unused") private val eventPlayerLifecycleDemo = eventPlayerLifecycleDemo()
 

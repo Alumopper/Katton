@@ -1,14 +1,19 @@
+package qwq
+
+import net.minecraft.server.level.ServerPlayer
 import net.minecraft.world.InteractionResult
 import net.minecraft.world.level.block.Blocks
+import top.katton.api.ServerScriptEntrypoint
 import top.katton.api.dpcaller.tell
 import top.katton.api.event.PlayerEvent
 import top.katton.api.event.UseItemOnArg
 
+@ServerScriptEntrypoint
 fun eventBlockInteractDemo() {
     PlayerEvent.onUseItemOn += onUse@ fun(arg: UseItemOnArg): InteractionResult {
         if (arg.world.isClientSide) return InteractionResult.PASS
 
-        val serverPlayer = arg.player as? net.minecraft.server.level.ServerPlayer ?: return InteractionResult.PASS
+        val serverPlayer = arg.player as? ServerPlayer ?: return InteractionResult.PASS
         val state = arg.world.getBlockState(arg.hitResult.blockPos)
 
         if (state.`is`(Blocks.DIAMOND_BLOCK)) {
@@ -19,6 +24,4 @@ fun eventBlockInteractDemo() {
         return InteractionResult.PASS
     }
 }
-
-@Suppress("unused") private val eventBlockInteractDemo = eventBlockInteractDemo()
 

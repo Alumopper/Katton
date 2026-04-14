@@ -6,7 +6,7 @@ plugins {
 }
 
 version = mod_version
-group = mod_group_id
+group = maven_group
 ext.useLeanMavenPublication = true
 
 def commonMainSourceSet = project(':common').sourceSets.main

@@ -1,3 +1,6 @@
+package qwq
+
+import top.katton.api.ClientScriptEntrypoint
 import top.katton.api.HudRenderLayer
 import top.katton.api.clientFps
 import top.katton.api.clientPos
@@ -6,10 +9,10 @@ import top.katton.api.clientTell
 import top.katton.api.drawHudText
 import top.katton.api.drawHudTexture
 import top.katton.api.fillHudRect
-import top.katton.api.once
 import top.katton.api.registerHudRenderer
 import top.katton.api.unregisterHudRenderer
 
+@ClientScriptEntrypoint
 fun hudRenderTestMain() {
 
     unregisterHudRenderer("katton:test:hud")
@@ -30,18 +33,16 @@ fun hudRenderTestMain() {
         // 9x9 heart icon area from vanilla icons atlas.
         drawHudTexture(
             ctx = ctx,
-            texture = "minecraft:textures/gui/icons.png",
+            texture = "minecraft:textures/items/apple.png",
             x = 232,
             y = 16,
             width = 9,
             height = 9,
-            u = 16f,
-            v = 0f,
-            textureWidth = 256,
-            textureHeight = 256
+            u0 = 0f,
+            u1 = 16f,
+            v0 = 0f,
+            v1 = 16f
         )
     }
     clientTell("[Katton] HUD render test script loaded")
 }
-
-val hudRenderTestEntryPoint = hudRenderTestMain()

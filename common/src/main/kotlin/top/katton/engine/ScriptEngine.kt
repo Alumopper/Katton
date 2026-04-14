@@ -3,10 +3,23 @@ package top.katton.engine
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.kotlin.scripting.compiler.plugin.impl.KJvmCompiledModuleInMemoryImpl
 import org.objectweb.asm.ClassReader
+import top.katton.api.ClientScriptEntrypoint
 import top.katton.api.LOGGER
+import top.katton.api.ServerScriptEntrypoint
 import top.katton.util.Event
 import java.io.File
-import kotlin.script.experimental.api.*
+import java.lang.reflect.Method
+import java.lang.reflect.Modifier
+import kotlin.script.experimental.api.CompiledScript
+import kotlin.script.experimental.api.EvaluationResult
+import kotlin.script.experimental.api.ResultValue
+import kotlin.script.experimental.api.ResultWithDiagnostics
+import kotlin.script.experimental.api.ScriptCompilationConfiguration
+import kotlin.script.experimental.api.ScriptDiagnostic
+import kotlin.script.experimental.api.ScriptEvaluationConfiguration
+import kotlin.script.experimental.api.defaultImports
+import kotlin.script.experimental.api.enableScriptsInstancesSharing
+import kotlin.script.experimental.api.importScripts
 import kotlin.script.experimental.host.toScriptSource
 import kotlin.script.experimental.jvm.dependenciesFromCurrentContext
 import kotlin.script.experimental.jvm.impl.KJvmCompiledScript
@@ -26,6 +39,10 @@ object ScriptEngine {
         jvm {
             dependenciesFromCurrentContext(wholeClasspath = true)
         }
+        defaultImports(
+            ClientScriptEntrypoint::class.qualifiedName!!,
+            ServerScriptEntrypoint::class.qualifiedName!!
+        )
     }
 
     // Evaluation configuration: enable sharing of script instances if needed.
@@ -34,9 +51,9 @@ object ScriptEngine {
     }
 
     @JvmStatic
-    fun compileAndExecuteAll(scriptPath: Collection<String>){
+    fun compileAndExecuteAll(scriptPath: Collection<String>, environment: ScriptEnvironment) {
         val dummyScript = "".toScriptSource()
-        LOGGER.info("Compiling and executing ${scriptPath.size} scripts")
+        LOGGER.info("Compiling and executing ${scriptPath.size} ${environment.name.lowercase()} scripts")
         runBlocking {
             val compileResult = compiler(dummyScript, ScriptCompilationConfiguration(baseConfig) {
                 importScripts(scriptPath.map { File(it).toScriptSource() })
@@ -45,7 +62,7 @@ object ScriptEngine {
 
             when (compileResult) {
                 is ResultWithDiagnostics.Success -> {
-                    val executionResult = execute(compileResult.value)
+                    val executionResult = execute(compileResult.value, environment)
                     logExecutionResult(executionResult)
                 }
 
@@ -104,10 +121,9 @@ object ScriptEngine {
     }
 
     private suspend fun execute(
-        script: CompiledScript
-    ): ResultWithDiagnostics<EvaluationResult>{
-
-        //create class instance to trigger static initializer and register events
+        script: CompiledScript,
+        environment: ScriptEnvironment
+    ): ResultWithDiagnostics<EvaluationResult> {
         val module = (script as KJvmCompiledScript).getCompiledModule() as KJvmCompiledModuleInMemoryImpl
         val outputFiles = module.compilerOutputFiles
 
@@ -127,18 +143,32 @@ object ScriptEngine {
 
             val internalName = ClassReader(bytes).className
             val fqcn = internalName.replace('/', '.')
-            if (fqcn == rootName) continue // 跳过空白入口脚本
+            if (fqcn == rootName) continue
 
             runCatching {
-                Event.withScriptOwner(fqcn) {
-                    Class.forName(fqcn, true, loader)
+                val clazz = Class.forName(fqcn, false, loader)
+                val entrypoints = clazz.declaredMethods.filter { method ->
+                    Modifier.isStatic(method.modifiers) &&
+                        method.annotationClassNames().contains(environment.annotationClassName)
                 }
-            }.onSuccess {
-                successCount++
+
+                for (method in entrypoints) {
+                    if (method.parameterCount != 0) {
+                        failureCount++
+                        errorMessages += "$fqcn.${method.name}: ${environment.annotationClassName.substringAfterLast('.')} functions must not declare parameters"
+                        continue
+                    }
+
+                    Event.withScriptOwner(fqcn) {
+                        method.isAccessible = true
+                        method.invoke(null)
+                    }
+                    successCount++
+                }
             }.onFailure {
                 failureCount++
                 errorMessages += "$fqcn: ${it.message ?: "Unknown error"}"
-                LOGGER.warn("Failed to instantiate script class: $fqcn", it)
+                LOGGER.warn("Failed to execute ${environment.name.lowercase()} script entrypoints from class: $fqcn", it)
             }
         }
 
@@ -163,4 +193,7 @@ object ScriptEngine {
         )
     }
 
+    private fun Method.annotationClassNames(): Set<String> {
+        return annotations.mapNotNull { it.annotationClass.qualifiedName }.toSet()
+    }
 }
