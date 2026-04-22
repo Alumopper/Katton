@@ -15,32 +15,12 @@ import top.katton.pack.ServerPackCacheManager
     modid = Katton.MOD_ID,
     value = [Dist.CLIENT]
 )
-object ClientNetworkingNeoForge: ClientNetworking() {
+object ClientNetworkingNeoForge {
 
     @JvmStatic
     @SubscribeEvent
     fun onRegisterPayloadHandlers(event: RegisterPayloadHandlersEvent) {
         val registrar = event.registrar("1")
-        registrar.configurationToClient(ItemSyncPacket.TYPE, ItemSyncPacket.STREAM_CODEC) { packet, context ->
-            if(context.connection().isMemoryConnection) return@configurationToClient
-            context.enqueueWork {
-                queueItemSnapshot(packet.items)
-            }
-        }
-
-        registrar.configurationToClient(EffectSyncPacket.TYPE, EffectSyncPacket.STREAM_CODEC) { packet, context ->
-            if(context.connection().isMemoryConnection) return@configurationToClient
-            context.enqueueWork {
-                queueEffectSnapshot(packet.effects)
-            }
-        }
-
-        registrar.configurationToClient(BlockSyncPacket.TYPE, BlockSyncPacket.STREAM_CODEC) { packet, context ->
-            if(context.connection().isMemoryConnection) return@configurationToClient
-            context.enqueueWork {
-                queueBlockSnapshot(packet.blocks)
-            }
-        }
 
         registrar.configurationToClient(ScriptPackHashListPacket.TYPE, ScriptPackHashListPacket.STREAM_CODEC) { packet, context ->
             if (context.connection().isMemoryConnection) return@configurationToClient
@@ -55,27 +35,6 @@ object ClientNetworkingNeoForge: ClientNetworking() {
             if (context.connection().isMemoryConnection) return@configurationToClient
             context.enqueueWork {
                 ServerPackCacheManager.handleBundle(packet)
-            }
-        }
-
-        registrar.playToClient(ItemSyncPacket.TYPE, ItemSyncPacket.STREAM_CODEC) { packet, context ->
-            if(context.connection().isMemoryConnection) return@playToClient
-            context.enqueueWork {
-                applyItemSnapshot(packet.items)
-            }
-        }
-
-        registrar.playToClient(EffectSyncPacket.TYPE, EffectSyncPacket.STREAM_CODEC) { packet, context ->
-            if(context.connection().isMemoryConnection) return@playToClient
-            context.enqueueWork {
-                applyEffectSnapshot(packet.effects)
-            }
-        }
-
-        registrar.playToClient(BlockSyncPacket.TYPE, BlockSyncPacket.STREAM_CODEC) { packet, context ->
-            if(context.connection().isMemoryConnection) return@playToClient
-            context.enqueueWork {
-                applyBlockSnapshot(packet.blocks)
             }
         }
     }

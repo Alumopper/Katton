@@ -29,12 +29,6 @@ public abstract class ServerConfigurationPacketListenerImplMixin {
     )
     private void katton$onInit(MinecraftServer server, Connection connection, CommonListenerCookie cookie, CallbackInfo ci) {
         var THIS = (ServerConfigurationPacketListenerImpl) (Object) this;
-        // Send item sync packet to the connecting player
-        ServerNetworking.INSTANCE.sendItemSyncPacket(THIS, ServerConfigurationNetworking::send);
-        // Send effect sync packet to the connecting player
-        ServerNetworking.INSTANCE.sendEffectSyncPacket(THIS, ServerConfigurationNetworking::send);
-        // Send block sync packet to the connecting player
-        ServerNetworking.INSTANCE.sendBlockSyncPacket(THIS, ServerConfigurationNetworking::send);
         // Send script pack hash snapshot for client-side cache negotiation
         ServerNetworking.INSTANCE.sendScriptPackHashPacket(THIS, ServerConfigurationNetworking::send);
     }

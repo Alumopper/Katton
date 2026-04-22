@@ -36,6 +36,14 @@ object ScriptPackManager {
         worldDirectory = path
     }
 
+    fun getGlobalScriptDirectory(): Path? {
+        return gameDirectory?.resolve(PACKS_DIR_NAME)
+    }
+
+    fun getWorldScriptDirectory(): Path? {
+        return worldDirectory?.resolve(PACKS_DIR_NAME)
+    }
+
     @Synchronized
     fun clearWorldDirectory() {
         worldDirectory = null

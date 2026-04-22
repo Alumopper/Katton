@@ -23,11 +23,7 @@ Server-transferred cache on client:
   "version": "1.0.0",
   "description": "Example scripts for Katton pack system",
   "authors": ["YourName"],
-  "enabled": true,
-  "targets": {
-    "server": true,
-    "client": true
-  }
+  "enabled": true
 }
 ```
 
@@ -39,8 +35,10 @@ Server-transferred cache on client:
 - `description`: description in UI.
 - `authors`: optional string array.
 - `enabled`: default enabled state if no local state file exists.
-- `targets.server`: whether pack scripts should be loaded in server environment.
-- `targets.client`: whether pack scripts should be loaded in client environment.
+
+Side behavior:
+- Script packs do not declare server/client side in manifest.
+- Side-specific execution is decided by function annotations (`@ServerScriptEntrypoint`, `@ClientScriptEntrypoint`).
 
 ## 4. State File
 

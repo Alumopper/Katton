@@ -2,7 +2,7 @@
 
 # Katton
 
-Katton is a Minecraft Fabric/NeoForge mod that brings Kotlin scripting to datapacks. It lets you interact directly with Minecraft server internals and Fabric/NeoForge APIs from scripts, making it easy to build custom mechanics, commands, and items with Kotlin's concise syntax. Katton also supports hot reloading (similar to vanilla functions), so you can iterate quickly without restarting the server.
+Katton is a Minecraft Fabric/NeoForge mod that brings Kotlin scripting to script packs. It lets you interact directly with Minecraft server internals and Fabric/NeoForge APIs from scripts, making it easy to build custom mechanics, commands, and items with Kotlin's concise syntax. Katton also supports hot reloading, so you can iterate quickly without restarting the server.
 
 ## Roadmap
 
@@ -19,7 +19,12 @@ Katton is a Minecraft Fabric/NeoForge mod that brings Kotlin scripting to datapa
 
 ### Getting Started
 
-Add Katton to your Fabric/NeoForge modpack, then create a datapack in your world's `datapacks` directory. Inside your datapack namespace folder, create a `scripts` subdirectory and place your Kotlin script files there. Katton compiles these scripts automatically when the datapack is loaded.
+Add Katton to your Fabric/NeoForge modpack, then create a script pack folder under `kattonpacks`.
+
+- Global packs: `<gameDir>/kattonpacks/<pack>/...`
+- World packs: `<worldDir>/kattonpacks/<pack>/...`
+
+Each pack must include `manifest.json`, plus one or more `.kt` files. Scripts are side-agnostic: server/client execution is selected by entrypoint annotations (`@ServerScriptEntrypoint` and `@ClientScriptEntrypoint`).
 
 A ready-to-use example project (with dependencies and basic configuration) is available at [Katton-Example](https://github.com/Alumopper/Katton-Example).
 
@@ -43,7 +48,7 @@ In IDEs such as IntelliJ IDEA, you may see unresolved references for Minecraft/F
 
 ### Script Debugging (Remote)
 
-Katton supports debugging datapack Kotlin scripts through standard JVM remote debugging.
+Katton supports debugging Kotlin script pack files through standard JVM remote debugging.
 
 1. Start Minecraft (or the dedicated server) with a debug agent, for example:
 
@@ -52,7 +57,7 @@ Katton supports debugging datapack Kotlin scripts through standard JVM remote de
    ```
 
 2. In IntelliJ IDEA, create an **Attach to remote JVM** run configuration and connect to the same host and port.
-3. Set breakpoints in the actual datapack script file (for example, `data/<namespace>/scripts/*.kt`).
+3. Set breakpoints in the actual script pack file (for example, `<gameDir>/kattonpacks/<pack>/**/*.kt`).
 4. Enjoy debugging your scripts with the IDE's standard debugging tools.
 
 > [!NOTE]
@@ -131,7 +136,7 @@ registerNativeItem(
 
 Run `/katton reload` to reload all scripts without restarting the server. This will:
 
-1. Re-read all script files from datapacks
+1. Re-scan all enabled script packs from global/world scopes
 2. Re-compile and execute the scripts
 3. Update event handlers and item behaviors
 

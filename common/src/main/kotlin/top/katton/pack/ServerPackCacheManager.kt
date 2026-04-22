@@ -60,7 +60,7 @@ object ServerPackCacheManager {
             }
     }
 
-    fun collectClientScripts(): List<String> {
+    fun collectScripts(): List<String> {
         return activePacks
             .asSequence()
             .flatMap { pack -> pack.scripts.asSequence().map { it.absolutePath.absolutePathString() } }

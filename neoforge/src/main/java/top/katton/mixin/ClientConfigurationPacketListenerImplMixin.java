@@ -29,8 +29,6 @@ public class ClientConfigurationPacketListenerImplMixin {
         remap = false
     )
     private static void katton$onHandleRegistryData(ClientboundRegistryDataPacket packet, CallbackInfo ci) {
-        // Process any pending item registrations before Fabric's registry sync check
-        ClientNetworkingNeoForge.INSTANCE.processPendingRegistrations();
         // Ensure server-transferred script packs are executed before the check proceeds
         ServerPackCacheManager.INSTANCE.executePendingScriptsBeforeRegistryCheck();
     }

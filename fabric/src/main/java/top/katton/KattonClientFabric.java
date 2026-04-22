@@ -35,13 +35,11 @@ public class KattonClientFabric implements ClientModInitializer {
 
 		// Initialize client networking for item sync
 		ClientNetworkingFabric.INSTANCE.initialize();
-		Katton.reloadClientScripts();
 
 		// Reset state when disconnecting from server
 		ClientPlayConnectionEvents.JOIN.register((_, _, _) -> Katton.reloadClientScripts());
 
 		ClientPlayConnectionEvents.DISCONNECT.register((_, _) -> {
-			ClientNetworkingFabric.INSTANCE.reset();
 			ServerPackCacheManager.INSTANCE.reset();
 		});
 

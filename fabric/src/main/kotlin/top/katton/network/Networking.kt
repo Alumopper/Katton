@@ -19,25 +19,6 @@ object Networking {
     fun initialize() {
         // Register payload type for server->client communication
         // This must be done on both sides before registering handlers
-        if(PayloadTypeRegistryImpl.CLIENTBOUND_CONFIGURATION.get(ItemSyncPacket.TYPE.id) == null){
-            PayloadTypeRegistryImpl.CLIENTBOUND_CONFIGURATION.register(ItemSyncPacket.TYPE, ItemSyncPacket.STREAM_CODEC)
-        }
-        if(CLIENTBOUND_PLAY.get(ItemSyncPacket.TYPE.id) == null){
-            CLIENTBOUND_PLAY.register(ItemSyncPacket.TYPE, ItemSyncPacket.STREAM_CODEC)
-        }
-        if(PayloadTypeRegistryImpl.CLIENTBOUND_CONFIGURATION.get(EffectSyncPacket.TYPE.id) == null){
-            PayloadTypeRegistryImpl.CLIENTBOUND_CONFIGURATION.register(EffectSyncPacket.TYPE, EffectSyncPacket.STREAM_CODEC)
-        }
-        if(CLIENTBOUND_PLAY.get(EffectSyncPacket.TYPE.id) == null){
-            CLIENTBOUND_PLAY.register(EffectSyncPacket.TYPE, EffectSyncPacket.STREAM_CODEC)
-        }
-        if(PayloadTypeRegistryImpl.CLIENTBOUND_CONFIGURATION.get(BlockSyncPacket.TYPE.id) == null){
-            PayloadTypeRegistryImpl.CLIENTBOUND_CONFIGURATION.register(BlockSyncPacket.TYPE, BlockSyncPacket.STREAM_CODEC)
-        }
-        if(CLIENTBOUND_PLAY.get(BlockSyncPacket.TYPE.id) == null){
-            CLIENTBOUND_PLAY.register(BlockSyncPacket.TYPE, BlockSyncPacket.STREAM_CODEC)
-        }
-
         if(PayloadTypeRegistryImpl.CLIENTBOUND_CONFIGURATION.get(ScriptPackHashListPacket.TYPE.id) == null){
             PayloadTypeRegistryImpl.CLIENTBOUND_CONFIGURATION.register(ScriptPackHashListPacket.TYPE, ScriptPackHashListPacket.STREAM_CODEC)
         }

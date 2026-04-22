@@ -5,13 +5,13 @@ import net.minecraft.client.KeyMapping;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
+import net.neoforged.neoforge.client.event.AddClientReloadListenersEvent;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
 import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
 import net.neoforged.neoforge.client.event.RegisterKeyMappingsEvent;
 import net.neoforged.neoforge.common.NeoForge;
 import org.lwjgl.glfw.GLFW;
 import top.katton.client.ScriptPackUi;
-import top.katton.network.ClientNetworkingNeoForge;
 import top.katton.pack.ServerPackCacheManager;
 
 /**
@@ -35,24 +35,24 @@ public class KattonClientNeoForge {
         KATTON_KEY_CATEGORY
     );
 
+    /** Ensures client-only game bus listeners are wired once during client init. */
+    @SubscribeEvent
+    public static void onAddClientReloadListeners(AddClientReloadListenersEvent event) {
+        // Also wire game-bus events that are client-only (runs once per client init)
+        if (!gameEventsRegistered) {
+            gameEventsRegistered = true;
+            NeoForge.EVENT_BUS.addListener(KattonClientNeoForge::onDisconnect);
+            NeoForge.EVENT_BUS.addListener(KattonClientNeoForge::onLogin);
+            NeoForge.EVENT_BUS.addListener(KattonClientNeoForge::onClientTick);
+        }
+    }
+
     @SubscribeEvent
     public static void onRegisterKeyMappings(RegisterKeyMappingsEvent event) {
         event.register(OPEN_PACK_SCREEN);
-        Katton.reloadClientScripts();
-        ensureGameEventsRegistered();
     }
 
     private static volatile boolean gameEventsRegistered = false;
-
-    private static void ensureGameEventsRegistered() {
-        if (gameEventsRegistered) {
-            return;
-        }
-        gameEventsRegistered = true;
-        NeoForge.EVENT_BUS.addListener(KattonClientNeoForge::onDisconnect);
-        NeoForge.EVENT_BUS.addListener(KattonClientNeoForge::onLogin);
-        NeoForge.EVENT_BUS.addListener(KattonClientNeoForge::onClientTick);
-    }
 
     private static void onClientTick(ClientTickEvent.Post event) {
         while (OPEN_PACK_SCREEN.consumeClick()) {
@@ -65,7 +65,6 @@ public class KattonClientNeoForge {
     }
 
     private static void onDisconnect(ClientPlayerNetworkEvent.LoggingOut event) {
-        ClientNetworkingNeoForge.INSTANCE.reset();
         ServerPackCacheManager.INSTANCE.reset();
     }
 

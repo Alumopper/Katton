@@ -71,11 +71,16 @@ private class ScriptPackManagerScreen(
         minecraft?.setScreen(parent)
     }
 
+    override fun isPauseScreen(): Boolean = false
+
+    override fun extractBackground(graphics: GuiGraphicsExtractor, mouseX: Int, mouseY: Int, partialTick: Float) {
+        // Keep in-world scene visible without additional dim background.
+    }
+
     override fun extractRenderState(graphics: GuiGraphicsExtractor, mouseX: Int, mouseY: Int, partialTick: Float) {
         super.extractRenderState(graphics, mouseX, mouseY, partialTick)
 
-        graphics.fill(0, 0, width, height, 0xAA121212.toInt())
-        graphics.text(font, title, 16, 10, 0xFFFFFF, false)
+        graphics.text(font, title, 16, 10, 0xFFFFFFFF.toInt(), false)
 
         val listWidth = (width * 0.44f).toInt()
         val listLeft = LIST_MARGIN
@@ -101,7 +106,7 @@ private class ScriptPackManagerScreen(
             val status = if (pack.enabled) "ON" else "OFF"
             val lockText = if (pack.locked) " [Locked]" else ""
             val label = "[$status] ${pack.scope.displayName} - ${pack.name}$lockText"
-            graphics.text(font, label, listLeft + 4, rowTop + 5, 0xE0E0E0, false)
+            graphics.text(font, label, listLeft + 4, rowTop + 5, 0xFFE0E0E0.toInt(), false)
         }
 
         renderDetails(graphics, listLeft + listWidth + 12, listTop)
@@ -109,14 +114,14 @@ private class ScriptPackManagerScreen(
 
     private fun renderDetails(graphics: GuiGraphicsExtractor, x: Int, y: Int) {
         if (selectedIndex !in packs.indices) {
-            graphics.text(font, "Select a script pack to see details", x, y, 0xB0B0B0, false)
+            graphics.text(font, "Select a script pack to see details", x, y, 0xFFB0B0B0.toInt(), false)
             return
         }
 
         val pack = packs[selectedIndex]
         var lineY = y
 
-        fun line(text: String, color: Int = 0xF0F0F0) {
+        fun line(text: String, color: Int = 0xFFF0F0F0.toInt()) {
             graphics.text(font, text, x, lineY, color, false)
             lineY += 12
         }
@@ -135,7 +140,7 @@ private class ScriptPackManagerScreen(
         line("Hash: ${pack.hash.take(16)}...")
         if (pack.description.isNotBlank()) {
             line("Description:")
-            line(pack.description, 0xCFCFCF)
+            line(pack.description, 0xFFCFCFCF.toInt())
         }
     }
 
@@ -222,10 +227,20 @@ private class ScriptPackManagerScreen(
     }
 
     private fun triggerReload() {
-        Katton.reloadClientScripts()
+        val clientOk = Katton.reloadClientScripts()
         val integratedServer = minecraft?.singleplayerServer
-        if (integratedServer != null) {
-            Katton.reloadScripts(integratedServer)
+        val serverOk = if (integratedServer != null) Katton.reloadScripts(integratedServer) else true
+
+        val message = if (clientOk && serverOk) {
+            Component.literal("[Katton] Reloaded script packs.")
+        } else {
+            Component.literal("[Katton] Reload failed. Check logs for details.")
         }
+
+        minecraft?.player?.sendSystemMessage(message)
+        minecraft?.gui?.setOverlayMessage(message, false)
+
+        refreshData()
+        updateButtons()
     }
 }

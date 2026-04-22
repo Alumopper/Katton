@@ -19,10 +19,10 @@ object ScriptCommand {
                         .executes {
                             val source = it.source
                             if (reloadScript(source.server)) {
-                                source.sendSuccess({ Component.literal("[Katton] Reloaded datapack scripts.") }, true)
+                                source.sendSuccess({ Component.literal("[Katton] Reloaded script packs.") }, true)
                                 1
                             } else {
-                                source.sendFailure(Component.literal("[Katton] Failed to reload datapack scripts."))
+                                source.sendFailure(Component.literal("[Katton] Failed to reload script packs."))
                                 0
                             }
                         }

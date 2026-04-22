@@ -1,4 +1,4 @@
-# Katton Technical Brief (For AI Quick Read)
+# Katton Technical Brief
 
 ## 1. Project Positioning
 
@@ -37,8 +37,13 @@ Compiler/runtime:
 - Owner-aware execution via `Event.withScriptOwner(...)` allows hot reload cleanup by owner.
 
 Load sources in current implementation:
-- Server base scripts: datapack scripts (`ScriptLoader`) + local script packs (`ScriptPackManager`, server env).
-- Client base scripts: resourcepack scripts (`ClientScriptLoader`) + local script packs + server-transferred cache packs.
+- Server base scripts: local script packs (`ScriptPackManager`).
+- Client base scripts: local script packs + server-transferred cache packs.
+
+Side execution model:
+- Script packs are side-agnostic.
+- A single pack can contain both `@ServerScriptEntrypoint` and `@ClientScriptEntrypoint` functions.
+- Which functions execute is decided by the runtime environment, not by manifest-side flags.
 
 ## 4. New Script Pack System (kattonpacks)
 
@@ -53,7 +58,6 @@ Each pack directory contains:
 Current parser fields (tolerant):
 - `id`, `name`, `version`, `description`, `authors[]`
 - `enabled` (default true)
-- `targets.server`, `targets.client` (default true)
 
 State persistence:
 - Per pack local state file: `.kattonpack.state.json` with `enabled` boolean.
@@ -101,7 +105,6 @@ Open keybind:
 ## 7. Existing Reload Semantics
 
 Server reload (`Katton.reloadScripts`):
-- Refresh datapack script snapshot.
 - Refresh global/world pack snapshot.
 - Clear/rebind script-managed state (events, injections, registries, datapack mutation).
 - Compile+execute server scripts.
@@ -109,7 +112,6 @@ Server reload (`Katton.reloadScripts`):
 - Sync runtime registry snapshots and script pack hashes to clients.
 
 Client reload (`Katton.reloadClientScripts`):
-- Refresh resourcepack script snapshot.
 - Refresh local packs.
 - Merge local + server-cache script sources and execute client environment scripts.
 
@@ -119,4 +121,3 @@ Client reload (`Katton.reloadClientScripts`):
 - Preserve owner-based cleanup on reload to avoid handler duplication.
 - If changing pack hash algorithm, migrate client cache invalidation explicitly.
 - Ensure Fabric and NeoForge handler registrations remain parity-tested.
-- Do not remove existing datapack/resourcepack script loading unless intentionally breaking compatibility.

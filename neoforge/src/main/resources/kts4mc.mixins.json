@@ -22,7 +22,6 @@
     "MinecraftServerMixin",
     "PlayerListMixin",
     "PlayerMixin",
-    "RegistryDataCollectorMixin",
     "ReloadableServerRegistriesMixin",
     "ResourceManagerRegistryLoadTaskMixin",
     "ServerConfigurationPacketListenerImplMixin",
