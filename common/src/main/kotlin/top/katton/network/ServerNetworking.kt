@@ -9,6 +9,7 @@ import net.minecraft.server.network.ServerConfigurationPacketListenerImpl
 import net.minecraft.world.effect.MobEffect
 import net.minecraft.world.level.block.Block
 import top.katton.Katton
+import top.katton.pack.ScriptPackManager
 import top.katton.registry.KattonRegistry
 
 fun interface ServerConfigurationNetworkingSender {
@@ -68,6 +69,26 @@ object ServerNetworking {
         sender(handler, packet)
     }
 
+    /**
+     * Sends script pack hash snapshot during configuration.
+     * This packet is always sent so the client can clear stale cached packs when empty.
+     */
+    fun sendScriptPackHashPacket(handler: ServerConfigurationPacketListenerImpl, sender: ServerConfigurationNetworkingSender) {
+        sender(handler, createScriptPackHashPacket())
+    }
+
+    fun sendScriptPackBundle(
+        handler: ServerConfigurationPacketListenerImpl,
+        requestedSyncIds: List<String>,
+        sender: ServerConfigurationNetworkingSender
+    ) {
+        val packet = createScriptPackBundlePacket(requestedSyncIds)
+        if (packet.packs.isEmpty()) {
+            return
+        }
+        sender(handler, packet)
+    }
+
     fun syncOnlinePlayers(server: MinecraftServer) {
         val sender = playSender ?: return
         val itemPacket = createItemSyncPacket()
@@ -97,6 +118,47 @@ object ServerNetworking {
      */
     private fun createBlockSyncPacket(): BlockSyncPacket {
         return BlockSyncPacket(collectKattonBlocks())
+    }
+
+    fun createScriptPackBundlePacket(requestedSyncIds: List<String>): ScriptPackBundlePacket {
+        if (requestedSyncIds.isEmpty()) {
+            return ScriptPackBundlePacket(emptyList())
+        }
+
+        val requestedSet = requestedSyncIds.toSet()
+        val packs = ScriptPackManager.collectServerSyncPacks()
+            .asSequence()
+            .filter { it.syncId in requestedSet }
+            .map { pack ->
+                ScriptPackBundlePacket.PackData(
+                    syncId = pack.syncId,
+                    scope = pack.scope.serializedName,
+                    hash = pack.hash,
+                    manifestJson = pack.manifestJson,
+                    files = pack.scripts.map { script ->
+                        ScriptPackBundlePacket.ScriptFileData(
+                            relativePath = script.relativePath,
+                            content = script.bytes
+                        )
+                    }
+                )
+            }
+            .toList()
+
+        return ScriptPackBundlePacket(packs)
+    }
+
+    private fun createScriptPackHashPacket(): ScriptPackHashListPacket {
+        val entries = ScriptPackManager.collectServerSyncPacks()
+            .map { pack ->
+                ScriptPackHashListPacket.HashEntry(
+                    syncId = pack.syncId,
+                    scope = pack.scope.serializedName,
+                    hash = pack.hash,
+                    name = pack.manifest.name
+                )
+            }
+        return ScriptPackHashListPacket(entries)
     }
     
     /**

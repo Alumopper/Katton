@@ -3,15 +3,13 @@ package top.katton;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.loader.api.FabricLoader;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
+import net.fabricmc.fabric.api.networking.v1.ServerConfigurationNetworking;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
-import net.fabricmc.fabric.api.resource.v1.ResourceLoader;
-import net.minecraft.resources.Identifier;
-import net.minecraft.server.packs.PackType;
 import top.katton.api.event.*;
 import top.katton.command.ScriptCommand;
-import top.katton.engine.ScriptLoader;
 import top.katton.network.Networking;
 import top.katton.network.ServerNetworking;
+import top.katton.pack.ScriptPackManager;
 
 import static top.katton.Katton.*;
 
@@ -26,9 +24,15 @@ public class KattonFabric implements ModInitializer {
         Networking.initialize();
         ServerNetworking.INSTANCE.setPlaySender(ServerPlayNetworking::send);
 
-        ResourceLoader.get(PackType.SERVER_DATA).registerReloadListener(
-                Identifier.fromNamespaceAndPath(MOD_ID, "scripts"),
-                ScriptLoader.INSTANCE
+        ServerConfigurationNetworking.registerGlobalReceiver(
+            top.katton.network.ScriptPackRequestPacket.TYPE,
+            (packet, context) -> context.server().execute(() ->
+                ServerNetworking.INSTANCE.sendScriptPackBundle(
+                    context.packetListener(),
+                    packet.getRequestedSyncIds(),
+                    ServerConfigurationNetworking::send
+                )
+            )
         );
 
         ServerLifecycleEvents.SERVER_STARTED.register(serverInstance -> {
@@ -41,6 +45,7 @@ public class KattonFabric implements ModInitializer {
         ServerLifecycleEvents.SERVER_STOPPED.register(_ -> {
             server = null;
             globalState = LoadState.SERVER_STOPPED;
+            ScriptPackManager.INSTANCE.clearWorldDirectory();
         });
 
         ServerLifecycleEvents.END_DATA_PACK_RELOAD.register((_, _, success) -> {

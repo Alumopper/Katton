@@ -5,6 +5,7 @@ import net.neoforged.bus.api.SubscribeEvent
 import net.neoforged.fml.common.EventBusSubscriber
 import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent
 import top.katton.Katton
+import top.katton.pack.ServerPackCacheManager
 
 /**
  * Client-side networking handler for Katton.
@@ -38,6 +39,22 @@ object ClientNetworkingNeoForge: ClientNetworking() {
             if(context.connection().isMemoryConnection) return@configurationToClient
             context.enqueueWork {
                 queueBlockSnapshot(packet.blocks)
+            }
+        }
+
+        registrar.configurationToClient(ScriptPackHashListPacket.TYPE, ScriptPackHashListPacket.STREAM_CODEC) { packet, context ->
+            if (context.connection().isMemoryConnection) return@configurationToClient
+            context.enqueueWork {
+                ServerPackCacheManager.handleHashList(packet) { request ->
+                    context.reply(request)
+                }
+            }
+        }
+
+        registrar.configurationToClient(ScriptPackBundlePacket.TYPE, ScriptPackBundlePacket.STREAM_CODEC) { packet, context ->
+            if (context.connection().isMemoryConnection) return@configurationToClient
+            context.enqueueWork {
+                ServerPackCacheManager.handleBundle(packet)
             }
         }
 

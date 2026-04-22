@@ -2,17 +2,15 @@ package top.katton;
 
 // 平台无关的公共初始化适配器，供各 loader 子模块调用
 import net.minecraft.server.MinecraftServer;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import net.minecraft.world.level.storage.LevelResource;
 import top.katton.api.KattonClientRenderApiKt;
 import top.katton.api.dpcaller.EntityEvent;
 import top.katton.datapack.ServerDatapackManager;
+import top.katton.pack.ScriptPackManager;
+import top.katton.pack.ServerPackCacheManager;
 import top.katton.registry.ScriptCommandRegistry;
-import top.katton.engine.ClientScriptLoader;
-import top.katton.engine.ExternalScriptLoader;
 import top.katton.engine.ScriptEngine;
 import top.katton.engine.ScriptEnvironment;
-import top.katton.engine.ScriptLoader;
 import top.katton.engine.InjectionManager;
 import top.katton.network.ServerNetworking;
 import top.katton.registry.KattonRegistry;
@@ -24,7 +22,6 @@ import java.util.Set;
 
 public class Katton {
     public static final String MOD_ID = "katton";
-    private static final Logger logger = LoggerFactory.getLogger(MOD_ID);
 
     /**
      * Current minecraft server instance. Maybe null during client-side execution.
@@ -37,32 +34,25 @@ public class Katton {
     public static void mainInitialize() {
         // Initialize KattonRegistry first to register custom DataComponentTypes
         KattonRegistry.INSTANCE.initialize();
-        Set<String> mergedScripts = new LinkedHashSet<>(ScriptLoader.getScripts().values());
-        mergedScripts.addAll(ExternalScriptLoader.collectServerScripts(gameDirectory));
-        ScriptEngine.compileAndExecuteAll(mergedScripts, ScriptEnvironment.SERVER);
+        ScriptPackManager.INSTANCE.setGameDirectory(gameDirectory);
+        ScriptPackManager.INSTANCE.refreshGlobalPacks();
     }
 
     public static void setGameDirectory(Path gameDir) {
         gameDirectory = gameDir;
+        ScriptPackManager.INSTANCE.setGameDirectory(gameDir);
     }
 
-    /**
-     * Reload client-side scripts from resource packs and the external scripts folder.
-     * This must be called on the client thread (e.g. from a resource reload callback).
-     *
-     * @return true if scripts were reloaded successfully.
-     */
+    /** Reload client-side scripts from local/server script packs. */
     public static boolean reloadClientScripts() {
-        if (!ClientScriptLoader.refreshFromLatestResourceManager()) {
-            logger.warn("Skipping client script reload because no client resource manager is available yet");
-            return false;
-        }
-
         Event.clearHandlers();
         InjectionManager.beginReload();
         KattonClientRenderApiKt.clearClientRenderers();
-        Set<String> mergedScripts = new LinkedHashSet<>(ClientScriptLoader.getScripts().values());
-        mergedScripts.addAll(ExternalScriptLoader.collectClientScripts(gameDirectory));
+        ScriptPackManager.INSTANCE.setGameDirectory(gameDirectory);
+        ScriptPackManager.INSTANCE.refreshGlobalPacks();
+        ScriptPackManager.INSTANCE.refreshWorldPacks();
+        Set<String> mergedScripts = new LinkedHashSet<>(ScriptPackManager.INSTANCE.collectScripts());
+        mergedScripts.addAll(ServerPackCacheManager.INSTANCE.collectClientScripts());
         ScriptEngine.compileAndExecuteAll(mergedScripts, ScriptEnvironment.CLIENT);
         return true;
     }
@@ -72,10 +62,9 @@ public class Katton {
             return false;
         }
 
-        if (!ScriptLoader.refreshFromLatestResourceManager()) {
-            logger.warn("Skipping /katton reload because no datapack resource manager is available yet");
-            return false;
-        }
+        ScriptPackManager.INSTANCE.setGameDirectory(gameDirectory);
+        ScriptPackManager.INSTANCE.setWorldDirectory(server.getWorldPath(LevelResource.ROOT));
+        ScriptPackManager.INSTANCE.refreshLocalPacks();
 
         ScriptCommandRegistry.INSTANCE.beginReload(server);
         KattonRegistry.ITEMS.INSTANCE.beginReload();
@@ -85,7 +74,8 @@ public class Katton {
         EntityEvent.INSTANCE.beginReload();
         Event.clearHandlers();
         InjectionManager.beginReload();
-        ScriptEngine.compileAndExecuteAll(ScriptLoader.getScripts().values(), ScriptEnvironment.SERVER);
+        Set<String> mergedScripts = new LinkedHashSet<>(ScriptPackManager.INSTANCE.collectScripts());
+        ScriptEngine.compileAndExecuteAll(mergedScripts, ScriptEnvironment.SERVER);
         ServerDatapackManager.INSTANCE.apply(server);
         EntityEvent.INSTANCE.rebindLoadedEntities(server);
         ServerNetworking.INSTANCE.syncOnlinePlayers(server);

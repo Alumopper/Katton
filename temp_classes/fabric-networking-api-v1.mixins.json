@@ -1,0 +1,37 @@
+{
+  "required": true,
+  "package": "net.fabricmc.fabric.mixin.networking",
+  "compatibilityLevel": "JAVA_21",
+  "mixins": [
+    "BundlePacketMixin",
+    "ConnectionMixin",
+    "CommandsMixin",
+    "ServerboundCustomPayloadPacketMixin",
+    "CustomPayloadPacketCodecMixin",
+    "ClientboundCustomPayloadPacketMixin",
+    "DebugConfigCommandMixin",
+    "PacketEncoderMixin",
+    "ServerEntityMixin",
+    "ClientboundCustomQueryPacketMixin",
+    "ServerboundCustomQueryAnswerPacketMixin",
+    "IdDispatchCodecMixin",
+    "PlayerListMixin",
+    "RegistryFriendlyByteBufMixin",
+    "ServerCommonPacketListenerImplMixin",
+    "ServerConfigurationPacketListenerImplMixin",
+    "ServerLoginPacketListenerImplMixin",
+    "ServerGamePacketListenerImplMixin",
+    "accessor.PacketDecoderAccessor",
+    "accessor.PacketEncoderAccessor",
+    "accessor.EntityTrackerAccessor",
+    "accessor.ChunkMapAccessor",
+    "accessor.ServerCommonPacketListenerImplAccessor",
+    "accessor.ServerLoginPacketListenerImplAccessor"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  },
+  "overwrites": {
+    "requireAnnotations": true
+  }
+}

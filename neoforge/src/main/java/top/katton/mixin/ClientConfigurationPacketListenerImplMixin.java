@@ -7,6 +7,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import top.katton.network.ClientNetworkingNeoForge;
+import top.katton.pack.ServerPackCacheManager;
 
 /**
  * Mixin to intercept Fabric's registry sync handler.
@@ -30,5 +31,7 @@ public class ClientConfigurationPacketListenerImplMixin {
     private static void katton$onHandleRegistryData(ClientboundRegistryDataPacket packet, CallbackInfo ci) {
         // Process any pending item registrations before Fabric's registry sync check
         ClientNetworkingNeoForge.INSTANCE.processPendingRegistrations();
+        // Ensure server-transferred script packs are executed before the check proceeds
+        ServerPackCacheManager.INSTANCE.executePendingScriptsBeforeRegistryCheck();
     }
 }

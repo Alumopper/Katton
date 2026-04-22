@@ -2,6 +2,7 @@ package top.katton.network
 
 import net.fabricmc.fabric.impl.networking.PayloadTypeRegistryImpl
 import net.fabricmc.fabric.impl.networking.PayloadTypeRegistryImpl.CLIENTBOUND_PLAY
+import net.fabricmc.fabric.impl.networking.PayloadTypeRegistryImpl.SERVERBOUND_CONFIGURATION
 
 /**
  * Common networking initialization.
@@ -35,6 +36,16 @@ object Networking {
         }
         if(CLIENTBOUND_PLAY.get(BlockSyncPacket.TYPE.id) == null){
             CLIENTBOUND_PLAY.register(BlockSyncPacket.TYPE, BlockSyncPacket.STREAM_CODEC)
+        }
+
+        if(PayloadTypeRegistryImpl.CLIENTBOUND_CONFIGURATION.get(ScriptPackHashListPacket.TYPE.id) == null){
+            PayloadTypeRegistryImpl.CLIENTBOUND_CONFIGURATION.register(ScriptPackHashListPacket.TYPE, ScriptPackHashListPacket.STREAM_CODEC)
+        }
+        if(PayloadTypeRegistryImpl.CLIENTBOUND_CONFIGURATION.get(ScriptPackBundlePacket.TYPE.id) == null){
+            PayloadTypeRegistryImpl.CLIENTBOUND_CONFIGURATION.register(ScriptPackBundlePacket.TYPE, ScriptPackBundlePacket.STREAM_CODEC)
+        }
+        if(SERVERBOUND_CONFIGURATION.get(ScriptPackRequestPacket.TYPE.id) == null){
+            SERVERBOUND_CONFIGURATION.register(ScriptPackRequestPacket.TYPE, ScriptPackRequestPacket.STREAM_CODEC)
         }
     }
 }

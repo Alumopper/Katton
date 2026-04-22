@@ -2,6 +2,7 @@ package top.katton.network
 
 import net.fabricmc.fabric.api.client.networking.v1.ClientConfigurationNetworking
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking
+import top.katton.pack.ServerPackCacheManager
 
 /**
  * Client-side networking handler for Katton.
@@ -32,6 +33,22 @@ object ClientNetworkingFabric: ClientNetworking() {
             if (context.client().isLocalServer) return@registerGlobalReceiver
             context.client().execute {
                 queueBlockSnapshot(packet.blocks)
+            }
+        }
+
+        ClientConfigurationNetworking.registerGlobalReceiver(ScriptPackHashListPacket.TYPE) { packet, context ->
+            if (context.client().isLocalServer) return@registerGlobalReceiver
+            context.client().execute {
+                ServerPackCacheManager.handleHashList(packet) { request ->
+                    ClientConfigurationNetworking.send(request)
+                }
+            }
+        }
+
+        ClientConfigurationNetworking.registerGlobalReceiver(ScriptPackBundlePacket.TYPE) { packet, context ->
+            if (context.client().isLocalServer) return@registerGlobalReceiver
+            context.client().execute {
+                ServerPackCacheManager.handleBundle(packet)
             }
         }
 

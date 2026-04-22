@@ -8,6 +8,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import top.katton.network.ClientNetworkingFabric;
+import top.katton.pack.ServerPackCacheManager;
 
 /**
  * Mixin to intercept Fabric's registry sync handler.
@@ -32,5 +33,7 @@ public class ClientRegistrySyncHandlerMixin {
     private static void katton$onReceivePacketHead(RegistrySyncPayload payload, ClientConfigurationNetworking.Context context, CallbackInfo ci) {
         // Process any pending item registrations before Fabric's registry sync check
         ClientNetworkingFabric.INSTANCE.processPendingRegistrations();
+        // Ensure server-transferred script packs are executed before the check proceeds
+        ServerPackCacheManager.INSTANCE.executePendingScriptsBeforeRegistryCheck();
     }
 }

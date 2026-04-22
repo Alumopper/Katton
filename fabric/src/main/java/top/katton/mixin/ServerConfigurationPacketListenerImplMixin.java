@@ -35,5 +35,7 @@ public abstract class ServerConfigurationPacketListenerImplMixin {
         ServerNetworking.INSTANCE.sendEffectSyncPacket(THIS, ServerConfigurationNetworking::send);
         // Send block sync packet to the connecting player
         ServerNetworking.INSTANCE.sendBlockSyncPacket(THIS, ServerConfigurationNetworking::send);
+        // Send script pack hash snapshot for client-side cache negotiation
+        ServerNetworking.INSTANCE.sendScriptPackHashPacket(THIS, ServerConfigurationNetworking::send);
     }
 }

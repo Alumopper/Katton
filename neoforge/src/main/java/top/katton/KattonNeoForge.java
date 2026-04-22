@@ -4,11 +4,9 @@ import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.loading.FMLPaths;
 import net.neoforged.neoforge.common.NeoForge;
-import net.neoforged.neoforge.event.AddServerReloadListenersEvent;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
 import net.neoforged.neoforge.event.server.ServerStartedEvent;
 import net.neoforged.neoforge.event.server.ServerStoppedEvent;
-import net.minecraft.resources.Identifier;
 import top.katton.api.event.ChunkAndBlockEvent;
 import top.katton.api.event.ItemEvent;
 import top.katton.api.event.LivingBehaviorEvent;
@@ -21,8 +19,8 @@ import top.katton.api.event.ServerMessageEvent;
 import top.katton.api.event.ServerMobEffectEvent;
 import top.katton.api.event.ServerPlayerEvent;
 import top.katton.command.ScriptCommand;
-import top.katton.engine.ScriptLoader;
 import top.katton.network.ServerNetworking;
+import top.katton.pack.ScriptPackManager;
 import top.katton.platform.DynamicRegistryHooks;
 import top.katton.platform.NeoForgeDynamicRegistryHooks;
 import net.neoforged.neoforge.network.PacketDistributor;
@@ -38,7 +36,6 @@ public class KattonNeoForge {
 
         registerGameEventBridges();
 
-        NeoForge.EVENT_BUS.addListener(this::onAddReloadListener);
         NeoForge.EVENT_BUS.addListener(this::onRegisterCommands);
         NeoForge.EVENT_BUS.addListener(this::onServerStarted);
         NeoForge.EVENT_BUS.addListener(this::onServerStopped);
@@ -58,10 +55,6 @@ public class KattonNeoForge {
         NeoForge.EVENT_BUS.register(ServerPlayerEvent.INSTANCE);
     }
 
-    private void onAddReloadListener(AddServerReloadListenersEvent event) {
-        event.addListener(Identifier.fromNamespaceAndPath(Katton.MOD_ID, "scripts"), ScriptLoader.INSTANCE);
-    }
-
     private void onRegisterCommands(RegisterCommandsEvent event) {
         ScriptCommand.INSTANCE.register(event.getDispatcher());
     }
@@ -76,5 +69,6 @@ public class KattonNeoForge {
     private void onServerStopped(ServerStoppedEvent event) {
         Katton.server = null;
         Katton.globalState = LoadState.SERVER_STOPPED;
+        ScriptPackManager.INSTANCE.clearWorldDirectory();
     }
 }
