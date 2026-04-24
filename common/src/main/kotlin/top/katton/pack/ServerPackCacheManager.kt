@@ -47,6 +47,7 @@ object ServerPackCacheManager {
                 ScriptPackView(
                     syncId = pack.syncId,
                     scope = ScriptPackScope.SERVER_CACHE,
+                    kind = pack.kind,
                     id = pack.manifest.id,
                     name = pack.manifest.name,
                     version = pack.manifest.version,
@@ -55,17 +56,13 @@ object ServerPackCacheManager {
                     hash = pack.hash,
                     enabled = true,
                     locked = true,
-                    sourcePath = pack.directory.absolutePathString()
+                    sourcePath = pack.location.absolutePathString()
                 )
             }
     }
 
-    fun collectScripts(): List<String> {
-        return activePacks
-            .asSequence()
-            .flatMap { pack -> pack.scripts.asSequence().map { it.absolutePath.absolutePathString() } }
-            .distinct()
-            .toList()
+    fun collectExecutablePacks(): List<ScriptPack> {
+        return activePacks.toList()
     }
 
     @Synchronized

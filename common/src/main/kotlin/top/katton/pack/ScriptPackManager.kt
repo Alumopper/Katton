@@ -1,5 +1,6 @@
 package top.katton.pack
 
+import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import top.katton.api.LOGGER
@@ -8,6 +9,7 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardOpenOption
 import java.security.MessageDigest
+import java.util.jar.JarFile
 import kotlin.io.path.absolutePathString
 
 object ScriptPackManager {
@@ -15,7 +17,6 @@ object ScriptPackManager {
     private const val PACKS_DIR_NAME = "kattonpacks"
     private const val MANIFEST_FILE_NAME = "manifest.json"
     private const val STATE_FILE_NAME = ".kattonpack.state.json"
-
     @Volatile
     private var gameDirectory: Path? = null
 
@@ -66,20 +67,15 @@ object ScriptPackManager {
         refreshWorldPacks()
     }
 
-    fun collectScripts(): List<String> {
+    fun collectExecutablePacks(): List<ScriptPack> {
         return (globalPacks + worldPacks)
             .asSequence()
             .filter { it.enabled }
-            .flatMap { pack -> pack.scripts.asSequence().map { it.absolutePath.absolutePathString() } }
-            .distinct()
             .toList()
     }
 
     fun collectServerSyncPacks(): List<ScriptPack> {
-        return (globalPacks + worldPacks)
-            .asSequence()
-            .filter { it.enabled }
-            .toList()
+        return collectExecutablePacks()
     }
 
     fun listLocalPacksForGui(lockGlobalInWorld: Boolean): List<ScriptPackView> {
@@ -90,6 +86,7 @@ object ScriptPackManager {
                 ScriptPackView(
                     syncId = pack.syncId,
                     scope = pack.scope,
+                    kind = pack.kind,
                     id = pack.manifest.id,
                     name = pack.manifest.name,
                     version = pack.manifest.version,
@@ -98,7 +95,7 @@ object ScriptPackManager {
                     hash = pack.hash,
                     enabled = pack.enabled,
                     locked = locked,
-                    sourcePath = pack.directory.absolutePathString()
+                    sourcePath = pack.location.absolutePathString()
                 )
             }
     }
@@ -114,12 +111,13 @@ object ScriptPackManager {
             return false
         }
 
-        val stateFile = pack.directory.resolve(STATE_FILE_NAME)
+        val stateFile = resolveStateFile(pack.location, pack.kind)
         val stateJson = JsonObject().apply {
             addProperty("enabled", enabled)
         }
 
         return runCatching {
+            stateFile.parent?.let(Files::createDirectories)
             Files.writeString(
                 stateFile,
                 stateJson.toString(),
@@ -151,11 +149,13 @@ object ScriptPackManager {
         return runCatching {
             val discovered = mutableListOf<ScriptPack>()
             Files.list(packsRoot).use { stream ->
-                stream
-                    .filter { Files.isDirectory(it) }
-                    .forEach { directory ->
-                        scanPackDirectory(directory, scope)?.let(discovered::add)
+                stream.forEach { path ->
+                    when {
+                        Files.isDirectory(path) -> scanPackDirectory(path, scope)?.let(discovered::add)
+                        Files.isRegularFile(path) && path.fileName.toString().endsWith(".jar", ignoreCase = true) ->
+                            scanPackJar(path, scope)?.let(discovered::add)
                     }
+                }
             }
             discovered.sortedWith(compareBy<ScriptPack> { it.manifest.name.lowercase() }.thenBy { it.manifest.id.lowercase() })
         }.getOrElse {
@@ -183,20 +183,80 @@ object ScriptPackManager {
 
         val manifest = ScriptPackManifest.parse(packDirectory, manifestJson)
         val scriptFiles = collectScriptFiles(packDirectory)
-        val enabled = forceEnabled ?: readEnabledState(packDirectory) ?: manifest.enabledByDefault
+        if (scriptFiles.isEmpty()) {
+            LOGGER.warn("Skipping script pack {} because it contains no .kt scripts", packDirectory)
+            return null
+        }
+        val hash = computeScriptHash(manifestJson, scriptFiles)
+        val enabled = forceEnabled ?: readEnabledState(packDirectory, ScriptPackKind.DIRECTORY) ?: manifest.enabledByDefault
         val syncId = syncIdOverride ?: makeSyncId(scope, manifest.id)
-        val hash = computeHash(manifestJson, scriptFiles)
+        val contentFiles = scriptFiles.map {
+            ScriptPackContentFile(
+                relativePath = it.relativePath,
+                absolutePath = it.absolutePath,
+                bytes = it.bytes
+            )
+        }
 
         return ScriptPack(
             syncId = syncId,
             scope = scope,
-            directory = packDirectory,
+            kind = ScriptPackKind.DIRECTORY,
+            location = packDirectory,
             manifestJson = manifestJson,
             manifest = manifest,
             enabled = enabled,
             hash = hash,
-            scripts = scriptFiles
+            scripts = scriptFiles,
+            contentFiles = contentFiles,
+            compiledJar = null
+        ).also {
+            LOGGER.info(
+                "Discovered source pack {} with {} script files at {}",
+                it.manifest.name,
+                it.scripts.size,
+                it.location
+            )
+        }
+    }
+
+    internal fun scanPackJar(
+        jarPath: Path,
+        scope: ScriptPackScope,
+        syncIdOverride: String? = null,
+        forceEnabled: Boolean? = null
+    ): ScriptPack? {
+        val jarBytes = runCatching { Files.readAllBytes(jarPath) }
+            .getOrElse {
+                LOGGER.warn("Failed to read script pack jar {}", jarPath, it)
+                return null
+            }
+
+        val manifestJson = readManifestJsonFromJar(jarPath) ?: createFallbackManifestJson(jarPath)
+        val manifest = ScriptPackManifest.parse(jarPath, manifestJson)
+        val enabled = forceEnabled ?: readEnabledState(jarPath, ScriptPackKind.JAR) ?: manifest.enabledByDefault
+        val syncId = syncIdOverride ?: makeSyncId(scope, manifest.id)
+        val contentFile = ScriptPackContentFile(
+            relativePath = jarPath.fileName.toString(),
+            absolutePath = jarPath,
+            bytes = jarBytes
         )
+
+        return ScriptPack(
+            syncId = syncId,
+            scope = scope,
+            kind = ScriptPackKind.JAR,
+            location = jarPath,
+            manifestJson = manifestJson,
+            manifest = manifest,
+            enabled = enabled,
+            hash = computeJarHash(manifestJson, contentFile),
+            scripts = emptyList(),
+            contentFiles = listOf(contentFile),
+            compiledJar = jarPath
+        ).also {
+            LOGGER.info("Discovered jar pack {} at {}", it.manifest.name, it.location)
+        }
     }
 
     internal fun collectScriptFiles(packDirectory: Path): List<ScriptPackScriptFile> {
@@ -225,7 +285,7 @@ object ScriptPackManager {
         }
     }
 
-    internal fun computeHash(manifestJson: String, scripts: List<ScriptPackScriptFile>): String {
+    internal fun computeScriptHash(manifestJson: String, scripts: List<ScriptPackScriptFile>): String {
         val digest = MessageDigest.getInstance("SHA-256")
         digest.update(manifestJson.toByteArray(StandardCharsets.UTF_8))
 
@@ -239,8 +299,17 @@ object ScriptPackManager {
         return digest.digest().joinToString("") { "%02x".format(it) }
     }
 
-    private fun readEnabledState(packDirectory: Path): Boolean? {
-        val stateFile = packDirectory.resolve(STATE_FILE_NAME)
+    internal fun computeJarHash(manifestJson: String, jarFile: ScriptPackContentFile): String {
+        val digest = MessageDigest.getInstance("SHA-256")
+        digest.update(manifestJson.toByteArray(StandardCharsets.UTF_8))
+        digest.update(jarFile.relativePath.toByteArray(StandardCharsets.UTF_8))
+        digest.update(0)
+        digest.update(jarFile.bytes)
+        return digest.digest().joinToString("") { "%02x".format(it) }
+    }
+
+    private fun readEnabledState(packPath: Path, kind: ScriptPackKind): Boolean? {
+        val stateFile = resolveStateFile(packPath, kind)
         if (!Files.isRegularFile(stateFile)) {
             return null
         }
@@ -254,6 +323,38 @@ object ScriptPackManager {
                 null
             }
         }.getOrNull()
+    }
+
+    private fun resolveStateFile(packPath: Path, kind: ScriptPackKind): Path {
+        return when (kind) {
+            ScriptPackKind.DIRECTORY -> packPath.resolve(STATE_FILE_NAME)
+            ScriptPackKind.JAR -> packPath.resolveSibling("${packPath.fileName}.state.json")
+        }
+    }
+
+    private fun readManifestJsonFromJar(jarPath: Path): String? {
+        return runCatching {
+            JarFile(jarPath.toFile()).use { jar ->
+                val entry = jar.getJarEntry(MANIFEST_FILE_NAME)
+                    ?: jar.getJarEntry("META-INF/katton/$MANIFEST_FILE_NAME")
+                    ?: return@use null
+                jar.getInputStream(entry).use { input ->
+                    input.readAllBytes().toString(StandardCharsets.UTF_8)
+                }
+            }
+        }.getOrNull()
+    }
+
+    private fun createFallbackManifestJson(jarPath: Path): String {
+        val id = jarPath.fileName.toString().removeSuffix(".jar")
+        return JsonObject().apply {
+            addProperty("id", id)
+            addProperty("name", id)
+            addProperty("version", "compiled")
+            addProperty("description", "Compiled Katton script pack")
+            add("authors", JsonArray())
+            addProperty("enabled", true)
+        }.toString()
     }
 
     private fun makeSyncId(scope: ScriptPackScope, id: String): String {

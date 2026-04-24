@@ -14,11 +14,12 @@ data class ScriptPackManifest(
     val enabledByDefault: Boolean
 ) {
     companion object {
-        fun parse(packDirectory: Path, manifestJson: String): ScriptPackManifest {
+        fun parse(packPath: Path, manifestJson: String): ScriptPackManifest {
             val root = runCatching { JsonParser.parseString(manifestJson).asJsonObject }
                 .getOrElse { JsonObject() }
 
-            val fallbackId = packDirectory.fileName.toString()
+            val fileName = packPath.fileName.toString()
+            val fallbackId = if (fileName.endsWith(".jar")) fileName.removeSuffix(".jar") else fileName
             val id = root.stringOrNull("id")?.takeIf { it.isNotBlank() } ?: fallbackId
             val name = root.stringOrNull("name")?.takeIf { it.isNotBlank() } ?: id
             val version = root.stringOrNull("version") ?: "unknown"

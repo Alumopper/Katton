@@ -6,6 +6,7 @@ import net.minecraft.world.level.storage.LevelResource;
 import top.katton.api.KattonClientRenderApiKt;
 import top.katton.api.dpcaller.EntityEvent;
 import top.katton.datapack.ServerDatapackManager;
+import top.katton.pack.ScriptPack;
 import top.katton.pack.ScriptPackManager;
 import top.katton.pack.ServerPackCacheManager;
 import top.katton.registry.ScriptCommandRegistry;
@@ -17,8 +18,8 @@ import top.katton.util.Event;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.LinkedHashSet;
-import java.util.Set;
+import java.util.ArrayList;
+import java.util.List;
 
 public class Katton {
     public static final String MOD_ID = "katton";
@@ -35,6 +36,7 @@ public class Katton {
         // Initialize KattonRegistry first to register custom DataComponentTypes
         KattonRegistry.INSTANCE.initialize();
         ScriptPackManager.INSTANCE.setGameDirectory(gameDirectory);
+        ScriptEngine.setCacheDirectory(gameDirectory == null ? null : gameDirectory.resolve(".katton").resolve("compiled-script-cache"));
         ScriptPackManager.INSTANCE.refreshGlobalPacks();
         ensureDirectory(ScriptPackManager.INSTANCE.getGlobalScriptDirectory());
     }
@@ -42,6 +44,7 @@ public class Katton {
     public static void setGameDirectory(Path gameDir) {
         gameDirectory = gameDir;
         ScriptPackManager.INSTANCE.setGameDirectory(gameDir);
+        ScriptEngine.setCacheDirectory(gameDir == null ? null : gameDir.resolve(".katton").resolve("compiled-script-cache"));
     }
 
     /**
@@ -60,9 +63,9 @@ public class Katton {
         }
         ScriptPackManager.INSTANCE.refreshGlobalPacks();
         ScriptPackManager.INSTANCE.refreshWorldPacks();
-        Set<String> mergedScripts = new LinkedHashSet<>(ScriptPackManager.INSTANCE.collectScripts());
-        mergedScripts.addAll(ServerPackCacheManager.INSTANCE.collectScripts());
-        ScriptEngine.compileAndExecuteAll(mergedScripts, ScriptEnvironment.CLIENT);
+        List<ScriptPack> mergedPacks = new ArrayList<>(ScriptPackManager.INSTANCE.collectExecutablePacks());
+        mergedPacks.addAll(ServerPackCacheManager.INSTANCE.collectExecutablePacks());
+        ScriptEngine.compileAndExecuteAll(mergedPacks, ScriptEnvironment.CLIENT);
         return true;
     }
 
@@ -84,8 +87,7 @@ public class Katton {
         EntityEvent.INSTANCE.beginReload();
         Event.clearHandlers();
         InjectionManager.beginReload();
-        Set<String> mergedScripts = new LinkedHashSet<>(ScriptPackManager.INSTANCE.collectScripts());
-        ScriptEngine.compileAndExecuteAll(mergedScripts, ScriptEnvironment.SERVER);
+        ScriptEngine.compileAndExecuteAll(ScriptPackManager.INSTANCE.collectExecutablePacks(), ScriptEnvironment.SERVER);
         ServerDatapackManager.INSTANCE.apply(server);
         EntityEvent.INSTANCE.rebindLoadedEntities(server);
         return true;

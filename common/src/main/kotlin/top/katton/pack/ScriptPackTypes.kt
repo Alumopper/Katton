@@ -2,7 +2,18 @@ package top.katton.pack
 
 import java.nio.file.Path
 
+enum class ScriptPackKind {
+    DIRECTORY,
+    JAR
+}
+
 data class ScriptPackScriptFile(
+    val relativePath: String,
+    val absolutePath: Path,
+    val bytes: ByteArray
+)
+
+data class ScriptPackContentFile(
     val relativePath: String,
     val absolutePath: Path,
     val bytes: ByteArray
@@ -11,17 +22,21 @@ data class ScriptPackScriptFile(
 data class ScriptPack(
     val syncId: String,
     val scope: ScriptPackScope,
-    val directory: Path,
+    val kind: ScriptPackKind,
+    val location: Path,
     val manifestJson: String,
     val manifest: ScriptPackManifest,
     val enabled: Boolean,
     val hash: String,
-    val scripts: List<ScriptPackScriptFile>
+    val scripts: List<ScriptPackScriptFile>,
+    val contentFiles: List<ScriptPackContentFile>,
+    val compiledJar: Path?
 )
 
 data class ScriptPackView(
     val syncId: String,
     val scope: ScriptPackScope,
+    val kind: ScriptPackKind,
     val id: String,
     val name: String,
     val version: String,

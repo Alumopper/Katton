@@ -64,10 +64,10 @@ object ServerNetworking {
                     scope = pack.scope.serializedName,
                     hash = pack.hash,
                     manifestJson = pack.manifestJson,
-                    files = pack.scripts.map { script ->
+                    files = pack.contentFiles.map { file ->
                         ScriptPackBundlePacket.ScriptFileData(
-                            relativePath = script.relativePath,
-                            content = script.bytes
+                            relativePath = file.relativePath,
+                            content = file.bytes
                         )
                     }
                 )

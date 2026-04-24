@@ -2,14 +2,23 @@ package top.katton.engine
 
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.kotlin.scripting.compiler.plugin.impl.KJvmCompiledModuleInMemoryImpl
-import org.objectweb.asm.ClassReader
 import top.katton.api.ClientScriptEntrypoint
 import top.katton.api.LOGGER
 import top.katton.api.ServerScriptEntrypoint
+import top.katton.pack.ScriptPack
+import top.katton.pack.ScriptPackKind
 import top.katton.util.Event
 import java.io.File
 import java.lang.reflect.Method
 import java.lang.reflect.Modifier
+import java.nio.charset.StandardCharsets
+import java.nio.file.Files
+import java.nio.file.Path
+import java.security.MessageDigest
+import java.util.Optional
+import java.util.concurrent.ConcurrentHashMap
+import java.util.jar.JarFile
+import kotlin.jvm.optionals.getOrNull
 import kotlin.script.experimental.api.CompiledScript
 import kotlin.script.experimental.api.EvaluationResult
 import kotlin.script.experimental.api.ResultValue
@@ -19,22 +28,45 @@ import kotlin.script.experimental.api.ScriptDiagnostic
 import kotlin.script.experimental.api.ScriptEvaluationConfiguration
 import kotlin.script.experimental.api.defaultImports
 import kotlin.script.experimental.api.enableScriptsInstancesSharing
+import kotlin.script.experimental.api.hostConfiguration
 import kotlin.script.experimental.api.importScripts
+import kotlin.script.experimental.host.ScriptingHostConfiguration
 import kotlin.script.experimental.host.toScriptSource
+import kotlin.script.experimental.jvm.compilationCache
 import kotlin.script.experimental.jvm.dependenciesFromCurrentContext
 import kotlin.script.experimental.jvm.impl.KJvmCompiledScript
 import kotlin.script.experimental.jvm.jvm
+import kotlin.script.experimental.jvm.updateClasspath
+import kotlin.script.experimental.jvmhost.CompiledScriptJarsCache
 import kotlin.script.experimental.jvmhost.JvmScriptCompiler
+import kotlin.script.experimental.jvmhost.loadScriptFromJar
 
 /**
- * ScriptEngine compiles and executes Kotlin script sources.
+ * ScriptEngine compiles source packs together and executes jar packs separately.
  */
 object ScriptEngine {
 
+    private data class CompiledScriptArtifact(
+        val compiledScript: CompiledScript,
+        val cacheJar: Path?
+    )
+
+    private data class SourceCompilationPlan(
+        val sourcePacks: List<ScriptPack>,
+        val binaryPacks: List<ScriptPack>,
+        val scriptPaths: List<String>,
+        val classpathJars: List<Path>,
+        val cacheKey: String
+    )
+
     private val compiler = JvmScriptCompiler()
 
-    // Base compilation configuration for all scripts.
-    // Includes classpath dependencies and default imports commonly used by scripts.
+    @Volatile
+    private var cacheDirectory: Path? = null
+
+    private val sourceCompileCache = ConcurrentHashMap<String, CompiledScriptArtifact>()
+    private val jarLoadCache = ConcurrentHashMap<String, Optional<CompiledScriptArtifact>>()
+
     private val baseConfig = ScriptCompilationConfiguration {
         jvm {
             dependenciesFromCurrentContext(wholeClasspath = true)
@@ -45,88 +77,203 @@ object ScriptEngine {
         )
     }
 
-    // Evaluation configuration: enable sharing of script instances if needed.
     private val evaluationConfig = ScriptEvaluationConfiguration {
         enableScriptsInstancesSharing()
     }
 
     @JvmStatic
-    fun compileAndExecuteAll(scriptPath: Collection<String>, environment: ScriptEnvironment) {
-        val dummyScript = "".toScriptSource()
-        LOGGER.info("Compiling and executing ${scriptPath.size} ${environment.name.lowercase()} scripts")
-        runBlocking {
-            val compileResult = compiler(dummyScript, ScriptCompilationConfiguration(baseConfig) {
-                importScripts(scriptPath.map { File(it).toScriptSource() })
-            })
-            logCompileResult(compileResult)
+    fun setCacheDirectory(path: Path?) {
+        cacheDirectory = path?.toAbsolutePath()?.normalize()
+    }
 
-            when (compileResult) {
-                is ResultWithDiagnostics.Success -> {
-                    val executionResult = execute(compileResult.value, environment)
-                    logExecutionResult(executionResult)
-                }
+    @JvmStatic
+    fun compileAndExecuteAll(packs: Collection<ScriptPack>, environment: ScriptEnvironment) {
+        val enabledPacks = packs.filter { it.enabled }
+        val sourcePackCount = enabledPacks.count { it.scripts.isNotEmpty() }
+        val jarPackCount = enabledPacks.count { it.kind == ScriptPackKind.JAR }
+        LOGGER.info(
+            "Preparing {} {} script packs (source={}, jar={})",
+            enabledPacks.size,
+            environment.name.lowercase(),
+            sourcePackCount,
+            jarPackCount
+        )
 
-                is ResultWithDiagnostics.Failure -> {
-                    return@runBlocking
+        val sourcePlan = buildSourceCompilationPlan(enabledPacks)
+        if (sourcePlan != null) {
+            LOGGER.info(
+                "Compiling {} source packs together with {} jar dependencies for {}",
+                sourcePlan.sourcePacks.size,
+                sourcePlan.binaryPacks.size,
+                environment.name.lowercase()
+            )
+            val artifact = loadCompiledSourceArtifact(sourcePlan)
+            if (artifact != null) {
+                runBlocking {
+                    val executionResult = executeCombined(
+                        artifact = artifact,
+                        environment = environment,
+                        label = "source packs (${sourcePlan.sourcePacks.size})"
+                    )
+                    logExecutionResult("source packs", executionResult)
                 }
             }
         }
+
+        enabledPacks
+            .asSequence()
+            .filter { it.kind == ScriptPackKind.JAR }
+            .forEach { pack ->
+                val artifact = loadJarPack(pack) ?: return@forEach
+                runBlocking {
+                    val executionResult = executeCombined(
+                        artifact = artifact,
+                        environment = environment,
+                        label = "jar pack ${pack.manifest.name}"
+                    )
+                    logExecutionResult(pack.manifest.name, executionResult)
+                }
+            }
     }
 
-    private fun logCompileResult(compileResult: ResultWithDiagnostics<CompiledScript>) {
+    private fun buildSourceCompilationPlan(packs: Collection<ScriptPack>): SourceCompilationPlan? {
+        val sourcePacks = packs
+            .filter { it.scripts.isNotEmpty() }
+            .sortedBy { it.syncId }
+        if (sourcePacks.isEmpty()) {
+            return null
+        }
+
+        val binaryPacks = packs
+            .filter { it.kind == ScriptPackKind.JAR && it.compiledJar != null }
+            .sortedBy { it.syncId }
+        val scriptPaths = sourcePacks
+            .flatMap { pack -> pack.scripts.sortedBy { it.relativePath }.map { it.absolutePath.toAbsolutePath().normalize().toString() } }
+        val classpathJars = binaryPacks.mapNotNull { it.compiledJar?.toAbsolutePath()?.normalize() }
+        val cacheKey = buildSourceCacheKey(sourcePacks, binaryPacks)
+
+        return SourceCompilationPlan(
+            sourcePacks = sourcePacks,
+            binaryPacks = binaryPacks,
+            scriptPaths = scriptPaths,
+            classpathJars = classpathJars,
+            cacheKey = cacheKey
+        )
+    }
+
+    private fun loadCompiledSourceArtifact(plan: SourceCompilationPlan): CompiledScriptArtifact? {
+        sourceCompileCache[plan.cacheKey]?.let {
+            LOGGER.info("Reusing in-memory combined source compilation cache {}", plan.cacheKey)
+            return it
+        }
+
+        val cacheJar = resolveSourceCacheJar(plan.cacheKey)
+        if (cacheJar != null && Files.isRegularFile(cacheJar)) {
+            LOGGER.info("Combined source cache jar available at {}", cacheJar)
+        }
+        val dummyScript = "".toScriptSource()
+        val compilationConfig = createCompilationConfiguration(
+            orderedScriptPaths = plan.scriptPaths,
+            classpathJars = plan.classpathJars,
+            cacheJar = cacheJar
+        )
+        val compileResult = runBlocking {
+            compiler(dummyScript, compilationConfig)
+        }
+        logCompileResult(plan.sourcePacks, compileResult)
+
+        val artifact = when (compileResult) {
+            is ResultWithDiagnostics.Success -> CompiledScriptArtifact(compileResult.value, cacheJar)
+            is ResultWithDiagnostics.Failure -> null
+        }
+        if (artifact != null) {
+            LOGGER.info(
+                "Stored combined source compilation result for {} packs with cache key {}",
+                plan.sourcePacks.size,
+                plan.cacheKey
+            )
+            sourceCompileCache[plan.cacheKey] = artifact
+        }
+        return artifact
+    }
+
+    private fun loadJarPack(pack: ScriptPack): CompiledScriptArtifact? {
+        val cacheKey = "${pack.syncId}:${pack.hash}"
+        if (jarLoadCache.containsKey(cacheKey)) {
+            LOGGER.info("Reusing jar load cache for {}", pack.manifest.name)
+            return jarLoadCache[cacheKey]?.getOrNull()
+        }
+
+        val jarPath = pack.compiledJar
+        if (jarPath == null || !Files.isRegularFile(jarPath)) {
+            LOGGER.warn("Skipping jar pack {} because compiled jar is missing", pack.manifest.name)
+            jarLoadCache[cacheKey] = Optional.empty()
+            return null
+        }
+
+        LOGGER.info("Loading jar pack {} from {}", pack.manifest.name, jarPath)
+        val compiledScript = runCatching { jarPath.toFile().loadScriptFromJar() }
+            .getOrElse {
+                LOGGER.warn("Failed to load compiled script jar {}", jarPath, it)
+                null
+            }
+
+        val artifact = compiledScript?.let { CompiledScriptArtifact(it, jarPath) }
+        if (artifact == null) {
+            LOGGER.info("Jar pack {} has no loadable script metadata, using it as classpath only", pack.manifest.name)
+        } else {
+            LOGGER.info("Loaded executable compiled script jar for pack {}", pack.manifest.name)
+        }
+        jarLoadCache[cacheKey] = Optional.ofNullable(artifact)
+        return artifact
+    }
+
+    private fun logCompileResult(sourcePacks: List<ScriptPack>, compileResult: ResultWithDiagnostics<CompiledScript>) {
+        val label = sourcePacks.joinToString(", ") { it.manifest.name }
         val compileReports = compileResult.reports.filter { it.severity >= ScriptDiagnostic.Severity.INFO }
         if (compileReports.isNotEmpty()) {
-            LOGGER.info(compileReports.joinToString("\n"))
+            LOGGER.info("[{}] {}", label, compileReports.joinToString("\n"))
         }
 
         when (compileResult) {
-            is ResultWithDiagnostics.Success -> {
-                LOGGER.info("Compile succeeded, start executing scripts")
-            }
-
-            is ResultWithDiagnostics.Failure -> {
-                LOGGER.error("Compile failed.")
-            }
+            is ResultWithDiagnostics.Success -> LOGGER.info("Compile succeeded for source packs: {}", label)
+            is ResultWithDiagnostics.Failure -> LOGGER.error("Compile failed for source packs: {}", label)
         }
     }
 
-    private fun logExecutionResult(executionResult: ResultWithDiagnostics<EvaluationResult>) {
+    private fun logExecutionResult(label: String, executionResult: ResultWithDiagnostics<EvaluationResult>) {
         when (executionResult) {
             is ResultWithDiagnostics.Success -> {
-                val summary = (executionResult.value.returnValue as? ResultValue.Value)
-                    ?.value as? Map<*, *>
-
+                val summary = (executionResult.value.returnValue as? ResultValue.Value)?.value as? Map<*, *>
                 if (summary != null) {
-                    val successCount = summary["successCount"]
-                    val failureCount = summary["failureCount"]
-                    val totalAttempted = summary["totalAttempted"]
-                    val errorMessages = summary["errorMessages"] as? List<*>
-
                     LOGGER.info(
-                        "Execution finished: total=$totalAttempted, success=$successCount, failure=$failureCount"
+                        "[{}] Execution finished: total={}, success={}, failure={}",
+                        label,
+                        summary["totalAttempted"],
+                        summary["successCount"],
+                        summary["failureCount"]
                     )
-
+                    val errorMessages = summary["errorMessages"] as? List<*>
                     if (!errorMessages.isNullOrEmpty()) {
-                        LOGGER.warn("Execution errors:\n${errorMessages.joinToString("\n")}")
+                        LOGGER.warn("[{}] Execution errors:\n{}", label, errorMessages.joinToString("\n"))
                     }
                 } else {
-                    LOGGER.info("Execution finished, but no execution summary was returned")
+                    LOGGER.info("[{}] Execution finished without summary", label)
                 }
             }
 
             is ResultWithDiagnostics.Failure -> {
-                LOGGER.error("Execution failed: ${executionResult.reports.joinToString("\n")}")
+                LOGGER.error("[{}] Execution failed: {}", label, executionResult.reports.joinToString("\n"))
             }
         }
     }
 
-    private suspend fun execute(
-        script: CompiledScript,
-        environment: ScriptEnvironment
+    private suspend fun executeCombined(
+        artifact: CompiledScriptArtifact,
+        environment: ScriptEnvironment,
+        label: String
     ): ResultWithDiagnostics<EvaluationResult> {
-        val module = (script as KJvmCompiledScript).getCompiledModule() as KJvmCompiledModuleInMemoryImpl
-        val outputFiles = module.compilerOutputFiles
-
+        val script = artifact.compiledScript
         val rootClass = when (val res = script.getClass(evaluationConfig)) {
             is ResultWithDiagnostics.Success -> res.value
             is ResultWithDiagnostics.Failure -> return res
@@ -134,15 +281,18 @@ object ScriptEngine {
 
         val loader = rootClass.java.classLoader
         val rootName = rootClass.qualifiedName
+        val topLevelClasses = collectTopLevelClassNames(script, artifact.cacheJar)
+        LOGGER.info(
+            "Discovered {} top-level compiled classes for {} in {} environment",
+            topLevelClasses.size,
+            label,
+            environment.name.lowercase()
+        )
         var successCount = 0
         var failureCount = 0
         val errorMessages = mutableListOf<String>()
 
-        for ((path, bytes) in outputFiles) {
-            if (!path.endsWith(".class") || path.contains("$")) continue
-
-            val internalName = ClassReader(bytes).className
-            val fqcn = internalName.replace('/', '.')
+        for (fqcn in topLevelClasses) {
             if (fqcn == rootName) continue
 
             runCatching {
@@ -150,6 +300,14 @@ object ScriptEngine {
                 val entrypoints = clazz.declaredMethods.filter { method ->
                     Modifier.isStatic(method.modifiers) &&
                         method.annotationClassNames().contains(environment.annotationClassName)
+                }
+                if (entrypoints.isNotEmpty()) {
+                    LOGGER.info(
+                        "Executing {} entrypoints from {} for {}",
+                        entrypoints.size,
+                        fqcn,
+                        label
+                    )
                 }
 
                 for (method in entrypoints) {
@@ -168,7 +326,7 @@ object ScriptEngine {
             }.onFailure {
                 failureCount++
                 errorMessages += "$fqcn: ${it.message ?: "Unknown error"}"
-                LOGGER.warn("Failed to execute ${environment.name.lowercase()} script entrypoints from class: $fqcn", it)
+                LOGGER.warn("Failed to execute {} entrypoints from class: {}", label, fqcn, it)
             }
         }
 
@@ -191,6 +349,95 @@ object ScriptEngine {
                 configuration = evaluationConfig
             )
         )
+    }
+
+    private fun createCompilationConfiguration(
+        orderedScriptPaths: List<String>,
+        classpathJars: List<Path>,
+        cacheJar: Path?
+    ): ScriptCompilationConfiguration {
+        // Source packs are compiled as one unit so Kotlin symbols can be referenced across pack boundaries.
+        val jarCache = cacheJar?.let { resolvedJar ->
+            resolvedJar.parent?.let(Files::createDirectories)
+            CompiledScriptJarsCache { _, _ -> resolvedJar.toFile() }
+        }
+        val baseHostConfiguration = baseConfig[ScriptCompilationConfiguration.hostConfiguration]
+
+        return ScriptCompilationConfiguration(baseConfig) {
+            importScripts(orderedScriptPaths.map { File(it).toScriptSource() })
+            if (classpathJars.isNotEmpty()) {
+                jvm {
+                    updateClasspath(classpathJars.map(Path::toFile))
+                }
+            }
+            if (jarCache != null) {
+                hostConfiguration(
+                    ScriptingHostConfiguration(baseHostConfiguration ?: ScriptingHostConfiguration()) {
+                        jvm {
+                            compilationCache(jarCache)
+                        }
+                    }
+                )
+            }
+        }
+    }
+
+    private fun resolveSourceCacheJar(cacheKey: String): Path? {
+        val root = cacheDirectory ?: return null
+        return runCatching {
+            Files.createDirectories(root)
+            root.resolve("source-$cacheKey.jar")
+        }.getOrElse {
+            LOGGER.warn("Failed to initialize script compile cache directory {}", root, it)
+            null
+        }
+    }
+
+    private fun buildSourceCacheKey(sourcePacks: List<ScriptPack>, binaryPacks: List<ScriptPack>): String {
+        // Both source pack content and binary jar hashes affect the combined compilation result.
+        val digest = MessageDigest.getInstance("SHA-256")
+        digest.update("katton-source-pack-cache-v1".toByteArray(StandardCharsets.UTF_8))
+        sourcePacks.forEach { pack ->
+            digest.update(pack.syncId.toByteArray(StandardCharsets.UTF_8))
+            digest.update(0)
+            digest.update(pack.hash.toByteArray(StandardCharsets.UTF_8))
+            digest.update(0)
+        }
+        binaryPacks.forEach { pack ->
+            digest.update(pack.syncId.toByteArray(StandardCharsets.UTF_8))
+            digest.update(0)
+            digest.update(pack.hash.toByteArray(StandardCharsets.UTF_8))
+            digest.update(0)
+        }
+        return digest.digest().joinToString("") { "%02x".format(it) }
+    }
+
+    private fun collectTopLevelClassNames(script: CompiledScript, cacheJar: Path?): List<String> {
+        val module = (script as? KJvmCompiledScript)?.getCompiledModule()
+        if (module is KJvmCompiledModuleInMemoryImpl) {
+            return module.compilerOutputFiles.keys
+                .asSequence()
+                .filter { it.endsWith(".class") && !it.contains("$") }
+                .map { it.removeSuffix(".class").replace('/', '.') }
+                .toList()
+        }
+
+        if (cacheJar != null && Files.isRegularFile(cacheJar)) {
+            return runCatching {
+                JarFile(cacheJar.toFile()).use { jar ->
+                    jar.entries().asSequence()
+                        .map { it.name }
+                        .filter { it.endsWith(".class") && !it.contains("$") }
+                        .map { it.removeSuffix(".class").replace('/', '.') }
+                        .toList()
+                }
+            }.getOrElse {
+                LOGGER.warn("Failed to read compiled script jar {}", cacheJar, it)
+                emptyList()
+            }
+        }
+
+        return emptyList()
     }
 
     private fun Method.annotationClassNames(): Set<String> {
