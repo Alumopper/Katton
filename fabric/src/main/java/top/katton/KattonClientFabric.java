@@ -40,6 +40,7 @@ public class KattonClientFabric implements ClientModInitializer {
 		ClientPlayConnectionEvents.JOIN.register((_, _, _) -> Katton.reloadClientScripts());
 
 		ClientPlayConnectionEvents.DISCONNECT.register((_, _) -> {
+			Katton.clearWorldAndServerEvents();
 			ServerPackCacheManager.INSTANCE.reset();
 		});
 

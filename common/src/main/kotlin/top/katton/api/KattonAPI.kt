@@ -5,7 +5,7 @@ package top.katton.api
 import com.mojang.logging.LogUtils
 import net.minecraft.server.MinecraftServer
 import top.katton.Katton
-import top.katton.util.Event
+import top.katton.util.ScriptExecutionContext
 import java.util.concurrent.ConcurrentHashMap
 
 internal val LOGGER = LogUtils.getLogger()
@@ -15,7 +15,7 @@ private val onceRegistry = ConcurrentHashMap<String, MutableSet<String>>()
 
 private fun onceNamespace(namespace: String?): String {
     if (namespace != null) return namespace
-    return Event.currentScriptOwner() ?: "global"
+    return ScriptExecutionContext.currentScriptOwner() ?: "global"
 }
 
 

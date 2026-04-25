@@ -45,6 +45,7 @@ public class KattonFabric implements ModInitializer {
         ServerLifecycleEvents.SERVER_STOPPED.register(_ -> {
             server = null;
             globalState = LoadState.SERVER_STOPPED;
+            clearWorldAndServerEvents();
             ScriptPackManager.INSTANCE.clearWorldDirectory();
         });
 

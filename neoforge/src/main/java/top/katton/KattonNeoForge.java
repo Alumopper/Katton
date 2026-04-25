@@ -69,6 +69,7 @@ public class KattonNeoForge {
     private void onServerStopped(ServerStoppedEvent event) {
         Katton.server = null;
         Katton.globalState = LoadState.SERVER_STOPPED;
+        Katton.clearWorldAndServerEvents();
         ScriptPackManager.INSTANCE.clearWorldDirectory();
     }
 }

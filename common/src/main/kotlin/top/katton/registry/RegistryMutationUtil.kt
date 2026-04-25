@@ -6,30 +6,70 @@ import net.minecraft.core.Holder
 import net.minecraft.core.MappedRegistry
 import net.minecraft.resources.ResourceKey
 import top.katton.util.ReflectUtil
+import java.util.IdentityHashMap
 
 object RegistryMutationUtil {
 
-    private fun isRegistryFrozen(registry: MappedRegistry<*>): Boolean {
+    fun isRegistryFrozen(registry: MappedRegistry<*>): Boolean {
         return ReflectUtil.getT<Boolean>(registry, "frozen").getOrNull() ?: true
     }
 
-    private fun setRegistryFrozen(registry: MappedRegistry<*>, frozen: Boolean) {
+    fun setRegistryFrozen(registry: MappedRegistry<*>, frozen: Boolean) {
         ReflectUtil.set(registry, "frozen", frozen)
+    }
+
+    /**
+     * Executes [action] with the given [registry] temporarily unfrozen.
+     * The registry is refrozen (if it was frozen) in the `finally` block.
+     */
+    inline fun <T : Any, R> withUnfrozenRegistry(
+        registry: MappedRegistry<T>,
+        action: () -> R
+    ): R {
+        val savedFrozen = isRegistryFrozen(registry)
+        return try {
+            setRegistryFrozen(registry, false)
+            action()
+        } finally {
+            if (savedFrozen) setRegistryFrozen(registry, true)
+        }
+    }
+
+    /**
+     * Like [withUnfrozenRegistry] but also injects a temporary
+     * `unregisteredIntrusiveHolders` map when it is null.
+     * Used for items and blocks which need an identity-map holder.
+     */
+    @Suppress("UNCHECKED_CAST")
+    inline fun <T : Any, R> withUnfrozenAndHolders(
+        registry: MappedRegistry<T>,
+        action: () -> R
+    ): R {
+        val previousUnregistered = registry.unregisteredIntrusiveHolders
+        val injectedUnregistered = previousUnregistered == null
+        if (injectedUnregistered) {
+            registry.unregisteredIntrusiveHolders = IdentityHashMap()
+        }
+
+        val savedFrozen = isRegistryFrozen(registry)
+        return try {
+            setRegistryFrozen(registry, false)
+            action()
+        } finally {
+            if (savedFrozen) setRegistryFrozen(registry, true)
+            if (injectedUnregistered) {
+                registry.unregisteredIntrusiveHolders = previousUnregistered
+            }
+        }
     }
 
     fun <T : Any> unregister(registry: MappedRegistry<T>, key: ResourceKey<T>): T? {
         val holder = registry.get(key).orElse(null) ?: return null
         val value = holder.value()
-        val savedFrozen = isRegistryFrozen(registry)
 
-        return try {
-            setRegistryFrozen(registry, false)
+        return withUnfrozenRegistry(registry) {
             removeEntry(registry, key, holder, value)
             value
-        } finally {
-            if (savedFrozen) {
-                setRegistryFrozen(registry, true)
-            }
         }
     }
 

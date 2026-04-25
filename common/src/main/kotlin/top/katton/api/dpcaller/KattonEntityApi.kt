@@ -31,7 +31,8 @@ import net.minecraft.world.phys.Vec2
 import net.minecraft.world.phys.Vec3
 import top.katton.api.LOGGER
 import top.katton.api.requireServer
-import top.katton.util.ContextEvent
+import top.katton.util.EventHandler
+import top.katton.util.ScriptExecutionContext
 import java.util.*
 import kotlin.jvm.optionals.getOrNull
 
@@ -58,40 +59,12 @@ var Entity.nbt: CompoundTag
  * Event handlers for entity lifecycle events.
  */
 object EntityEvent {
-    val onTickHandlers = mutableMapOf<Entity, ContextEvent.HandlerEntry<Entity.(Level) -> Unit>>()
-    
-    /**
-     * Context event for entity tick operations.
-     */
-    class EntityOnTickEvent(entity: Entity): ContextEvent<Entity, Entity.(level: Level)-> Unit>(entity, onTickHandlers) {
-        override fun invoker(): Entity.(level: Level) -> Unit {
-            return { level ->
-                handlerSnapshot().forEach { handler ->
-                    handler(this, level)
-                }
-            }
-        }
-    }
+    val onTickHandlers = mutableMapOf<Entity, EventHandler<Entity.(Level) -> Unit>>()
 
-    /**
-     * Register a tick event for this entity.
-     */
-    val Entity.onTick: EntityOnTickEvent
-        get() = EntityOnTickEvent(this)
-
-    /**
-     * Clear all script-owned entity handlers before scripts are reloaded.
-     */
     fun beginReload() {
         onTickHandlers.clear()
     }
 
-    /**
-     * Re-apply handlers for entities that are already loaded.
-     *
-     * This makes behavior changes effective immediately after reload,
-     * without requiring entities to be reloaded from chunks.
-     */
     fun rebindLoadedEntities(server: MinecraftServer) {
         server.allLevels.forEach { level ->
             level.allEntities.forEach { entity ->
@@ -100,6 +73,23 @@ object EntityEvent {
         }
     }
 }
+
+/**
+ * Register or replace a tick handler for this entity.
+ */
+@Suppress("NOTHING_TO_INLINE")
+inline var Entity.onTick: (Entity.(Level) -> Unit)?
+    get() = EntityEvent.onTickHandlers[this]?.handler
+    set(value) {
+        if (value != null) {
+            EntityEvent.onTickHandlers[this] = EventHandler(
+                handler = value,
+                owner = ScriptExecutionContext.currentScriptOwner()
+            )
+        } else {
+            EntityEvent.onTickHandlers.remove(this)
+        }
+    }
 
 /**
  * Collection of all entities across all server levels.

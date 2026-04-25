@@ -42,3 +42,4 @@ replay_*.log
 .kilocode/
 .kotlin/
 /plans/
+/examples/

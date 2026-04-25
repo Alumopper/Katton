@@ -3,7 +3,7 @@
 package top.katton.api.inject
 
 import top.katton.engine.InjectionManager
-import top.katton.util.Event
+import top.katton.util.ScriptExecutionContext
 import java.lang.reflect.Constructor
 import java.lang.reflect.Method
 
@@ -131,7 +131,7 @@ class ConstructorInvocationContext internal constructor(
 }
 
 private fun effectiveOwner(explicitOwner: String?): String? {
-    return explicitOwner ?: Event.currentScriptOwner()
+    return explicitOwner ?: ScriptExecutionContext.currentScriptOwner()
 }
 
 /**

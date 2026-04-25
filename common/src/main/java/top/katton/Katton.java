@@ -8,6 +8,7 @@ import top.katton.api.dpcaller.EntityEvent;
 import top.katton.datapack.ServerDatapackManager;
 import top.katton.pack.ScriptPack;
 import top.katton.pack.ScriptPackManager;
+import top.katton.pack.ScriptPackScope;
 import top.katton.pack.ServerPackCacheManager;
 import top.katton.registry.ScriptCommandRegistry;
 import top.katton.engine.ScriptEngine;
@@ -91,6 +92,11 @@ public class Katton {
         ServerDatapackManager.INSTANCE.apply(server);
         EntityEvent.INSTANCE.rebindLoadedEntities(server);
         return true;
+    }
+
+    public static void clearWorldAndServerEvents() {
+        Event.clearHandlersByScope(ScriptPackScope.WORLD);
+        Event.clearHandlersByScope(ScriptPackScope.SERVER_CACHE);
     }
 
     private static void ensureDirectory(Path path) {

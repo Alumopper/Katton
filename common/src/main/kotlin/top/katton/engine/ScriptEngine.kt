@@ -7,7 +7,8 @@ import top.katton.api.LOGGER
 import top.katton.api.ServerScriptEntrypoint
 import top.katton.pack.ScriptPack
 import top.katton.pack.ScriptPackKind
-import top.katton.util.Event
+import top.katton.pack.ScriptPackScope
+import top.katton.util.ScriptExecutionContext
 import java.io.File
 import java.lang.reflect.Method
 import java.lang.reflect.Modifier
@@ -89,17 +90,36 @@ object ScriptEngine {
     @JvmStatic
     fun compileAndExecuteAll(packs: Collection<ScriptPack>, environment: ScriptEnvironment) {
         val enabledPacks = packs.filter { it.enabled }
-        val sourcePackCount = enabledPacks.count { it.scripts.isNotEmpty() }
-        val jarPackCount = enabledPacks.count { it.kind == ScriptPackKind.JAR }
+        if (enabledPacks.isEmpty()) return
+
+        val scopeGroups = enabledPacks.groupBy { it.scope }
+        val globalJarPacks = enabledPacks.filter { it.scope == ScriptPackScope.GLOBAL && it.kind == ScriptPackKind.JAR }
+
+        for ((scope, scopePacks) in scopeGroups) {
+            ScriptExecutionContext.withScope(scope) {
+                compileAndExecuteScope(scopePacks, environment, scope, globalJarPacks)
+            }
+        }
+    }
+
+    private fun compileAndExecuteScope(
+        packs: List<ScriptPack>,
+        environment: ScriptEnvironment,
+        scope: ScriptPackScope,
+        extraClasspathJars: List<ScriptPack>
+    ) {
+        val sourcePackCount = packs.count { it.scripts.isNotEmpty() }
+        val jarPackCount = packs.count { it.kind == ScriptPackKind.JAR }
         LOGGER.info(
-            "Preparing {} {} script packs (source={}, jar={})",
-            enabledPacks.size,
+            "Preparing {} {} script packs in scope {} (source={}, jar={})",
+            packs.size,
             environment.name.lowercase(),
+            scope.serializedName,
             sourcePackCount,
             jarPackCount
         )
 
-        val sourcePlan = buildSourceCompilationPlan(enabledPacks)
+        val sourcePlan = buildSourceCompilationPlan(packs, extraClasspathJars)
         if (sourcePlan != null) {
             LOGGER.info(
                 "Compiling {} source packs together with {} jar dependencies for {}",
@@ -113,6 +133,7 @@ object ScriptEngine {
                     val executionResult = executeCombined(
                         artifact = artifact,
                         environment = environment,
+                        scope = scope,
                         label = "source packs (${sourcePlan.sourcePacks.size})"
                     )
                     logExecutionResult("source packs", executionResult)
@@ -120,7 +141,7 @@ object ScriptEngine {
             }
         }
 
-        enabledPacks
+        packs
             .asSequence()
             .filter { it.kind == ScriptPackKind.JAR }
             .forEach { pack ->
@@ -129,6 +150,7 @@ object ScriptEngine {
                     val executionResult = executeCombined(
                         artifact = artifact,
                         environment = environment,
+                        scope = scope,
                         label = "jar pack ${pack.manifest.name}"
                     )
                     logExecutionResult(pack.manifest.name, executionResult)
@@ -136,7 +158,7 @@ object ScriptEngine {
             }
     }
 
-    private fun buildSourceCompilationPlan(packs: Collection<ScriptPack>): SourceCompilationPlan? {
+    private fun buildSourceCompilationPlan(packs: Collection<ScriptPack>, extraClasspathJars: List<ScriptPack> = emptyList()): SourceCompilationPlan? {
         val sourcePacks = packs
             .filter { it.scripts.isNotEmpty() }
             .sortedBy { it.syncId }
@@ -144,8 +166,8 @@ object ScriptEngine {
             return null
         }
 
-        val binaryPacks = packs
-            .filter { it.kind == ScriptPackKind.JAR && it.compiledJar != null }
+        val binaryPacks = (packs.filter { it.kind == ScriptPackKind.JAR && it.compiledJar != null } + extraClasspathJars)
+            .distinctBy { it.syncId }
             .sortedBy { it.syncId }
         val scriptPaths = sourcePacks
             .flatMap { pack -> pack.scripts.sortedBy { it.relativePath }.map { it.absolutePath.toAbsolutePath().normalize().toString() } }
@@ -271,6 +293,7 @@ object ScriptEngine {
     private suspend fun executeCombined(
         artifact: CompiledScriptArtifact,
         environment: ScriptEnvironment,
+        scope: ScriptPackScope,
         label: String
     ): ResultWithDiagnostics<EvaluationResult> {
         val script = artifact.compiledScript
@@ -317,7 +340,7 @@ object ScriptEngine {
                         continue
                     }
 
-                    Event.withScriptOwner(fqcn) {
+                    ScriptExecutionContext.withOwner("${scope.serializedName}:$fqcn") {
                         method.isAccessible = true
                         method.invoke(null)
                     }

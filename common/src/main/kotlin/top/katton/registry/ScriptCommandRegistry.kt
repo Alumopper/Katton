@@ -4,7 +4,7 @@ import com.mojang.brigadier.builder.LiteralArgumentBuilder
 import com.mojang.brigadier.tree.RootCommandNode
 import net.minecraft.commands.CommandSourceStack
 import net.minecraft.server.MinecraftServer
-import top.katton.util.Event
+import top.katton.util.ScriptExecutionContext
 import java.util.concurrent.ConcurrentHashMap
 
 /**
@@ -59,7 +59,7 @@ object ScriptCommandRegistry {
         val rootName = rootBuilder.literal
         require(rootName.isNotBlank()) { "Command root name cannot be blank" }
 
-        val owner = Event.Companion.currentScriptOwner() ?: "global"
+        val owner = ScriptExecutionContext.currentScriptOwner() ?: "global"
         val dispatcherRoot = server.commands.dispatcher.root
 
         val existingNode = dispatcherRoot.getChild(rootName)

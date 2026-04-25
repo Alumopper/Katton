@@ -18,8 +18,7 @@ import top.katton.Katton
 import top.katton.Katton.MOD_ID
 import top.katton.LoadState
 import top.katton.platform.DynamicRegistryHooks
-import top.katton.util.Event
-import top.katton.util.ReflectUtil
+import top.katton.util.ScriptExecutionContext
 import java.util.*
 import java.util.Collections.emptySet
 import java.util.concurrent.ConcurrentHashMap
@@ -95,16 +94,37 @@ enum class RegisterMode {
  */
 object KattonRegistry {
 
-    private fun isRegistryFrozen(registry: MappedRegistry<*>): Boolean {
-        return ReflectUtil.getT<Boolean>(registry, "frozen").getOrNull() ?: true
-    }
-
-    private fun setRegistryFrozen(registry: MappedRegistry<*>, frozen: Boolean) {
-        ReflectUtil.set(registry, "frozen", frozen)
-    }
-
     //这个热重载怎么这么难写啊QwQ
     //感觉会有一堆bug但是现在能运行那就先不管了吧qwq
+
+    private class OwnershipTracker {
+        private val managedIds = linkedSetOf<Identifier>()
+        private val idsByOwner = ConcurrentHashMap<String, MutableSet<Identifier>>()
+
+        fun currentOwner() = ScriptExecutionContext.currentScriptOwner() ?: "global"
+
+        fun markManaged(id: Identifier, registerMode: RegisterMode) {
+            val owner = currentOwner()
+            if (owner != "global" && registerMode != RegisterMode.GLOBAL) {
+                managedIds.add(id)
+                idsByOwner.computeIfAbsent(owner) { ConcurrentHashMap.newKeySet() }.add(id)
+            }
+        }
+
+        @Synchronized
+        fun <T : Any> beginReload(
+            registry: MappedRegistry<T>,
+            resourceKey: (Identifier) -> ResourceKey<T>,
+            internalMap: MutableMap<Identifier, *>
+        ) {
+            managedIds.forEach {
+                RegistryMutationUtil.unregister(registry, resourceKey(it))
+                internalMap.remove(it)
+            }
+            managedIds.clear()
+            idsByOwner.clear()
+        }
+    }
 
     /**
      * Base class for Katton registries.
@@ -197,63 +217,21 @@ object KattonRegistry {
      */
     object ITEMS : KattonRegistries<KattonItemEntry>(id(MOD_ID, "item")) {
 
-        private val managedIds = linkedSetOf<Identifier>()
-        private val idsByOwner = ConcurrentHashMap<String, MutableSet<Identifier>>()
+        private val itemTracker = OwnershipTracker()
         private val pendingNativeRegistrations = mutableListOf<Pair<Identifier, () -> Item>>()
 
-        /**
-         * Registers an item in the global Minecraft registry.
-         * 
-         * @param id The identifier for the item
-         * @param item The item to register
-         * @return The registered item
-         */
         private fun registerGlobalItem(id: Identifier, item: Item): Item =
             Registry.register(BuiltInRegistries.ITEM, id, item)
 
-        /**
-         * Gets the current script owner for tracking purposes.
-         * 
-         * @return The current script owner name, or "global" if not in a script context
-         */
-        private fun currentOwner(): String = Event.currentScriptOwner() ?: "global"
-
-        /**
-         * Clears all managed entries. Called at the start of a reload.
-         * 
-         * This method removes all script-defined items from tracking but does
-         * not remove them from the global Minecraft registry. The items remain
-         * registered but their entries in this registry are cleared.
-         */
         @Synchronized
         fun beginReload() {
-            managedIds.forEach {
-                unregisterManagedItem(it)
-                remove(it)
-            }
-            managedIds.clear()
-            idsByOwner.clear()
-        }
-
-        private fun unregisterManagedItem(id: Identifier) {
-            RegistryMutationUtil.unregister(
+            itemTracker.beginReload(
                 BuiltInRegistries.ITEM as MappedRegistry<Item>,
-                ResourceKey.create(Registries.ITEM, id)
+                { ResourceKey.create(Registries.ITEM, it) },
+                this
             )
         }
 
-        /**
-         * Ensures an item is registered in the global registry with hot-reload support.
-         * 
-         * If the item already exists in the global registry, updates its components
-         * for hot-reload. If not, registers a new item with the necessary machinery
-         * for future hot-reloads.
-         * 
-         * @param id The identifier for the item
-         * @param itemBuilder Factory function to create the item
-         * @param properties The item properties, used for component updates
-         * @return The registered or existing item
-         */
         private fun ensureGlobalItemRegistered(
             id: Identifier,
             itemBuilder: () -> Item,
@@ -263,91 +241,31 @@ object KattonRegistry {
             if (existing.isPresent) {
                 return existing.get()
             }
-
             return registerNewItem(id, itemBuilder, properties)
         }
 
-        /**
-         * Updates the components of an existing item's holder.
-         * 
-         * Called during hot-reload to refresh item properties without
-         * creating a new item instance.
-         * 
-         * @param item The item to update
-         * @param id The item's identifier
-         * @param properties The new properties to apply
-         */
-        private fun updateHolderComponents(item: Item, id: Identifier, properties: KattonItemProperties) {
-            properties.setId(ResourceKey.create(Registries.ITEM, id))
-            val holder = item.builtInRegistryHolder
-            holder.components = properties.buildComponent()
-        }
-
-        /**
-         * Registers a new item with hot-reload support.
-         * 
-         * This method handles the complex process of registering an item after
-         * the Minecraft registry is frozen by temporarily unfreezing it and
-         * injecting intrusive holders.
-         * 
-         * @param id The identifier for the item
-         * @param itemBuilder Factory function to create the item
-         * @param properties The item properties
-         * @return The newly registered item
-         */
         private fun registerNewItem(
             id: Identifier,
             itemBuilder: () -> Item,
             properties: KattonItemProperties?
         ): Item {
-            @Suppress("UNCHECKED_CAST") 
+            @Suppress("UNCHECKED_CAST")
             val itemRegistry = BuiltInRegistries.ITEM as MappedRegistry<Item>
 
-            val previousUnregistered = itemRegistry.unregisteredIntrusiveHolders
-            val injectedUnregistered = previousUnregistered == null
-            if (injectedUnregistered) {
-                itemRegistry.unregisteredIntrusiveHolders = IdentityHashMap()
-            }
-            
-            val savedFrozen = isRegistryFrozen(itemRegistry)
-            
-            return try {
-                setRegistryFrozen(itemRegistry, false)
+            return RegistryMutationUtil.withUnfrozenAndHolders(itemRegistry) {
                 val item = itemBuilder()
                 val registered = Registry.register(BuiltInRegistries.ITEM, id, item)
-                
                 bindHolderComponents(item, properties)
                 registered
-            } finally {
-                if (savedFrozen) setRegistryFrozen(itemRegistry, true)
-                if (injectedUnregistered) itemRegistry.unregisteredIntrusiveHolders = previousUnregistered
             }
         }
 
-        /**
-         * Binds components and tags to an item's holder.
-         * 
-         * Required for items registered after the registry is frozen,
-         * as the normal binding process may not have occurred.
-         * 
-         * @param item The item to bind components to
-         * @param properties The properties containing component data
-         */
         private fun bindHolderComponents(item: Item, properties: KattonItemProperties?) {
             val holder = item.builtInRegistryHolder
             holder.components = properties?.buildComponent() ?: DataComponentMap.EMPTY
             holder.tags = emptySet()
         }
 
-        /**
-         * Registers an item with the specified mode.
-         * 
-         * @param id The identifier for the item
-         * @param registerMode The registration mode
-         * @param itemBuilder Factory function to create the item
-         * @param properties The item properties
-         * @return The registered item
-         */
         private fun registerItemWithMode(
             id: Identifier,
             registerMode: RegisterMode,
@@ -365,21 +283,6 @@ object KattonRegistry {
             }
         }
 
-        /**
-         * Registers a native Item instance with hot-reload support.
-         * 
-         * Use this method to register custom Item subclasses from scripts.
-         * The method handles all the complexity of late registration and
-         * hot-reload support automatically.
-         * 
-         * If called before the mod is fully initialized, the registration
-         * will be queued and processed later.
-         * 
-         * @param components The item properties containing id, name, model, etc.
-         * @param registerMode The registration mode (GLOBAL, RELOADABLE, or AUTO)
-         * @param itemFactory Factory function to create the Item instance
-         * @return The registered KattonItemEntry
-         */
         fun newNative(
             components: KattonItemProperties,
             registerMode: RegisterMode = RegisterMode.AUTO,
@@ -389,7 +292,7 @@ object KattonRegistry {
                 val placeholder = KattonItemEntry(id = components.id, item = Items.AIR, properties = components)
                 @Suppress("DEPRECATION")
                 register(placeholder)
-                markManaged(components.id, registerMode)
+                itemTracker.markManaged(components.id, registerMode)
                 synchronized(pendingNativeRegistrations) {
                     pendingNativeRegistrations.add(components.id to {
                         components.setId(ResourceKey.create(Registries.ITEM, components.id))
@@ -412,24 +315,8 @@ object KattonRegistry {
             )
             @Suppress("DEPRECATION")
             register(entry)
-            markManaged(components.id, registerMode)
+            itemTracker.markManaged(components.id, registerMode)
             return entry
-        }
-
-        /**
-         * Marks an item as managed by a script owner.
-         * 
-         * Managed items are tracked for cleanup during reload operations.
-         * 
-         * @param itemId The identifier of the item to mark
-         * @param registerMode The registration mode
-         */
-        private fun markManaged(itemId: Identifier, registerMode: RegisterMode) {
-            val owner = currentOwner()
-            if (owner != "global" && registerMode != RegisterMode.GLOBAL) {
-                managedIds.add(itemId)
-                idsByOwner.computeIfAbsent(owner) { ConcurrentHashMap.newKeySet() }.add(itemId)
-            }
         }
     }
 
@@ -438,43 +325,20 @@ object KattonRegistry {
      */
     object EFFECTS : KattonRegistries<KattonMobEffectEntry>(id(MOD_ID, "effect")) {
 
-        private val managedIds = linkedSetOf<Identifier>()
-        private val idsByOwner = ConcurrentHashMap<String, MutableSet<Identifier>>()
+        private val effectTracker = OwnershipTracker()
 
-        /**
-         * Registers a mob effect in the global Minecraft registry.
-         */
         private fun registerGlobalEffect(id: Identifier, effect: MobEffect): MobEffect =
             Registry.register(BuiltInRegistries.MOB_EFFECT, id, effect)
 
-        /**
-         * Gets the current script owner for tracking purposes.
-         */
-        private fun currentOwner(): String = Event.currentScriptOwner() ?: "global"
-
-        /**
-         * Clears all managed entries. Called at the start of a reload.
-         */
         @Synchronized
         fun beginReload() {
-            managedIds.forEach {
-                unregisterManagedEffect(it)
-                remove(it)
-            }
-            managedIds.clear()
-            idsByOwner.clear()
-        }
-
-        private fun unregisterManagedEffect(id: Identifier) {
-            RegistryMutationUtil.unregister(
+            effectTracker.beginReload(
                 BuiltInRegistries.MOB_EFFECT as MappedRegistry<MobEffect>,
-                ResourceKey.create(Registries.MOB_EFFECT, id)
+                { ResourceKey.create(Registries.MOB_EFFECT, it) },
+                this
             )
         }
 
-        /**
-         * Ensures a mob effect is registered in the global registry with hot-reload support.
-         */
         private fun ensureGlobalEffectRegistered(
             id: Identifier,
             effectBuilder: () -> MobEffect
@@ -483,33 +347,22 @@ object KattonRegistry {
             if (existing.isPresent) {
                 return existing.get()
             }
-
             return registerNewEffect(id, effectBuilder)
         }
 
-        /**
-         * Registers a new mob effect with hot-reload support.
-         */
         private fun registerNewEffect(
             id: Identifier,
             effectBuilder: () -> MobEffect
         ): MobEffect {
             @Suppress("UNCHECKED_CAST")
             val effectRegistry = BuiltInRegistries.MOB_EFFECT as MappedRegistry<MobEffect>
-            val savedFrozen = isRegistryFrozen(effectRegistry)
 
-            return try {
-                setRegistryFrozen(effectRegistry, false)
+            return RegistryMutationUtil.withUnfrozenRegistry(effectRegistry) {
                 val effect = effectBuilder()
                 Registry.register(BuiltInRegistries.MOB_EFFECT, id, effect)
-            } finally {
-                if (savedFrozen) setRegistryFrozen(effectRegistry, true)
             }
         }
 
-        /**
-         * Registers a mob effect with the specified mode.
-         */
         private fun registerEffectWithMode(
             id: Identifier,
             registerMode: RegisterMode,
@@ -526,14 +379,6 @@ object KattonRegistry {
             }
         }
 
-        /**
-         * Registers a native MobEffect instance with hot-reload support.
-         * 
-         * @param id The identifier for the effect
-         * @param registerMode The registration mode
-         * @param effectFactory Factory function to create the MobEffect instance
-         * @return The registered KattonMobEffectEntry
-         */
         fun newNative(
             id: Identifier,
             registerMode: RegisterMode = RegisterMode.AUTO,
@@ -545,19 +390,8 @@ object KattonRegistry {
             )
             @Suppress("DEPRECATION")
             register(entry)
-            markManaged(id, registerMode)
+            effectTracker.markManaged(id, registerMode)
             return entry
-        }
-
-        /**
-         * Marks a mob effect as managed by a script owner.
-         */
-        private fun markManaged(effectId: Identifier, registerMode: RegisterMode) {
-            val owner = currentOwner()
-            if (owner != "global" && registerMode != RegisterMode.GLOBAL) {
-                managedIds.add(effectId)
-                idsByOwner.computeIfAbsent(owner) { ConcurrentHashMap.newKeySet() }.add(effectId)
-            }
         }
     }
 
@@ -566,43 +400,20 @@ object KattonRegistry {
      */
     object BLOCKS : KattonRegistries<KattonBlockEntry>(id(MOD_ID, "block")) {
 
-        private val managedIds = linkedSetOf<Identifier>()
-        private val idsByOwner = ConcurrentHashMap<String, MutableSet<Identifier>>()
+        private val blockTracker = OwnershipTracker()
 
-        /**
-         * Registers a block in the global Minecraft registry.
-         */
         private fun registerGlobalBlock(id: Identifier, block: Block): Block =
             Registry.register(BuiltInRegistries.BLOCK, id, block)
 
-        /**
-         * Gets the current script owner for tracking purposes.
-         */
-        private fun currentOwner(): String = Event.currentScriptOwner() ?: "global"
-
-        /**
-         * Clears all managed entries. Called at the start of a reload.
-         */
         @Synchronized
         fun beginReload() {
-            managedIds.forEach {
-                unregisterManagedBlock(it)
-                remove(it)
-            }
-            managedIds.clear()
-            idsByOwner.clear()
-        }
-
-        private fun unregisterManagedBlock(id: Identifier) {
-            RegistryMutationUtil.unregister(
+            blockTracker.beginReload(
                 BuiltInRegistries.BLOCK as MappedRegistry<Block>,
-                ResourceKey.create(Registries.BLOCK, id)
+                { ResourceKey.create(Registries.BLOCK, it) },
+                this
             )
         }
 
-        /**
-         * Ensures a block is registered in the global registry with hot-reload support.
-         */
         private fun ensureGlobalBlockRegistered(
             id: Identifier,
             blockBuilder: (BlockBehaviour.Properties) -> Block
@@ -613,13 +424,9 @@ object KattonRegistry {
                 block.builtInRegistryHolder().tags = emptySet()
                 return block
             }
-
             return registerNewBlock(id, blockBuilder)
         }
 
-        /**
-         * Registers a new block with hot-reload support.
-         */
         private fun registerNewBlock(
             id: Identifier,
             blockBuilder: (BlockBehaviour.Properties) -> Block
@@ -627,31 +434,16 @@ object KattonRegistry {
             @Suppress("UNCHECKED_CAST")
             val blockRegistry = BuiltInRegistries.BLOCK as MappedRegistry<Block>
 
-            val previousUnregistered = blockRegistry.unregisteredIntrusiveHolders
-            val injectedUnregistered = previousUnregistered == null
-            if (injectedUnregistered) {
-                blockRegistry.unregisteredIntrusiveHolders = IdentityHashMap()
-            }
-
-            val savedFrozen = isRegistryFrozen(blockRegistry)
-
-            return try {
-                setRegistryFrozen(blockRegistry, false)
+            return RegistryMutationUtil.withUnfrozenAndHolders(blockRegistry) {
                 val props = BlockBehaviour.Properties.of().setId(ResourceKey.create(Registries.BLOCK, id))
                 val block = blockBuilder(props)
                 val registered = Registry.register(BuiltInRegistries.BLOCK, id, block)
                 registered.builtInRegistryHolder().tags = emptySet()
                 DynamicRegistryHooks.onDynamicBlockRegistered(registered)
                 registered
-            } finally {
-                if (savedFrozen) setRegistryFrozen(blockRegistry, true)
-                if (injectedUnregistered) blockRegistry.unregisteredIntrusiveHolders = previousUnregistered
             }
         }
 
-        /**
-         * Registers a block with the specified mode.
-         */
         private fun registerBlockWithMode(
             id: Identifier,
             registerMode: RegisterMode,
@@ -672,14 +464,6 @@ object KattonRegistry {
             }
         }
 
-        /**
-         * Registers a native Block instance with hot-reload support.
-         * 
-         * @param id The identifier for the block
-         * @param registerMode The registration mode
-         * @param blockFactory Factory function to create the Block instance
-         * @return The registered KattonBlockEntry
-         */
         fun newNative(
             id: Identifier,
             registerMode: RegisterMode = RegisterMode.AUTO,
@@ -691,19 +475,8 @@ object KattonRegistry {
             )
             @Suppress("DEPRECATION")
             register(entry)
-            markManaged(id, registerMode)
+            blockTracker.markManaged(id, registerMode)
             return entry
-        }
-
-        /**
-         * Marks a block as managed by a script owner.
-         */
-        private fun markManaged(blockId: Identifier, registerMode: RegisterMode) {
-            val owner = currentOwner()
-            if (owner != "global" && registerMode != RegisterMode.GLOBAL) {
-                managedIds.add(blockId)
-                idsByOwner.computeIfAbsent(owner) { ConcurrentHashMap.newKeySet() }.add(blockId)
-            }
         }
     }
 
@@ -729,19 +502,13 @@ object KattonRegistry {
 
             @Suppress("UNCHECKED_CAST")
             val componentRegistry = BuiltInRegistries.DATA_COMPONENT_TYPE as MappedRegistry<DataComponentType<*>>
-            val savedFrozen = isRegistryFrozen(componentRegistry)
 
-            try {
-                setRegistryFrozen(componentRegistry, false)
+            RegistryMutationUtil.withUnfrozenRegistry(componentRegistry) {
                 KATTON_ID = Registry.register(
                     BuiltInRegistries.DATA_COMPONENT_TYPE,
                     Identifier.fromNamespaceAndPath(MOD_ID, "id"),
                     DataComponentType.builder<String>().persistent(Codec.STRING).build()
                 )
-            } finally {
-                if (savedFrozen) {
-                    setRegistryFrozen(componentRegistry, true)
-                }
             }
         }
     }

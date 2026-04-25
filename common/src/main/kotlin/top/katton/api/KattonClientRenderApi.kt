@@ -12,7 +12,7 @@ import net.minecraft.client.renderer.state.level.CameraRenderState
 import net.minecraft.network.chat.Component
 import net.minecraft.resources.Identifier
 import org.joml.Vector3f
-import top.katton.util.Event
+import top.katton.util.ScriptExecutionContext
 import java.util.concurrent.ConcurrentHashMap
 
 /**
@@ -140,7 +140,7 @@ fun registerHudRenderer(
     priority: Int = 0,
     render: (HudRenderContext) -> Unit
 ) {
-    hudRenderers[id] = HudRendererEntry(Event.currentScriptOwner(), layer, priority, render)
+    hudRenderers[id] = HudRendererEntry(ScriptExecutionContext.currentScriptOwner(), layer, priority, render)
 }
 
 /**
@@ -181,7 +181,7 @@ fun registerWorldRenderer(
     priority: Int = 0,
     render: (WorldRenderContext) -> Unit
 ) {
-    worldRenderers[id] = WorldRendererEntry(Event.currentScriptOwner(), layer, priority, render)
+    worldRenderers[id] = WorldRendererEntry(ScriptExecutionContext.currentScriptOwner(), layer, priority, render)
 }
 
 /**
@@ -215,7 +215,7 @@ fun dispatchHudRender(graphics: GuiGraphicsExtractor, tickDelta: Float) {
         .sortedWith(compareBy({ it.layer.ordinal }, { it.priority }))
     for (entry in ordered) {
         runCatching {
-            Event.withScriptOwner(entry.owner) {
+            ScriptExecutionContext.withOwner(entry.owner) {
                 entry.render(ctx)
             }
         }.onFailure {
@@ -237,7 +237,7 @@ fun dispatchWorldRender(camera: CameraRenderState?, tickDelta: Float) {
         .sortedWith(compareBy({ it.layer.ordinal }, { it.priority }))
     for (entry in ordered) {
         runCatching {
-            Event.withScriptOwner(entry.owner) {
+            ScriptExecutionContext.withOwner(entry.owner) {
                 entry.render(ctx)
             }
         }.onFailure {

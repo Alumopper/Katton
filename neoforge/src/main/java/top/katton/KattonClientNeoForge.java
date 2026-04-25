@@ -65,6 +65,7 @@ public class KattonClientNeoForge {
     }
 
     private static void onDisconnect(ClientPlayerNetworkEvent.LoggingOut event) {
+        Katton.clearWorldAndServerEvents();
         ServerPackCacheManager.INSTANCE.reset();
     }
 
