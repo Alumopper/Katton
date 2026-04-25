@@ -1,0 +1,172 @@
+═══════════════════════════════════════════════════════════════════════════
+Token Analysis: Session ses_23e3563e2ffeNYl2hFS4Lm6O7S
+Model: deepseek-v4-pro
+═══════════════════════════════════════════════════════════════════════════
+
+WARNINGS
+───────────────────────────────────────────────────
+- Pricing for 'opencode-go/kimi-k2.6' was not found in models.json. Cost estimates use the default fallback rates ($1/M input, $3/M output, no cache pricing).
+- TokenScope used approximate token counting for 'deepseek-ai/DeepSeek-V3' because an exact public tokenizer could not be loaded.
+
+TOKEN BREAKDOWN BY CATEGORY
+─────────────────────────────────────────────────────────────────────────
+Estimated using tokenizer analysis of message content:
+
+Input Categories:
+  SYSTEM    ████████████░░░░░░░░░░░░░░░░░░    39.4% (35,379)
+  USER      ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░        0.8% (686)
+  TOOLS     ██████████████████░░░░░░░░░░░░    59.9% (53,820)
+
+  Subtotal: 89,885 estimated input tokens
+  Note: inferred system/overhead values are heuristic estimates from API telemetry.
+
+Output Categories:
+  ASSISTANT █████████░░░░░░░░░░░░░░░░░░░░░    31.1% (12,180)
+  REASONING █████████████████████░░░░░░░░░    68.9% (26,985)
+
+  Subtotal: 39,165 estimated output tokens
+
+Local Total: 129,050 tokens (estimated)
+
+TOOL USAGE BREAKDOWN
+─────────────────────────────────────────────────────────────────────────
+read                 ████████████████░░░░░░░░░░░░░░    53.2% (28,635)   20x
+task                 ████████████░░░░░░░░░░░░░░░░░░    39.8% (21,397)    4x
+webfetch             █░░░░░░░░░░░░░░░░░░░░░░░░░░░░░      2.6% (1,403)    1x
+grep                 █░░░░░░░░░░░░░░░░░░░░░░░░░░░░░      2.3% (1,214)    6x
+todowrite            █░░░░░░░░░░░░░░░░░░░░░░░░░░░░░      2.0% (1,055)    4x
+glob                 ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░         0.1% (60)    1x
+edit                 ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░         0.1% (56)    8x
+
+TOP CONTRIBUTORS
+─────────────────────────────────────────────────────────────────────────
+• System (inferred from API telemetry) 35,379 tokens (27.4%)
+• read                         28,635 tokens (22.2%)
+• task                         21,397 tokens (16.6%)
+• Reasoning#26                 4,433 tokens (3.4%)
+• Reasoning#25                 3,127 tokens (2.4%)
+
+═══════════════════════════════════════════════════════════════════════════
+MOST RECENT API CALL
+─────────────────────────────────────────────────────────────────────────
+
+Raw telemetry from last API response:
+  Input (fresh):          2,333 tokens
+  Cache read:            87,552 tokens
+  Output:                   703 tokens
+  Reasoning:                761 tokens
+  Provider total:        91,349 tokens
+  Cost:              $0.0074
+  ─────────────────────────────────────
+  Total:                 91,349 tokens
+
+═══════════════════════════════════════════════════════════════════════════
+SESSION TOTALS (All 59 API calls)
+─────────────────────────────────────────────────────────────────────────
+
+Assistant messages observed: 61 (structural count)
+
+Total tokens processed across the entire session (for cost calculation):
+
+  Input tokens:         363,304 (fresh tokens across all calls)
+  Cache read:         3,432,576 (cached tokens across all calls)
+  Cache write:                0 (tokens written to cache)
+  Output tokens:         25,610 (all model responses)
+  Reasoning tokens:      26,244 (thinking/reasoning)
+  ─────────────────────────────────────
+  Session Total:      3,847,734 tokens (for billing)
+  Cache read calls:          57 / 59
+  Cache write calls:          0 / 59
+
+═══════════════════════════════════════════════════════════════════════════
+SESSION COST
+─────────────────────────────────────────────────────────────────────────
+
+Token usage breakdown:
+  Input tokens:         363,304
+  Output tokens:         25,610
+  Reasoning tokens:      26,244
+  Cache read:         3,432,576
+
+─────────────────────────────────────────────────────────────────────────
+ACTUAL COST (from API):  $1.0488
+Estimated cost:          $0.5189 (-50.5% diff)
+
+Note: Actual cost from OpenCode includes provider-specific pricing
+and 200K+ context adjustments.
+
+═══════════════════════════════════════════════════════════════════════════
+AVAILABLE SUBAGENTS (in task tool definition)
+─────────────────────────────────────────────────────────────────────────
+
+These subagents are embedded in the task tool description and consume tokens on every API call.
+
+  Subagent               Description                                        Tokens
+  ───────────────────────────────────────────────────────────────────────
+  explore                Fast agent specialized for exploring codebases. U…    ~124
+  general                General-purpose agent for researching complex que…     ~40
+  ───────────────────────────────────────────────────────────────────────
+  Total: ~164 tokens (2 subagents available)
+
+  Note: Full task tool description is ~1,112 tokens (includes instructions/examples).
+
+═══════════════════════════════════════════════════════════════════════════
+TOOL DEFINITION COSTS (Estimated from argument analysis)
+─────────────────────────────────────────────────────────────────────────
+
+  Tool                Est. Tokens   Args   Complexity
+  ───────────────────────────────────────────────────────────────────
+  todowrite                  ~380       1   complex (arrays/objects)
+  task                       ~370       3   simple
+  read                       ~370       3   simple
+  grep                       ~370       3   simple
+  edit                       ~370       3   simple
+  bash                       ~370       3   simple
+  webfetch                   ~340       2   simple
+  glob                       ~310       1   simple
+  tokenscope                 ~310       1   simple
+  ───────────────────────────────────────────────────────────────────
+  Total:             ~      3,190 tokens (9 enabled tools)
+
+  Note: Estimates inferred from tool call arguments in this session.
+        Actual schema tokens may vary +/-20%.
+
+═══════════════════════════════════════════════════════════════════════════
+CACHE EFFICIENCY
+─────────────────────────────────────────────────────────────────────────
+
+  Token Distribution:
+    Cache Read:         3,432,576 tokens   ███████████████████████████░░░  90.4%
+    Fresh Input:          363,304 tokens   ███░░░░░░░░░░░░░░░░░░░░░░░░░░░  9.6%
+  ───────────────────────────────────────────────────────────────────
+  Cache Hit Rate:      90.4% (cache read / (cache read + fresh input))
+
+  Cost Analysis (deepseek-v4-pro @ $1.00/M input, $0.00/M cache read, $0.00/M cache write):
+    Without caching:   $3.7959  (3,795,880 tokens x $1.00/M)
+    With caching:      $0.3633  (fresh x $1.00/M + cache read x $0.00/M + cache write x $0.00/M)
+  ───────────────────────────────────────────────────────────────────
+  Cost Savings:        $3.4326  (90.4% reduction)
+  Effective Rate:      $0.10/M tokens  (vs. $1.00/M standard)
+
+═══════════════════════════════════════════════════════════════════════════
+SUBAGENT COSTS (4 child sessions, 45 API calls)
+─────────────────────────────────────────────────────────────────────────
+
+  explore                      $0.1784  (345,584 tokens, 9 calls)
+  explore                      $0.2256  (539,302 tokens, 14 calls)
+  explore                      $0.2213  (591,583 tokens, 14 calls)
+  explore                      $0.2835  (562,054 tokens, 8 calls)
+─────────────────────────────────────────────────────────────────────────
+Subagent Total:            $0.9089  (2,038,523 tokens, 45 calls)
+
+═══════════════════════════════════════════════════════════════════════════
+SUMMARY
+─────────────────────────────────────────────────────────────────────────
+
+                          Cost        Tokens          API Calls
+  Main session:      $    1.0488     3,847,734            59
+  Subagents:         $    0.9089     2,038,523            45
+─────────────────────────────────────────────────────────────────────────
+  TOTAL:             $    1.9577     5,886,257           104
+
+═══════════════════════════════════════════════════════════════════════════
