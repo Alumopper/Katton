@@ -1,7 +1,6 @@
 package top.katton.registry
 
 import com.mojang.serialization.Codec
-import net.minecraft.core.MappedRegistry
 import net.minecraft.core.Registry
 import net.minecraft.core.component.DataComponentMap
 import net.minecraft.core.component.DataComponentType
@@ -18,62 +17,37 @@ import top.katton.Katton
 import top.katton.Katton.MOD_ID
 import top.katton.LoadState
 import top.katton.platform.DynamicRegistryHooks
-import top.katton.util.ScriptExecutionContext
-import java.util.*
-import java.util.Collections.emptySet
-import java.util.concurrent.ConcurrentHashMap
+import top.katton.platform.SpawnPlacementHooks
+import top.katton.util.ReflectUtil
+import org.slf4j.LoggerFactory
 
 /**
  * Creates an [Identifier] from a namespace and path.
- * 
- * This is a convenience function for creating Minecraft resource identifiers.
- * 
- * @param namespace The namespace (mod id) for the identifier
- * @param path The path component of the identifier
- * @return A new [Identifier] instance
  */
 fun id(namespace: String, path: String) = Identifier.fromNamespaceAndPath(namespace, path)
 
 /**
  * Parses an [Identifier] from a string in the format "namespace:path".
- * 
- * @param string The string to parse
- * @return The parsed [Identifier]
- * @throws IllegalArgumentException if the string is not a valid identifier format
  */
 fun id(string: String) = Identifier.parse(string)
 
+private val REGLOGGER = LoggerFactory.getLogger("KattonRegistry")
+
+private fun regDebug(msg: () -> String) {
+    if (Katton.debugRegistryLogging) {
+        REGLOGGER.info(msg())
+    }
+}
+
 /**
  * Interface for objects that have an [Identifier].
- * 
- * This interface provides a common contract for objects that can be identified
- * by a Minecraft resource identifier. It is used throughout the registry system
- * to track and manage registered objects.
  */
 interface Identifiable {
-    /**
-     * The unique identifier for this object.
-     */
     val id: Identifier
 }
 
 /**
  * Registration mode for game objects.
- * 
- * This enum defines how objects should be registered with Minecraft's registries,
- * particularly in relation to the hot-reload system.
- * 
- * - **GLOBAL**: Register during mod initialization, cannot be hot-reloaded.
- *   Use this for objects that need to persist across reloads or are required
- *   for the mod to function properly.
- *   
- * - **RELOADABLE**: Register with hot-reload support. Objects registered this
- *   way can be redefined during script reloads. Use this for content that
- *   may change during development or configuration.
- *   
- * - **AUTO**: Automatically choose based on current load state. During initial
- *   mod loading, behaves like GLOBAL. After initialization, behaves like
- *   RELOADABLE. This is the recommended mode for most use cases.
  */
 enum class RegisterMode {
     GLOBAL,
@@ -82,95 +56,46 @@ enum class RegisterMode {
 }
 
 /**
+ * Base class for Katton registries.
+ *
+ * Provides internal entry storage with controlled access.
+ */
+abstract class KattonRegistries<T : Identifiable>(
+    override val id: Identifier
+) : Identifiable {
+    private val entries = mutableMapOf<Identifier, T>()
+
+    internal fun register(entry: T): T {
+        entries[entry.id] = entry
+        return entry
+    }
+
+    fun get(id: Identifier): T? = entries[id]
+    fun contains(id: Identifier): Boolean = id in entries
+    internal fun remove(id: Identifier): T? = entries.remove(id)
+    fun clear() = entries.clear()
+    val size: Int get() = entries.size
+    fun entries(): Set<Map.Entry<Identifier, T>> = entries.entries
+}
+
+/**
  * Central registry for Katton mod components.
- * 
- * This object provides a unified interface for registering custom game objects
- * such as items, blocks, and mob effects. It supports both traditional global
- * registration and hot-reloadable registration for script-defined content.
- * 
- * The registry uses a custom approach to handle registration after Minecraft's
- * registries are frozen, temporarily unfreeze registries
- * and inject intrusive holders as needed.
  */
 object KattonRegistry {
 
     //这个热重载怎么这么难写啊QwQ
     //感觉会有一堆bug但是现在能运行那就先不管了吧qwq
 
-    private class OwnershipTracker {
-        private val managedIds = linkedSetOf<Identifier>()
-        private val idsByOwner = ConcurrentHashMap<String, MutableSet<Identifier>>()
-
-        fun currentOwner() = ScriptExecutionContext.currentScriptOwner() ?: "global"
-
-        fun markManaged(id: Identifier, registerMode: RegisterMode) {
-            val owner = currentOwner()
-            if (owner != "global" && registerMode != RegisterMode.GLOBAL) {
-                managedIds.add(id)
-                idsByOwner.computeIfAbsent(owner) { ConcurrentHashMap.newKeySet() }.add(id)
-            }
-        }
-
-        @Synchronized
-        fun <T : Any> beginReload(
-            registry: MappedRegistry<T>,
-            resourceKey: (Identifier) -> ResourceKey<T>,
-            internalMap: MutableMap<Identifier, *>
-        ) {
-            managedIds.forEach {
-                RegistryMutationUtil.unregister(registry, resourceKey(it))
-                internalMap.remove(it)
-            }
-            managedIds.clear()
-            idsByOwner.clear()
-        }
-    }
-
-    /**
-     * Base class for Katton registries.
-     * 
-     * Provides a map-like interface for storing registered entries, allowing
-     * lookup by identifier. Each registry has its own unique identifier for
-     * debugging and logging purposes.
-     * 
-     * @param T The type of entries stored in this registry, must implement [Identifiable]
-     * @property id The identifier for this registry instance
-     * @param entries The initial entries map, defaults to an empty mutable map
-     */
-    abstract class KattonRegistries<T : Identifiable>(
-        override val id: Identifier,
-        entries: MutableMap<Identifier, T> = mutableMapOf()
-    ) : Identifiable, MutableMap<Identifier, T> by entries {
-
-        /**
-         * Registers an entry in this registry.
-         * 
-         * @param implement The entry to register
-         * @return The registered entry
-         * @deprecated Use the specific registration methods in ITEMS, BLOCKS, or EFFECTS instead
-         */
-        @Deprecated("Use Function In KattonRegistry Instead")
-        internal fun register(implement: T): T {
-            this[implement.id] = implement
-            return implement
-        }
-
-        /**
-         * Initializes this registry. Override to perform initialization logic.
-         */
-        @Suppress("unused")
-        fun initialize() {}
-    }
+    data class RegistryHealth(
+        val key: String,
+        val kattonEntries: Int,
+        val managedTracked: Int,
+        val staleRetained: Int,
+        val pendingRegistrations: Int
+    )
 
     /**
      * Represents a registered item entry.
-     * 
-     * Stores the item instance along with its properties for potential
-     * component rebuilding during hot-reload operations.
-     * 
-     * @property id The unique identifier for this item
-     * @property item The registered Item instance
-     * @property properties The properties used to create this item, may be null for non-reloadable items
      */
     data class KattonItemEntry(
         override val id: Identifier,
@@ -180,9 +105,6 @@ object KattonRegistry {
 
     /**
      * Represents a registered mob effect entry.
-     * 
-     * @property id The unique identifier for this effect
-     * @property effect The registered MobEffect instance
      */
     data class KattonMobEffectEntry(
         override val id: Identifier,
@@ -191,9 +113,6 @@ object KattonRegistry {
 
     /**
      * Represents a registered block entry.
-     * 
-     * @property id The unique identifier for this block
-     * @property block The registered Block instance
      */
     data class KattonBlockEntry(
         override val id: Identifier,
@@ -202,85 +121,27 @@ object KattonRegistry {
 
     /**
      * Registry for Katton items.
-     * 
-     * Supports both global registration (during mod initialization) and
-     * hot-reloadable registration (after the server has started). Items
-     * registered through this registry are tracked by their script owner
-     * and can be cleared during reload operations.
-     * 
-     * The registry handles the complexity of registering items after
-     * Minecraft's item registry is frozen by:
-     * 1. Temporarily unfreezing the registry
-     * 2. Injecting intrusive holders if needed
-     * 3. Registering the item
-     * 4. Restoring the registry state
      */
     object ITEMS : KattonRegistries<KattonItemEntry>(id(MOD_ID, "item")) {
 
-        private val itemTracker = OwnershipTracker()
-        private val pendingNativeRegistrations = mutableListOf<Pair<Identifier, () -> Item>>()
-
-        private fun registerGlobalItem(id: Identifier, item: Item): Item =
-            Registry.register(BuiltInRegistries.ITEM, id, item)
+        private val delegate = ReloadableBuiltInRegistry(
+            builtInRegistry = BuiltInRegistries.ITEM,
+            registryKey = Registries.ITEM,
+            requiresIntrusiveHolders = true,
+            unregisterOnReload = false
+        )
 
         @Synchronized
         fun beginReload() {
-            itemTracker.beginReload(
-                BuiltInRegistries.ITEM as MappedRegistry<Item>,
-                { ResourceKey.create(Registries.ITEM, it) },
-                this
-            )
-        }
-
-        private fun ensureGlobalItemRegistered(
-            id: Identifier,
-            itemBuilder: () -> Item,
-            properties: KattonItemProperties? = null
-        ): Item {
-            val existing = BuiltInRegistries.ITEM.getOptional(id)
-            if (existing.isPresent) {
-                return existing.get()
-            }
-            return registerNewItem(id, itemBuilder, properties)
-        }
-
-        private fun registerNewItem(
-            id: Identifier,
-            itemBuilder: () -> Item,
-            properties: KattonItemProperties?
-        ): Item {
-            @Suppress("UNCHECKED_CAST")
-            val itemRegistry = BuiltInRegistries.ITEM as MappedRegistry<Item>
-
-            return RegistryMutationUtil.withUnfrozenAndHolders(itemRegistry) {
-                val item = itemBuilder()
-                val registered = Registry.register(BuiltInRegistries.ITEM, id, item)
-                bindHolderComponents(item, properties)
-                registered
-            }
+            regDebug { "ITEMS.beginReload()" }
+            val removed = delegate.beginReload()
+            removed.forEach { remove(it) }
         }
 
         private fun bindHolderComponents(item: Item, properties: KattonItemProperties?) {
             val holder = item.builtInRegistryHolder
             holder.components = properties?.buildComponent() ?: DataComponentMap.EMPTY
             holder.tags = emptySet()
-        }
-
-        private fun registerItemWithMode(
-            id: Identifier,
-            registerMode: RegisterMode,
-            itemBuilder: () -> Item,
-            properties: KattonItemProperties? = null
-        ): Item = when (registerMode) {
-            RegisterMode.GLOBAL -> registerGlobalItem(id, itemBuilder())
-            RegisterMode.RELOADABLE -> ensureGlobalItemRegistered(id, itemBuilder, properties)
-            RegisterMode.AUTO -> {
-                if (Katton.globalState.after(LoadState.INIT)) {
-                    ensureGlobalItemRegistered(id, itemBuilder, properties)
-                } else {
-                    registerGlobalItem(id, itemBuilder())
-                }
-            }
         }
 
         fun newNative(
@@ -290,34 +151,46 @@ object KattonRegistry {
         ): KattonItemEntry {
             if (!Katton.globalState.after(LoadState.INIT)) {
                 val placeholder = KattonItemEntry(id = components.id, item = Items.AIR, properties = components)
-                @Suppress("DEPRECATION")
                 register(placeholder)
-                itemTracker.markManaged(components.id, registerMode)
-                synchronized(pendingNativeRegistrations) {
-                    pendingNativeRegistrations.add(components.id to {
-                        components.setId(ResourceKey.create(Registries.ITEM, components.id))
-                        components.finalizeComponentInitializer()
-                        itemFactory(components)
-                    })
+                delegate.markManaged(components.id, registerMode)
+                delegate.addPendingRegistration(components.id) {
+                    components.setId(ResourceKey.create(Registries.ITEM, components.id))
+                    components.finalizeComponentInitializer()
+                    itemFactory(components)
                 }
                 return placeholder
             }
 
+            // Even when RELOADABLE returns an existing registered item,
+            // the fresh KattonItemProperties used for rebinding components
+            // still needs itemId to satisfy component initializer paths.
+            components.setId(ResourceKey.create(Registries.ITEM, components.id))
+
             val delayedFactory = {
-                components.setId(ResourceKey.create(Registries.ITEM, components.id))
                 components.finalizeComponentInitializer()
                 itemFactory(components)
             }
-            val entry = KattonItemEntry(
-                id = components.id,
-                item = registerItemWithMode(components.id, registerMode, { delayedFactory() }, components),
-                properties = components
-            )
-            @Suppress("DEPRECATION")
+            val item = delegate.registerWithMode(components.id, registerMode) { delayedFactory() }
+            bindHolderComponents(item, components)
+            val entry = KattonItemEntry(id = components.id, item = item, properties = components)
             register(entry)
-            itemTracker.markManaged(components.id, registerMode)
+            delegate.markManaged(components.id, registerMode)
             return entry
         }
+
+        fun flushPendingRegistrations() {
+            delegate.flushPendingRegistrations()
+        }
+
+        fun hasPendingRegistrations(): Boolean = delegate.hasPendingRegistrations()
+
+        fun registryHealth(): RegistryHealth = RegistryHealth(
+            key = "items",
+            kattonEntries = size,
+            managedTracked = delegate.managedIdsSnapshot().size,
+            staleRetained = delegate.staleManagedIdsSnapshot().size,
+            pendingRegistrations = if (delegate.hasPendingRegistrations()) 1 else 0
+        )
     }
 
     /**
@@ -325,58 +198,17 @@ object KattonRegistry {
      */
     object EFFECTS : KattonRegistries<KattonMobEffectEntry>(id(MOD_ID, "effect")) {
 
-        private val effectTracker = OwnershipTracker()
-
-        private fun registerGlobalEffect(id: Identifier, effect: MobEffect): MobEffect =
-            Registry.register(BuiltInRegistries.MOB_EFFECT, id, effect)
+        private val delegate = ReloadableBuiltInRegistry(
+            builtInRegistry = BuiltInRegistries.MOB_EFFECT,
+            registryKey = Registries.MOB_EFFECT,
+            requiresIntrusiveHolders = false,
+            unregisterOnReload = false
+        )
 
         @Synchronized
         fun beginReload() {
-            effectTracker.beginReload(
-                BuiltInRegistries.MOB_EFFECT as MappedRegistry<MobEffect>,
-                { ResourceKey.create(Registries.MOB_EFFECT, it) },
-                this
-            )
-        }
-
-        private fun ensureGlobalEffectRegistered(
-            id: Identifier,
-            effectBuilder: () -> MobEffect
-        ): MobEffect {
-            val existing = BuiltInRegistries.MOB_EFFECT.getOptional(id)
-            if (existing.isPresent) {
-                return existing.get()
-            }
-            return registerNewEffect(id, effectBuilder)
-        }
-
-        private fun registerNewEffect(
-            id: Identifier,
-            effectBuilder: () -> MobEffect
-        ): MobEffect {
-            @Suppress("UNCHECKED_CAST")
-            val effectRegistry = BuiltInRegistries.MOB_EFFECT as MappedRegistry<MobEffect>
-
-            return RegistryMutationUtil.withUnfrozenRegistry(effectRegistry) {
-                val effect = effectBuilder()
-                Registry.register(BuiltInRegistries.MOB_EFFECT, id, effect)
-            }
-        }
-
-        private fun registerEffectWithMode(
-            id: Identifier,
-            registerMode: RegisterMode,
-            effectBuilder: () -> MobEffect
-        ): MobEffect = when (registerMode) {
-            RegisterMode.GLOBAL -> registerGlobalEffect(id, effectBuilder())
-            RegisterMode.RELOADABLE -> ensureGlobalEffectRegistered(id, effectBuilder)
-            RegisterMode.AUTO -> {
-                if (Katton.globalState.after(LoadState.INIT)) {
-                    ensureGlobalEffectRegistered(id, effectBuilder)
-                } else {
-                    registerGlobalEffect(id, effectBuilder())
-                }
-            }
+            val removed = delegate.beginReload()
+            removed.forEach { remove(it) }
         }
 
         fun newNative(
@@ -384,15 +216,20 @@ object KattonRegistry {
             registerMode: RegisterMode = RegisterMode.AUTO,
             effectFactory: () -> MobEffect
         ): KattonMobEffectEntry {
-            val entry = KattonMobEffectEntry(
-                id = id,
-                effect = registerEffectWithMode(id, registerMode, effectFactory)
-            )
-            @Suppress("DEPRECATION")
+            val effect = delegate.registerWithMode(id, registerMode, effectFactory)
+            val entry = KattonMobEffectEntry(id = id, effect = effect)
             register(entry)
-            effectTracker.markManaged(id, registerMode)
+            delegate.markManaged(id, registerMode)
             return entry
         }
+
+        fun registryHealth(): RegistryHealth = RegistryHealth(
+            key = "effects",
+            kattonEntries = size,
+            managedTracked = delegate.managedIdsSnapshot().size,
+            staleRetained = delegate.staleManagedIdsSnapshot().size,
+            pendingRegistrations = 0
+        )
     }
 
     /**
@@ -400,108 +237,535 @@ object KattonRegistry {
      */
     object BLOCKS : KattonRegistries<KattonBlockEntry>(id(MOD_ID, "block")) {
 
-        private val blockTracker = OwnershipTracker()
-
-        private fun registerGlobalBlock(id: Identifier, block: Block): Block =
-            Registry.register(BuiltInRegistries.BLOCK, id, block)
+        private val delegate = ReloadableBuiltInRegistry(
+            builtInRegistry = BuiltInRegistries.BLOCK,
+            registryKey = Registries.BLOCK,
+            requiresIntrusiveHolders = true,
+            unregisterOnReload = false
+        )
 
         @Synchronized
         fun beginReload() {
-            blockTracker.beginReload(
-                BuiltInRegistries.BLOCK as MappedRegistry<Block>,
-                { ResourceKey.create(Registries.BLOCK, it) },
-                this
-            )
+            val removed = delegate.beginReload()
+            removed.forEach { remove(it) }
         }
 
-        private fun ensureGlobalBlockRegistered(
-            id: Identifier,
-            blockBuilder: (BlockBehaviour.Properties) -> Block
-        ): Block {
-            val existing = BuiltInRegistries.BLOCK.getOptional(id)
-            if (existing.isPresent) {
-                val block = existing.get()
-                block.builtInRegistryHolder().tags = emptySet()
-                return block
-            }
-            return registerNewBlock(id, blockBuilder)
-        }
-
-        private fun registerNewBlock(
-            id: Identifier,
-            blockBuilder: (BlockBehaviour.Properties) -> Block
-        ): Block {
-            @Suppress("UNCHECKED_CAST")
-            val blockRegistry = BuiltInRegistries.BLOCK as MappedRegistry<Block>
-
-            return RegistryMutationUtil.withUnfrozenAndHolders(blockRegistry) {
-                val props = BlockBehaviour.Properties.of().setId(ResourceKey.create(Registries.BLOCK, id))
-                val block = blockBuilder(props)
-                val registered = Registry.register(BuiltInRegistries.BLOCK, id, block)
-                registered.builtInRegistryHolder().tags = emptySet()
-                DynamicRegistryHooks.onDynamicBlockRegistered(registered)
-                registered
-            }
-        }
-
-        private fun registerBlockWithMode(
-            id: Identifier,
-            registerMode: RegisterMode,
-            blockBuilder: (BlockBehaviour.Properties) -> Block
-        ): Block = when (registerMode) {
-            RegisterMode.GLOBAL -> {
-                val props = BlockBehaviour.Properties.of().setId(ResourceKey.create(Registries.BLOCK, id))
-                registerGlobalBlock(id, blockBuilder(props))
-            }
-            RegisterMode.RELOADABLE -> ensureGlobalBlockRegistered(id, blockBuilder)
-            RegisterMode.AUTO -> {
-                if (Katton.globalState.after(LoadState.INIT)) {
-                    ensureGlobalBlockRegistered(id, blockBuilder)
-                } else {
-                    val props = BlockBehaviour.Properties.of().setId(ResourceKey.create(Registries.BLOCK, id))
-                    registerGlobalBlock(id, blockBuilder(props))
-                }
-            }
-        }
+        private fun blockProperties(id: Identifier) =
+            BlockBehaviour.Properties.of().setId(ResourceKey.create(Registries.BLOCK, id))
 
         fun newNative(
             id: Identifier,
             registerMode: RegisterMode = RegisterMode.AUTO,
             blockFactory: (BlockBehaviour.Properties) -> Block
         ): KattonBlockEntry {
-            val entry = KattonBlockEntry(
-                id = id,
-                block = registerBlockWithMode(id, registerMode, blockFactory)
-            )
-            @Suppress("DEPRECATION")
+            val block = when (registerMode) {
+                RegisterMode.GLOBAL -> {
+                    delegate.registerGlobal(id, blockFactory(blockProperties(id)))
+                }
+                RegisterMode.RELOADABLE -> {
+                    delegate.ensureRegistered(
+                        id = id,
+                        builder = { blockFactory(blockProperties(id)) },
+                        onExisting = { it.builtInRegistryHolder().tags = emptySet() }
+                    )
+                }
+                RegisterMode.AUTO -> {
+                    if (Katton.globalState.after(LoadState.INIT)) {
+                        delegate.ensureRegistered(
+                            id = id,
+                            builder = { blockFactory(blockProperties(id)) },
+                            onExisting = { it.builtInRegistryHolder().tags = emptySet() }
+                        )
+                    } else {
+                        delegate.registerGlobal(id, blockFactory(blockProperties(id)))
+                    }
+                }
+            }
+            block.builtInRegistryHolder().tags = emptySet()
+            DynamicRegistryHooks.onDynamicBlockRegistered(block)
+            val entry = KattonBlockEntry(id = id, block = block)
             register(entry)
-            blockTracker.markManaged(id, registerMode)
+            delegate.markManaged(id, registerMode)
             return entry
         }
+
+        fun registryHealth(): RegistryHealth = RegistryHealth(
+            key = "blocks",
+            kattonEntries = size,
+            managedTracked = delegate.managedIdsSnapshot().size,
+            staleRetained = delegate.staleManagedIdsSnapshot().size,
+            pendingRegistrations = 0
+        )
     }
 
     /**
-     * Custom data component types for Katton.
-     * 
-     * This object defines and registers custom data component types that
-     * can be attached to items for storing mod-specific data.
+     * Represents a registered entity type entry.
      */
-    object COMPONENTS {
-        /**
-         * A data component type for storing Katton-specific string identifiers.
-         */
-        lateinit var KATTON_ID: DataComponentType<String>
+    data class KattonEntityTypeEntry(
+        override val id: Identifier,
+        val entityType: net.minecraft.world.entity.EntityType<*>,
+        val properties: KattonEntityProperties? = null,
+        val spawnEggEntry: KattonItemEntry? = null
+    ) : Identifiable
+
+    /**
+     * Represents a registered sound event entry.
+     */
+    data class KattonSoundEventEntry(
+        override val id: Identifier,
+        val soundEvent: net.minecraft.sounds.SoundEvent
+    ) : Identifiable
+
+    /**
+     * Represents a registered particle type entry.
+     */
+    data class KattonParticleTypeEntry(
+        override val id: Identifier,
+        val particleType: net.minecraft.core.particles.ParticleType<*>
+    ) : Identifiable
+
+    /**
+     * Registry for Katton entity types.
+     */
+    object ENTITY_TYPES : KattonRegistries<KattonEntityTypeEntry>(id(MOD_ID, "entity_type")) {
+
+        private val delegate = ReloadableBuiltInRegistry(
+            builtInRegistry = BuiltInRegistries.ENTITY_TYPE,
+            registryKey = Registries.ENTITY_TYPE,
+            requiresIntrusiveHolders = true,
+            unregisterOnReload = false
+        )
+
+        /** Tracks entity IDs that have registered attributes, for cleanup on reload. */
+        private val registeredAttributes = mutableSetOf<Identifier>()
+
+        /** Tracks entity IDs that have registered spawn placements, for cleanup on reload. */
+        private val registeredSpawnPlacements = mutableSetOf<Identifier>()
+
+        @Synchronized
+        fun beginReload() {
+            val removed = delegate.beginReload()
+            // Unregister attributes for removed entities
+            removed.forEach { entityId ->
+                unregisterAttributes(entityId)
+                unregisterSpawnPlacement(entityId)
+                remove(entityId)
+            }
+        }
+
+        private fun clearEntityTypeTags(entityType: net.minecraft.world.entity.EntityType<*>) {
+            runCatching {
+                entityType.builtInRegistryHolder().tags = emptySet()
+            }
+        }
+
+        fun newNative(
+            id: Identifier,
+            registerMode: RegisterMode = RegisterMode.AUTO,
+            entityTypeFactory: () -> net.minecraft.world.entity.EntityType<*>
+        ): KattonEntityTypeEntry {
+            val entityType = delegate.registerWithMode(id, registerMode, entityTypeFactory)
+            clearEntityTypeTags(entityType)
+            val entry = KattonEntityTypeEntry(id = id, entityType = entityType)
+            register(entry)
+            delegate.markManaged(id, registerMode)
+            return entry
+        }
 
         /**
-         * Initializes and registers the custom data component types.
-         * 
-         * This method is idempotent and can be called multiple times safely.
+         * Registers a complete entity with attributes, spawn egg, and spawn placement.
+         *
+         * @param id Entity identifier
+         * @param registerMode Registration mode
+         * @param properties Entity configuration (dimensions, category, attributes, spawn egg, spawn placement)
+         * @param entityFactory Factory that creates the EntityType from the configured properties
+         * @return The registered KattonEntityTypeEntry
          */
+        fun newNativeWithProperties(
+            id: Identifier,
+            registerMode: RegisterMode = RegisterMode.AUTO,
+            properties: KattonEntityProperties,
+            entityFactory: (KattonEntityProperties) -> net.minecraft.world.entity.EntityType<*>
+        ): KattonEntityTypeEntry {
+            val entityType = delegate.registerWithMode(id, registerMode) { entityFactory(properties) }
+            clearEntityTypeTags(entityType)
+            val isReloadable = registerMode == RegisterMode.RELOADABLE ||
+                (registerMode == RegisterMode.AUTO && Katton.globalState.after(LoadState.INIT))
+
+            @Suppress("UNCHECKED_CAST")
+            val castType = entityType as? net.minecraft.world.entity.EntityType<net.minecraft.world.entity.LivingEntity>
+
+            // Register attributes if configured and entity is a LivingEntity
+            if (castType != null && properties.hasAttributes) {
+                val attributeSupplier = properties.buildAttributes()
+                if (attributeSupplier != null) {
+                    registerEntityAttributes(castType, attributeSupplier, isReloadable)
+                    registeredAttributes.add(id)
+                }
+            }
+
+            // Register spawn placement if configured
+            if (castType != null && properties.spawnPlacementType != null) {
+                @Suppress("UNCHECKED_CAST")
+                registerSpawnPlacement(
+                    castType as net.minecraft.world.entity.EntityType<net.minecraft.world.entity.Mob>,
+                    properties.spawnPlacementType!!,
+                    properties.spawnHeightmap,
+                    isReloadable,
+                    net.minecraft.world.entity.SpawnPlacements.SpawnPredicate<net.minecraft.world.entity.Mob> { _, _, _, _, _ -> true }
+                )
+                registeredSpawnPlacements.add(id)
+            }
+
+            // Register spawn egg if configured
+            var spawnEggEntry: KattonItemEntry? = null
+            if (properties.spawnEgg) {
+                spawnEggEntry = registerSpawnEgg(id, properties, entityType, registerMode)
+            }
+
+            val entry = KattonEntityTypeEntry(
+                id = id,
+                entityType = entityType,
+                properties = properties,
+                spawnEggEntry = spawnEggEntry
+            )
+            register(entry)
+            delegate.markManaged(id, registerMode)
+            return entry
+        }
+
+        /**
+         * Registers entity attributes via the platform hook.
+         *
+         * @param entityType the entity type
+         * @param attributeSupplier the attribute supplier
+         * @param reloadable true for RELOADABLE/AUTO-after-init, false for GLOBAL/AUTO-at-init
+         */
+        private fun registerEntityAttributes(
+            entityType: net.minecraft.world.entity.EntityType<out net.minecraft.world.entity.LivingEntity>,
+            attributeSupplier: net.minecraft.world.entity.ai.attributes.AttributeSupplier,
+            reloadable: Boolean
+        ) {
+            top.katton.platform.EntityAttributeHooks.registerAttributes(entityType, attributeSupplier, reloadable)
+        }
+
+        /**
+         * Unregisters attributes for an entity (hot-reload cleanup).
+         */
+        private fun unregisterAttributes(entityId: Identifier) {
+            if (entityId !in registeredAttributes) return
+            registeredAttributes.remove(entityId)
+            val entityType = delegate.builtInRegistry.getOptional(entityId)
+            if (entityType.isPresent) {
+                top.katton.registry.DefaultAttributesHelper.unregister(entityType.get())
+            }
+        }
+
+        /**
+         * Registers a spawn placement rule, choosing platform-specific path based on mode.
+         */
+        private fun <T : net.minecraft.world.entity.Mob> registerSpawnPlacement(
+            entityType: net.minecraft.world.entity.EntityType<T>,
+            placementType: net.minecraft.world.entity.SpawnPlacementType,
+            heightmap: net.minecraft.world.level.levelgen.Heightmap.Types,
+            reloadable: Boolean,
+            predicate: net.minecraft.world.entity.SpawnPlacements.SpawnPredicate<T>
+        ) {
+            if (reloadable) {
+                SpawnPlacementHooks.registerReloadable(entityType, placementType, heightmap, predicate)
+            } else {
+                SpawnPlacementHooks.registerGlobal(entityType, placementType, heightmap, predicate)
+            }
+        }
+
+        /**
+         * Unregisters a spawn placement (hot-reload cleanup).
+         */
+        private fun unregisterSpawnPlacement(entityId: Identifier) {
+            if (entityId !in registeredSpawnPlacements) return
+            registeredSpawnPlacements.remove(entityId)
+            val entityType = delegate.builtInRegistry.getOptional(entityId)
+            if (entityType.isPresent) {
+                SpawnPlacementHooks.unregister(entityType.get())
+            }
+        }
+
+        /**
+         * Registers a spawn egg item for an entity type.
+         *
+         * In MC 1.21.11+, spawn egg items use data components instead of constructor args.
+         * The entity type is bound via `Item.Properties.spawnEgg(entityType)`.
+         * Spawn egg colors are derived from the entity type automatically.
+         */
+        private fun registerSpawnEgg(
+            entityId: Identifier,
+            properties: KattonEntityProperties,
+            entityType: net.minecraft.world.entity.EntityType<*>,
+            registerMode: RegisterMode
+        ): KattonItemEntry {
+            val eggId = entityId.withPath("${entityId.path}_spawn_egg")
+            val eggProperties = KattonItemProperties(eggId).apply {
+                stacksTo(64)
+                setModel(id("minecraft:item/zombie_spawn_egg"))
+                // Bind the entity type to the spawn egg item via data component.
+                // In MC 1.21.11+, spawnEgg() sets DataComponents.ENTITY_DATA.
+                spawnEgg(entityType)
+            }
+            return ITEMS.newNative(eggProperties, registerMode) { props ->
+                net.minecraft.world.item.SpawnEggItem(props)
+            }
+        }
+
+        fun registryHealth(): RegistryHealth = RegistryHealth(
+            key = "entity_types",
+            kattonEntries = size,
+            managedTracked = delegate.managedIdsSnapshot().size,
+            staleRetained = delegate.staleManagedIdsSnapshot().size,
+            pendingRegistrations = 0
+        )
+    }
+
+    /**
+     * Registry for Katton sound events.
+     */
+    object SOUND_EVENTS : KattonRegistries<KattonSoundEventEntry>(id(MOD_ID, "sound_event")) {
+
+        private val delegate = ReloadableBuiltInRegistry(
+            builtInRegistry = BuiltInRegistries.SOUND_EVENT,
+            registryKey = Registries.SOUND_EVENT,
+            requiresIntrusiveHolders = false,
+            unregisterOnReload = false
+        )
+
+        @Synchronized
+        fun beginReload() {
+            val removed = delegate.beginReload()
+            removed.forEach { remove(it) }
+        }
+
+        fun newNative(
+            id: Identifier,
+            registerMode: RegisterMode = RegisterMode.AUTO,
+            soundEventFactory: () -> net.minecraft.sounds.SoundEvent
+        ): KattonSoundEventEntry {
+            val soundEvent = delegate.registerWithMode(id, registerMode, soundEventFactory)
+            val entry = KattonSoundEventEntry(id = id, soundEvent = soundEvent)
+            register(entry)
+            delegate.markManaged(id, registerMode)
+            return entry
+        }
+
+        fun registryHealth(): RegistryHealth = RegistryHealth(
+            key = "sound_events",
+            kattonEntries = size,
+            managedTracked = delegate.managedIdsSnapshot().size,
+            staleRetained = delegate.staleManagedIdsSnapshot().size,
+            pendingRegistrations = 0
+        )
+    }
+
+    /**
+     * Registry for Katton particle types.
+     */
+    object PARTICLE_TYPES : KattonRegistries<KattonParticleTypeEntry>(id(MOD_ID, "particle_type")) {
+
+        private val delegate = ReloadableBuiltInRegistry(
+            builtInRegistry = BuiltInRegistries.PARTICLE_TYPE,
+            registryKey = Registries.PARTICLE_TYPE,
+            requiresIntrusiveHolders = true,
+            unregisterOnReload = false
+        )
+
+        @Synchronized
+        fun beginReload() {
+            val removed = delegate.beginReload()
+            removed.forEach { remove(it) }
+        }
+
+        fun newNative(
+            id: Identifier,
+            registerMode: RegisterMode = RegisterMode.AUTO,
+            particleTypeFactory: () -> net.minecraft.core.particles.ParticleType<*>
+        ): KattonParticleTypeEntry {
+            val particleType = delegate.registerWithMode(id, registerMode, particleTypeFactory)
+            val entry = KattonParticleTypeEntry(id = id, particleType = particleType)
+            register(entry)
+            delegate.markManaged(id, registerMode)
+            return entry
+        }
+
+        fun registryHealth(): RegistryHealth = RegistryHealth(
+            key = "particle_types",
+            kattonEntries = size,
+            managedTracked = delegate.managedIdsSnapshot().size,
+            staleRetained = delegate.staleManagedIdsSnapshot().size,
+            pendingRegistrations = 0
+        )
+    }
+
+    /**
+     * Represents a registered block entity type entry.
+     */
+    data class KattonBlockEntityTypeEntry(
+        override val id: Identifier,
+        val blockEntityType: net.minecraft.world.level.block.entity.BlockEntityType<*>
+    ) : Identifiable
+
+    /**
+     * Registry for Katton block entity types.
+     */
+    object BLOCK_ENTITY_TYPES : KattonRegistries<KattonBlockEntityTypeEntry>(id(MOD_ID, "block_entity_type")) {
+
+        private val delegate = ReloadableBuiltInRegistry(
+            builtInRegistry = BuiltInRegistries.BLOCK_ENTITY_TYPE,
+            registryKey = Registries.BLOCK_ENTITY_TYPE,
+            requiresIntrusiveHolders = true,
+            unregisterOnReload = false
+        )
+
+        @Synchronized
+        fun beginReload() {
+            val removed = delegate.beginReload()
+            removed.forEach { remove(it) }
+        }
+
+        fun newNative(
+            id: Identifier,
+            registerMode: RegisterMode = RegisterMode.AUTO,
+            blockEntityTypeFactory: () -> net.minecraft.world.level.block.entity.BlockEntityType<*>
+        ): KattonBlockEntityTypeEntry {
+            val blockEntityType = delegate.registerWithMode(id, registerMode, blockEntityTypeFactory)
+            val entry = KattonBlockEntityTypeEntry(id = id, blockEntityType = blockEntityType)
+            register(entry)
+            delegate.markManaged(id, registerMode)
+            return entry
+        }
+
+        fun registryHealth(): RegistryHealth = RegistryHealth(
+            key = "block_entity_types",
+            kattonEntries = size,
+            managedTracked = delegate.managedIdsSnapshot().size,
+            staleRetained = delegate.staleManagedIdsSnapshot().size,
+            pendingRegistrations = 0
+        )
+    }
+
+    /**
+     * Represents a registered creative mode tab entry.
+     */
+    data class KattonCreativeTabEntry(
+        override val id: Identifier,
+        val tab: net.minecraft.world.item.CreativeModeTab
+    ) : Identifiable
+
+    /**
+     * Registry for Katton creative mode tabs.
+     */
+    object CREATIVE_TABS : KattonRegistries<KattonCreativeTabEntry>(id(MOD_ID, "creative_tab")) {
+
+        private val delegate = ReloadableBuiltInRegistry(
+            builtInRegistry = BuiltInRegistries.CREATIVE_MODE_TAB,
+            registryKey = Registries.CREATIVE_MODE_TAB,
+            requiresIntrusiveHolders = false
+        )
+
+        @Synchronized
+        fun beginReload() {
+            val removed = delegate.beginReload()
+            removed.forEach { remove(it) }
+        }
+
+        fun newNative(
+            id: Identifier,
+            registerMode: RegisterMode = RegisterMode.AUTO,
+            tabFactory: () -> net.minecraft.world.item.CreativeModeTab
+        ): KattonCreativeTabEntry {
+            val tab = delegate.registerWithMode(id, registerMode, tabFactory)
+            val entry = KattonCreativeTabEntry(id = id, tab = tab)
+            register(entry)
+            delegate.markManaged(id, registerMode)
+            return entry
+        }
+
+        fun registryHealth(): RegistryHealth = RegistryHealth(
+            key = "creative_tabs",
+            kattonEntries = size,
+            managedTracked = delegate.managedIdsSnapshot().size,
+            staleRetained = delegate.staleManagedIdsSnapshot().size,
+            pendingRegistrations = 0
+        )
+    }
+
+    /**
+     * Represents a registered data component type entry.
+     */
+    data class KattonDataComponentTypeEntry(
+        override val id: Identifier,
+        val componentType: DataComponentType<*>
+    ) : Identifiable
+
+    /**
+     * Registry for Katton data component types.
+     */
+    object DATA_COMPONENT_TYPES : KattonRegistries<KattonDataComponentTypeEntry>(id(MOD_ID, "data_component_type")) {
+
+        private val delegate = ReloadableBuiltInRegistry(
+            builtInRegistry = BuiltInRegistries.DATA_COMPONENT_TYPE,
+            registryKey = Registries.DATA_COMPONENT_TYPE,
+            requiresIntrusiveHolders = false,
+            unregisterOnReload = false
+        )
+
+        @Synchronized
+        fun beginReload() {
+            val removed = delegate.beginReload()
+            removed.forEach { remove(it) }
+        }
+
+        fun <T : Any> newNative(
+            id: Identifier,
+            registerMode: RegisterMode = RegisterMode.AUTO,
+            componentTypeFactory: () -> DataComponentType<T>
+        ): KattonDataComponentTypeEntry {
+            val componentType = delegate.registerWithMode(id, registerMode, componentTypeFactory)
+            val entry = KattonDataComponentTypeEntry(id = id, componentType = componentType)
+            register(entry)
+            delegate.markManaged(id, registerMode)
+            return entry
+        }
+
+        fun registryHealth(): RegistryHealth = RegistryHealth(
+            key = "data_component_types",
+            kattonEntries = size,
+            managedTracked = delegate.managedIdsSnapshot().size,
+            staleRetained = delegate.staleManagedIdsSnapshot().size,
+            pendingRegistrations = 0
+        )
+    }
+
+    fun registryHealthSnapshot(): List<RegistryHealth> = listOf(
+        ITEMS.registryHealth(),
+        EFFECTS.registryHealth(),
+        BLOCKS.registryHealth(),
+        ENTITY_TYPES.registryHealth(),
+        SOUND_EVENTS.registryHealth(),
+        PARTICLE_TYPES.registryHealth(),
+        BLOCK_ENTITY_TYPES.registryHealth(),
+        CREATIVE_TABS.registryHealth(),
+        DATA_COMPONENT_TYPES.registryHealth()
+    )
+
+    /**
+     * Custom data component types for Katton.
+     */
+    object COMPONENTS {
+        lateinit var KATTON_ID: DataComponentType<String>
+
         fun initialize() {
             if (::KATTON_ID.isInitialized) return
 
             @Suppress("UNCHECKED_CAST")
-            val componentRegistry = BuiltInRegistries.DATA_COMPONENT_TYPE as MappedRegistry<DataComponentType<*>>
+            val componentRegistry = BuiltInRegistries.DATA_COMPONENT_TYPE as net.minecraft.core.MappedRegistry<DataComponentType<*>>
 
             RegistryMutationUtil.withUnfrozenRegistry(componentRegistry) {
                 KATTON_ID = Registry.register(
@@ -515,9 +779,6 @@ object KattonRegistry {
 
     /**
      * Initializes all Katton registries.
-     * 
-     * This method should be called during mod initialization to ensure
-     * all custom data component types are registered.
      */
     fun initialize() {
         COMPONENTS.initialize()

@@ -5,6 +5,7 @@ import org.jetbrains.kotlin.scripting.compiler.plugin.impl.KJvmCompiledModuleInM
 import top.katton.api.ClientScriptEntrypoint
 import top.katton.api.LOGGER
 import top.katton.api.ServerScriptEntrypoint
+import top.katton.client.ReloadProgressState
 import top.katton.pack.ScriptPack
 import top.katton.pack.ScriptPackKind
 import top.katton.pack.ScriptPackScope
@@ -18,6 +19,7 @@ import java.nio.file.Path
 import java.security.MessageDigest
 import java.util.Optional
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.CountDownLatch
 import java.util.jar.JarFile
 import kotlin.jvm.optionals.getOrNull
 import kotlin.script.experimental.api.CompiledScript
@@ -90,16 +92,37 @@ object ScriptEngine {
     @JvmStatic
     fun compileAndExecuteAll(packs: Collection<ScriptPack>, environment: ScriptEnvironment) {
         val enabledPacks = packs.filter { it.enabled }
-        if (enabledPacks.isEmpty()) return
+        if (enabledPacks.isEmpty()) {
+            ReloadProgressState.update("No enabled ${environment.name.lowercase()} script packs", 0.95f)
+            return
+        }
 
         val scopeGroups = enabledPacks.groupBy { it.scope }
         val globalJarPacks = enabledPacks.filter { it.scope == ScriptPackScope.GLOBAL && it.kind == ScriptPackKind.JAR }
 
-        for ((scope, scopePacks) in scopeGroups) {
+        val scopeEntries = scopeGroups.entries.toList()
+        val scopeCount = scopeEntries.size.coerceAtLeast(1)
+        val baseProgress = if (environment == ScriptEnvironment.SERVER) 0.50f else 0.46f
+        val maxProgress = if (environment == ScriptEnvironment.SERVER) 0.80f else 0.88f
+        ReloadProgressState.update(
+            "Preparing ${environment.name.lowercase()} script scopes",
+            baseProgress
+        )
+
+        scopeEntries.forEachIndexed { index, (scope, scopePacks) ->
+            val stepProgress = baseProgress + (maxProgress - baseProgress) * (index.toFloat() / scopeCount.toFloat())
+            ReloadProgressState.update(
+                "Compiling ${environment.name.lowercase()} scope ${scope.serializedName} (${index + 1}/$scopeCount)",
+                stepProgress.coerceIn(baseProgress, maxProgress)
+            )
             ScriptExecutionContext.withScope(scope) {
                 compileAndExecuteScope(scopePacks, environment, scope, globalJarPacks)
             }
         }
+        ReloadProgressState.update(
+            "Finished ${environment.name.lowercase()} script execution",
+            maxProgress
+        )
     }
 
     private fun compileAndExecuteScope(
@@ -341,8 +364,7 @@ object ScriptEngine {
                     }
 
                     ScriptExecutionContext.withOwner("${scope.serializedName}:$fqcn") {
-                        method.isAccessible = true
-                        method.invoke(null)
+                        invokeEntrypoint(method, environment)
                     }
                     successCount++
                 }
@@ -465,5 +487,45 @@ object ScriptEngine {
 
     private fun Method.annotationClassNames(): Set<String> {
         return annotations.mapNotNull { it.annotationClass.qualifiedName }.toSet()
+    }
+
+    private fun invokeEntrypoint(method: Method, environment: ScriptEnvironment) {
+        method.isAccessible = true
+        if (environment != ScriptEnvironment.CLIENT) {
+            method.invoke(null)
+            return
+        }
+        runOnClientMainThreadAndWait {
+            method.invoke(null)
+        }
+    }
+
+    private fun runOnClientMainThreadAndWait(action: () -> Unit) {
+        val minecraft = runCatching { net.minecraft.client.Minecraft.getInstance() }.getOrNull()
+        if (minecraft == null || minecraft.isSameThread) {
+            action()
+            return
+        }
+
+        val latch = CountDownLatch(1)
+        var failure: Throwable? = null
+        minecraft.execute {
+            try {
+                action()
+            } catch (t: Throwable) {
+                failure = t
+            } finally {
+                latch.countDown()
+            }
+        }
+
+        try {
+            latch.await()
+        } catch (interrupted: InterruptedException) {
+            Thread.currentThread().interrupt()
+            throw RuntimeException("Interrupted while waiting for client main-thread script execution", interrupted)
+        }
+
+        failure?.let { throw it }
     }
 }

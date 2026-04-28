@@ -28,17 +28,37 @@ import net.minecraft.core.component.DataComponentType;
 import net.minecraft.world.item.enchantment.Enchantment;
 import top.katton.util.EnchantmentUtil;
 
+/** Mixin accessor for {@link Enchantment.Builder} internals. */
 @Mixin(Enchantment.Builder.class)
 public interface EnchantmentBuilderAccessor extends EnchantmentUtil.EnchantmentBuilderAccessor {
+    /**
+     * Gets the enchantment definition.
+     * @return the enchantment definition
+     */
     @Accessor("definition")
     Enchantment.EnchantmentDefinition getDefinition();
 
+    /**
+     * Gets the exclusive set of enchantments.
+     * @return the exclusive set
+     */
     @Accessor("exclusiveSet")
     HolderSet<Enchantment> getExclusiveSet();
 
+    /**
+     * Gets the effect map builder.
+     * @return the effect map builder
+     */
     @Accessor("effectMapBuilder")
     DataComponentMap.Builder getEffectMap();
 
+    /**
+     * Invokes the internal effects list getter for the given component type.
+     *
+     * @param <E> the element type of the effects list
+     * @param type the data component type
+     * @return the effects list for the given type
+     */
     @Invoker("getEffectsList")
     <E> List<E> invokeGetEffectsList(DataComponentType<List<E>> type);
 }

@@ -6,6 +6,7 @@ import net.minecraft.core.component.DataComponents
 import net.minecraft.network.chat.Component
 import net.minecraft.resources.Identifier
 import net.minecraft.world.item.Item
+import org.slf4j.LoggerFactory
 import top.katton.api.server
 
 /**
@@ -25,6 +26,20 @@ import top.katton.api.server
 class KattonItemProperties(
     override val id: Identifier,
 ) : Item.Properties(), Identifiable {
+
+    companion object {
+        private val logger = LoggerFactory.getLogger(KattonItemProperties::class.java)
+
+        /**
+         * Creates a new KattonItemProperties with the given identifier.
+         * 
+         * This is a convenience factory method for creating properties instances.
+         * 
+         * @param id The identifier for the item
+         * @return A new KattonItemProperties instance
+         */
+        internal fun components(id: Identifier) = KattonItemProperties(id)
+    }
 
     private var _name: Component? = null
     
@@ -133,24 +148,13 @@ class KattonItemProperties(
         mapBuilder.set(DataComponents.ITEM_NAME, name)
         mapBuilder.set(DataComponents.ITEM_MODEL, model)
         
-        server?.let {
-            try {
-                this.componentInitializer.run(mapBuilder, it.registryAccess(), itemIdOrThrow())
-            } catch (_: Throwable) {
+server?.let {
+                try {
+                    this.componentInitializer.run(mapBuilder, it.registryAccess(), itemIdOrThrow())
+                } catch (e: Throwable) {
+                    logger.error("Failed to initialize components for item '{}'", id, e)
+                }
             }
-        }
         return mapBuilder.build()
-    }
-
-    companion object {
-        /**
-         * Creates a new KattonItemProperties with the given identifier.
-         * 
-         * This is a convenience factory method for creating properties instances.
-         * 
-         * @param id The identifier for the item
-         * @return A new KattonItemProperties instance
-         */
-        internal fun components(id: Identifier) = KattonItemProperties(id)
     }
 }

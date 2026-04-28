@@ -25,12 +25,19 @@ import top.katton.util.JResult;
 
 import java.util.Optional;
 
+/** Mixin into LivingEntity to hook combat, damage, death, and sleeping behavior events. */
 @SuppressWarnings({"DataFlowIssue", "ModifyVariableMayBeArgsOnly", "resource", "LocalMayBeArgsOnly"})
 @Mixin(LivingEntity.class)
 public abstract class LivingEntityMixin2 {
+    /** Checks whether this entity is dead or dying.
+     * @return true if the entity is dead or dying
+     */
     @Shadow
     public abstract boolean isDeadOrDying();
 
+    /** Returns the sleeping position of this entity, if any.
+     * @return an Optional containing the sleeping block position, or empty if not sleeping
+     */
     @Shadow
     public abstract Optional<BlockPos> getSleepingPos();
 

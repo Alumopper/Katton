@@ -571,6 +571,83 @@ object ReflectUtil {
     }
 
     //endregion
+
+    //region static — static field access, static final field replacement, static method invocation
+
+    /**
+     * Gets the value of a static field, resolving through the class hierarchy.
+     */
+    fun getStatic(clazz: Class<*>, fieldName: String): Result<*> {
+        val vh = findVarHandle(clazz, fieldName)
+            ?: return failure("Static field not found: $fieldName in ${clazz.name}")
+        return Result.success(vhGet(vh, null))
+    }
+
+    /**
+     * Gets the value of a static field with type checking.
+     */
+    fun <T> getStaticT(clazz: Class<*>, fieldName: String, fieldType: Class<T?>): Result<T?> {
+        val vh = findVarHandle(clazz, fieldName, fieldType)
+            ?: return failure("Static field not found: $fieldName in ${clazz.name}")
+        @Suppress("UNCHECKED_CAST")
+        return Result.success(vhGet(vh, null) as T?)
+    }
+
+    /**
+     * Replaces a static final field's value using [sun.misc.Unsafe].
+     *
+     * This is the only reliable way to replace an `ImmutableMap` or similar
+     * static final field on Java 17+ without `--add-opens` flags.
+     */
+    @Suppress("DEPRECATION", "PLATFORM_CLASS_MAPPED_TO_KOTLIN")
+    fun setStaticFinal(clazz: Class<*>, fieldName: String, newValue: Any?): Result<Unit> {
+        return try {
+            val field = clazz.getDeclaredField(fieldName).apply { isAccessible = true }
+            val unsafeField = sun.misc.Unsafe::class.java.getDeclaredField("theUnsafe").apply { isAccessible = true }
+            val unsafe = unsafeField.get(null) as sun.misc.Unsafe
+            val offset = unsafe.staticFieldOffset(field)
+            val base = unsafe.staticFieldBase(field)
+            unsafe.putObject(base, offset, newValue)
+            Result.success(Unit)
+        } catch (e: Exception) {
+            failure("Failed to set static final field $fieldName in ${clazz.name}", e)
+        }
+    }
+
+    /**
+     * Invokes a private static method via reflection.
+     */
+    @Suppress("UNCHECKED_CAST")
+    fun <R> invokeStatic(
+        clazz: Class<*>,
+        methodName: String,
+        paramTypes: Array<Class<*>>,
+        vararg args: Any?
+    ): Result<R> {
+        return try {
+            val method = clazz.getDeclaredMethod(methodName, *paramTypes).apply { isAccessible = true }
+            val mh = PUBLIC_LOOKUP.unreflect(method)
+            Result.success(invoke(mh, *args) as R)
+        } catch (e: NoSuchMethodException) {
+            failure("Static method not found: $methodName(${paramTypes.joinToString { it.simpleName }}) in ${clazz.name}", e)
+        } catch (e: Exception) {
+            failure("Failed to invoke static method $methodName in ${clazz.name}", e)
+        }
+    }
+
+    /**
+     * Resolves and returns a private static field, making it accessible.
+     */
+    fun resolveStaticField(clazz: Class<*>, fieldName: String): java.lang.reflect.Field? {
+        return try {
+            clazz.getDeclaredField(fieldName).apply { isAccessible = true }
+        } catch (_: NoSuchFieldException) {
+            null
+        }
+    }
+
+    //endregion
+
     private fun findConstructorHandle(target: Class<*>, vararg paramTypes: Class<*>): MethodHandle? {
         val k = ConstructorKey(target, paramTypes.toList())
         val result = CONSTRUCTOR_HANDLE_CACHE.computeIfAbsent(k) {

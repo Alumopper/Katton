@@ -43,3 +43,9 @@ replay_*.log
 .kotlin/
 /plans/
 /examples/
+
+#
+token-usage-output.txt
+docs/
+PLAN_registry_refactor.md
+/api/

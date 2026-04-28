@@ -112,15 +112,36 @@ public interface FabricLootPoolBuilder {
                 .apply(accessor.fabric_getFunctions());
     }
 
+    /** Accessor interface for loot pool internals via mixin. */
     interface LootPoolAccessor {
+        /**
+         * Gets the rolls number provider.
+         * @return the rolls provider
+         */
         NumberProvider fabric_getRolls();
 
+        /**
+         * Gets the bonus rolls number provider.
+         * @return the bonus rolls provider
+         */
         NumberProvider fabric_getBonusRolls();
 
+        /**
+         * Gets the loot pool entries.
+         * @return the list of entries
+         */
         List<LootPoolEntryContainer> fabric_getEntries();
 
+        /**
+         * Gets the loot pool conditions.
+         * @return the list of conditions
+         */
         List<LootItemCondition> fabric_getConditions();
 
+        /**
+         * Gets the loot pool functions.
+         * @return the list of functions
+         */
         List<LootItemFunction> fabric_getFunctions();
     }
 

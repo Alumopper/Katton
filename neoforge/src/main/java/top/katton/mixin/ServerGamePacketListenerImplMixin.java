@@ -42,6 +42,7 @@ import top.katton.api.event.PlayerPickFromBlockArg;
 import top.katton.api.event.PlayerPickFromEntityArg;
 import top.katton.api.event.ServerPlayerEvent;
 
+/** Mixin into ServerGamePacketListenerImpl to intercept pick-item actions from blocks and entities. */
 @Mixin(ServerGamePacketListenerImpl.class)
 public abstract class ServerGamePacketListenerImplMixin {
     @Shadow
@@ -52,6 +53,15 @@ public abstract class ServerGamePacketListenerImplMixin {
         throw new AssertionError();
     }
 
+    /** Intercepts block pick-item actions to allow scripts to customize the picked item.
+     * @param state the block state being picked
+     * @param level the level reader
+     * @param pos the block position
+     * @param includeData whether to include block data
+     * @param operation the original getCloneItemStack operation
+     * @param packet the pick-item-from-block packet
+     * @return the resulting item stack, or empty to prevent vanilla behavior
+     */
     @WrapOperation(method = "handlePickItemFromBlock", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/level/block/state/BlockState;getCloneItemStack(Lnet/minecraft/world/level/LevelReader;Lnet/minecraft/core/BlockPos;Z)Lnet/minecraft/world/item/ItemStack;"))
     public ItemStack onPickItemFromBlock(BlockState state, LevelReader level, BlockPos pos, boolean includeData, Operation<ItemStack> operation, @Local(argsOnly = true) ServerboundPickItemFromBlockPacket packet) {
         ItemStack stack = ServerPlayerEvent.onPickFromBlock.invoke(new PlayerPickFromBlockArg(player, pos, state, packet.includeData())).getOrNull();
@@ -66,6 +76,12 @@ public abstract class ServerGamePacketListenerImplMixin {
         return ItemStack.EMPTY;
     }
 
+    /** Intercepts entity pick-item actions to allow scripts to customize the picked item.
+     * @param entity the entity being picked
+     * @param operation the original getPickResult operation
+     * @param packet the pick-item-from-entity packet
+     * @return the resulting item stack, or empty to prevent vanilla behavior
+     */
     @WrapOperation(method = "handlePickItemFromEntity", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/entity/Entity;getPickResult()Lnet/minecraft/world/item/ItemStack;"))
     public ItemStack onPickItemFromEntity(Entity entity, Operation<ItemStack> operation, @Local(argsOnly = true) ServerboundPickItemFromEntityPacket packet) {
         ItemStack stack = ServerPlayerEvent.onPickFromEntity.invoke(new PlayerPickFromEntityArg(player, entity, packet.includeData())).getOrNull();

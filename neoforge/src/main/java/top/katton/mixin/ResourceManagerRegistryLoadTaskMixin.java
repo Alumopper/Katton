@@ -33,6 +33,7 @@ import net.minecraft.server.packs.resources.Resource;
 import net.minecraft.world.item.enchantment.Enchantment;
 import top.katton.util.EnchantmentUtil;
 
+/** Mixin into ResourceManagerRegistryLoadTask to modify enchantment data during registry loading. */
 @SuppressWarnings("unchecked")
 @Mixin(ResourceManagerRegistryLoadTask.class)
 public class ResourceManagerRegistryLoadTaskMixin {

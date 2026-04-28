@@ -1,3 +1,5 @@
+@file:Suppress("unused")
+
 package top.katton.api.registry
 
 import net.minecraft.resources.Identifier

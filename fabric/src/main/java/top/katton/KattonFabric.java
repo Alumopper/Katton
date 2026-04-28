@@ -2,6 +2,7 @@ package top.katton;
 
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.loader.api.FabricLoader;
+import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerConfigurationNetworking;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
@@ -10,6 +11,8 @@ import top.katton.command.ScriptCommand;
 import top.katton.network.Networking;
 import top.katton.network.ServerNetworking;
 import top.katton.pack.ScriptPackManager;
+import top.katton.platform.EntityAttributeHooks;
+import top.katton.platform.FabricEntityAttributeHooks;
 
 import static top.katton.Katton.*;
 
@@ -20,6 +23,10 @@ public class KattonFabric implements ModInitializer {
         setGameDirectory(FabricLoader.getInstance().getGameDir());
         mainInitialize();
         eventInitialize();
+
+        // Install Fabric-specific attribute registration hooks
+        EntityAttributeHooks.setGlobalRegistrar(FabricEntityAttributeHooks::registerAttributes);
+        EntityAttributeHooks.setReloadableRegistrar(FabricEntityAttributeHooks::registerAttributes);
 
         Networking.initialize();
         ServerNetworking.INSTANCE.setPlaySender(ServerPlayNetworking::send);
@@ -34,6 +41,8 @@ public class KattonFabric implements ModInitializer {
                 )
             )
         );
+
+        CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) -> ScriptCommand.INSTANCE.register(dispatcher));
 
         ServerLifecycleEvents.SERVER_STARTED.register(serverInstance -> {
             server = serverInstance;

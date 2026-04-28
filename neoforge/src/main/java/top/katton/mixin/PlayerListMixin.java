@@ -13,6 +13,7 @@ import net.minecraft.server.players.PlayerList;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import top.katton.api.event.*;
 
+/** Mixin into PlayerList to hook player connection, disconnection, respawn, and datapack sync events. */
 @Mixin(PlayerList.class)
 public class PlayerListMixin {
     @Inject(

@@ -17,6 +17,7 @@ import top.katton.command.ScriptCommand;
 import java.util.Collection;
 import java.util.concurrent.CompletableFuture;
 
+/** Mixin into MinecraftServer to hook datapack reload and server save lifecycle events. */
 @SuppressWarnings("DataFlowIssue")
 @Mixin(MinecraftServer.class)
 public class MinecraftServerMixin {

@@ -141,11 +141,11 @@ object LivingBehaviorEvent {
      * @return The modified direction for the player to face.
      */
     @JvmField
-    val onModifySleepingDirection = create { events: Array<(ModifySleepingDirectionArg) -> net.minecraft.core.Direction?> ->
+    val onModifySleepingDirection = create { events ->
         { arg: ModifySleepingDirectionArg ->
             var dir = arg.direction
             events.forEach {
-                handler -> dir = handler(arg.copy(direction = dir))
+                handler -> dir = handler.handler(arg.copy(direction = dir))
             }
             dir
         }
@@ -173,10 +173,10 @@ object LivingBehaviorEvent {
      * @return The modified Vec3 wake-up position.
      */
     @JvmField
-    val onModifyWakeUpPosition = create { events: Array<(ModifyWakeUpPositionArg) -> net.minecraft.world.phys.Vec3?> ->
+    val onModifyWakeUpPosition = create { events ->
         { arg: ModifyWakeUpPositionArg ->
             var p = arg.wakeUpPos
-            events.forEach { handler -> p = handler(arg.copy(wakeUpPos = p)) }
+            events.forEach { handler -> p = handler.handler(arg.copy(wakeUpPos = p)) }
             p
         }
     }

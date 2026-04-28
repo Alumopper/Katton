@@ -26,6 +26,7 @@ import net.minecraft.world.item.enchantment.Enchantment;
 
 import top.katton.util.EnchantmentUtil;
 
+/** Mixin that tracks modifications to {@link Enchantment.Builder} for the Katton event system. */
 @Mixin(Enchantment.Builder.class)
 public class EnchantmentBuilderMixin implements EnchantmentUtil.BuilderExtensions {
     @Unique
@@ -39,11 +40,16 @@ public class EnchantmentBuilderMixin implements EnchantmentUtil.BuilderExtension
         }
     }
 
+    /** Resets the modified flag on the builder. */
     @Override
     public void fabric$resetModified() {
         didModify = false;
     }
 
+    /**
+     * Checks whether the builder was modified.
+     * @return {@code true} if the builder was modified
+     */
     @Override
     public boolean fabric$didModify() {
         return didModify;

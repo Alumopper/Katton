@@ -4,6 +4,7 @@ import com.mojang.serialization.Lifecycle
 import it.unimi.dsi.fastutil.objects.Reference2IntMap
 import net.minecraft.core.Holder
 import net.minecraft.core.MappedRegistry
+import net.minecraft.resources.Identifier
 import net.minecraft.resources.ResourceKey
 import top.katton.util.ReflectUtil
 import java.util.IdentityHashMap
@@ -70,6 +71,28 @@ object RegistryMutationUtil {
         return withUnfrozenRegistry(registry) {
             removeEntry(registry, key, holder, value)
             value
+        }
+    }
+
+    /**
+     * Batch-unregisters all entries identified by [ids] from [registry].
+     * Unfreezes the registry once, removes all entries, then refreezes once,
+     * unlike calling [unregister] in a loop which unfreezes/refreezes per entry.
+     */
+    fun <T : Any> unregisterAll(
+        registry: MappedRegistry<T>,
+        ids: List<Identifier>,
+        resourceKey: (Identifier) -> ResourceKey<T>
+    ) {
+        if (ids.isEmpty()) return
+
+        withUnfrozenRegistry(registry) {
+            for (id in ids) {
+                val key = resourceKey(id)
+                val holder = registry.get(key).orElse(null) ?: continue
+                val value = holder.value()
+                removeEntry(registry, key, holder, value)
+            }
         }
     }
 

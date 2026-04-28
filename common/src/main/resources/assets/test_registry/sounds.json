@@ -1,0 +1,10 @@
+{
+  "test_sound": {
+    "subtitle": "subtitles.block.note_block.harp",
+    "sounds": [
+      {
+        "name": "minecraft:entity.experience_orb.pickup"
+      }
+    ]
+  }
+}

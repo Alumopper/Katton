@@ -41,6 +41,7 @@ private class ScriptPackManagerScreen(
 
     private lateinit var toggleButton: Button
     private lateinit var reloadButton: Button
+    private var reloadQueued: Boolean = false
 
     override fun init() {
         refreshData()
@@ -80,6 +81,13 @@ private class ScriptPackManagerScreen(
     override fun extractRenderState(graphics: GuiGraphicsExtractor, mouseX: Int, mouseY: Int, partialTick: Float) {
         super.extractRenderState(graphics, mouseX, mouseY, partialTick)
 
+        val panelLeft = 10
+        val panelTop = 6
+        val panelRight = width - 10
+        val panelBottom = height - 36
+        graphics.fill(panelLeft, panelTop, panelRight, panelBottom, 0x8A000000.toInt())
+        graphics.fill(panelLeft + 1, panelTop + 1, panelRight - 1, panelBottom - 1, 0x4D111111)
+
         graphics.text(font, title, 16, 10, 0xFFFFFFFF.toInt(), false)
 
         val listWidth = (width * 0.44f).toInt()
@@ -90,7 +98,8 @@ private class ScriptPackManagerScreen(
         val visibleRows = max(1, listHeight / ROW_HEIGHT)
         val start = scrollOffset.coerceIn(0, max(0, packs.size - visibleRows))
 
-        graphics.fill(listLeft - 2, listTop - 2, listLeft + listWidth, listBottom, 0x55000000)
+        graphics.fill(listLeft - 2, listTop - 2, listLeft + listWidth, listBottom, 0x7A000000)
+        graphics.fill(listLeft - 1, listTop - 1, listLeft + listWidth - 1, listBottom - 1, 0x4D202020)
 
         for (i in 0 until visibleRows) {
             val index = start + i
@@ -109,7 +118,15 @@ private class ScriptPackManagerScreen(
             graphics.text(font, label, listLeft + 4, rowTop + 5, 0xFFE0E0E0.toInt(), false)
         }
 
-        renderDetails(graphics, listLeft + listWidth + 12, listTop)
+        val detailsLeft = listLeft + listWidth + 10
+        val detailsTop = listTop - 2
+        val detailsRight = width - 16
+        val detailsBottom = listBottom
+        graphics.fill(detailsLeft, detailsTop, detailsRight, detailsBottom, 0x70000000)
+        graphics.fill(detailsLeft + 1, detailsTop + 1, detailsRight - 1, detailsBottom - 1, 0x40202020)
+
+        renderDetails(graphics, listLeft + listWidth + 16, listTop + 4)
+        ReloadProgressOverlay.renderExtractor(graphics)
     }
 
     private fun renderDetails(graphics: GuiGraphicsExtractor, x: Int, y: Int) {
@@ -207,7 +224,7 @@ private class ScriptPackManagerScreen(
     private fun updateButtons() {
         val selected = packs.getOrNull(selectedIndex)
         toggleButton.active = selected != null && !selected.locked && selected.scope != ScriptPackScope.SERVER_CACHE
-        reloadButton.active = true
+        reloadButton.active = !reloadQueued && !Katton.isClientReloadRunning()
     }
 
     private fun toggleSelectedPack() {
@@ -227,19 +244,44 @@ private class ScriptPackManagerScreen(
     }
 
     private fun triggerReload() {
-        val clientOk = Katton.reloadClientScripts()
-        val integratedServer = minecraft?.singleplayerServer
-        val serverOk = if (integratedServer != null) Katton.reloadScripts(integratedServer) else true
-
-        val message = if (clientOk && serverOk) {
-            Component.literal("[Katton] Reloaded script packs.")
-        } else {
-            Component.literal("[Katton] Reload failed. Check logs for details.")
+        val mc = minecraft ?: return
+        if (reloadQueued || Katton.isClientReloadRunning()) {
+            return
         }
 
-        minecraft?.player?.sendSystemMessage(message)
-        minecraft?.gui?.setOverlayMessage(message, false)
+        reloadQueued = true
+        updateButtons()
 
+        val integratedServer = mc.singleplayerServer
+        if (integratedServer != null) {
+            integratedServer.execute {
+                val serverOk = Katton.reloadScripts(integratedServer)
+                val clientOk = Katton.reloadClientScriptsAsync()
+                mc.execute {
+                    val message = if (serverOk && clientOk) {
+                        Component.literal("[Katton] Script reload started.")
+                    } else {
+                        Component.literal("[Katton] Reload failed. Check logs for details.")
+                    }
+                    mc.player?.sendSystemMessage(message)
+                    mc.gui?.setOverlayMessage(message, false)
+                    reloadQueued = false
+                    refreshData()
+                    updateButtons()
+                }
+            }
+            return
+        }
+
+        val clientOk = Katton.reloadClientScriptsAsync()
+        val message = if (clientOk) {
+            Component.literal("[Katton] Script reload started.")
+        } else {
+            Component.literal("[Katton] Reload already in progress.")
+        }
+        mc.player?.sendSystemMessage(message)
+        mc.gui?.setOverlayMessage(message, false)
+        reloadQueued = false
         refreshData()
         updateButtons()
     }

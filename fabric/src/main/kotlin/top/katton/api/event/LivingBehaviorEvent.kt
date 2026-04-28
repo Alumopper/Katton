@@ -142,7 +142,7 @@ object LivingBehaviorEvent {
     val onModifySleepingDirection = create { events ->
         { arg: ModifySleepingDirectionArg ->
             var d = arg.direction
-            events.forEach { e -> d = e(arg.copy(direction = d)) }
+            events.forEach { e -> d = e.handler(arg.copy(direction = d)) }
             d
         }
     }
@@ -169,7 +169,7 @@ object LivingBehaviorEvent {
     val onModifyWakeUpPosition = create { events ->
         { arg: ModifyWakeUpPositionArg ->
             var p = arg.wakeUpPos
-            events.forEach { e -> p = e(arg.copy(wakeUpPos = p)) }
+            events.forEach { e -> p = e.handler(arg.copy(wakeUpPos = p)) }
             p
         }
     }

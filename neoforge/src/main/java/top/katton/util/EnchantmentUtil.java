@@ -32,9 +32,17 @@ import top.katton.api.event.ModifyEnchantmentArg;
 import top.katton.bridger.EnchantmentSource;
 
 
+/** Utility class for modifying enchantments via the Katton event system. */
 public class EnchantmentUtil {
     private static final Logger LOGGER = LoggerFactory.getLogger(EnchantmentUtil.class);
 
+    /**
+     * Attempts to modify an enchantment by invoking the modify-enchantment event.
+     *
+     * @param key the resource key identifying the enchantment
+     * @param originalEnchantment the original enchantment to modify
+     * @return the modified enchantment, or {@code null} if no modifications were made
+     */
     @SuppressWarnings("unchecked")
     @Nullable
     public static Enchantment modify(ResourceKey<Enchantment> key, Enchantment originalEnchantment) {
@@ -75,19 +83,46 @@ public class EnchantmentUtil {
 
     private EnchantmentUtil() { }
 
+    /** Extensions interface for tracking whether an enchantment builder was modified. */
     public interface BuilderExtensions {
+        /** Resets the modified flag on the builder. */
         void fabric$resetModified();
+
+        /**
+         * Checks whether the builder was modified.
+         * @return {@code true} if the builder was modified
+         */
         boolean fabric$didModify();
     }
 
+    /** Accessor interface for enchantment builder internals via mixin. */
     public interface EnchantmentBuilderAccessor {
+        /**
+         * Gets the enchantment definition.
+         * @return the enchantment definition
+         */
         Enchantment.EnchantmentDefinition getDefinition();
 
+        /**
+         * Gets the exclusive set of enchantments.
+         * @return the exclusive set
+         */
         HolderSet<Enchantment> getExclusiveSet();
 
+        /**
+         * Gets the effect map builder.
+         * @return the effect map builder
+         */
         DataComponentMap.Builder getEffectMap();
 
+        /**
+         * Invokes the internal effects list getter for the given component type.
+         *
+         * @param <E> the element type of the effects list
+         * @param type the data component type
+         * @return the effects list for the given type
+         */
         <E> List<E> invokeGetEffectsList(DataComponentType<List<E>> type);
-}
+    }
 
 }

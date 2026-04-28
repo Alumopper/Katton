@@ -9,6 +9,7 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import top.katton.api.KattonClientRenderApiKt;
 
+/** Mixin into Gui to dispatch HUD render events during frame rendering. */
 @Mixin(Gui.class)
 public class GuiRenderMixin {
 

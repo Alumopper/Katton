@@ -30,7 +30,15 @@ import net.minecraft.server.packs.resources.Resource;
 import net.minecraft.world.level.storage.loot.LootTable;
 import top.katton.bridger.LootTableSource;
 
+/** Utility class for loot table operations. */
 public final class LootUtil {
+    /**
+     * Gets the holder for a loot table, or returns a direct holder if not found in the registry.
+     *
+     * @param level the server level used to look up the loot table registry
+     * @param table the loot table to find a holder for
+     * @return the registry holder for the table, or a direct holder if not registered
+     */
     public static Holder<LootTable> getEntryOrDirect(ServerLevel level, LootTable table) {
         HolderLookup.Provider provider = level
                 .getServer()

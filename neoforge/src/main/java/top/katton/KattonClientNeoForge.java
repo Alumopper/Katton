@@ -42,11 +42,11 @@ public class KattonClientNeoForge {
         if (!gameEventsRegistered) {
             gameEventsRegistered = true;
             NeoForge.EVENT_BUS.addListener(KattonClientNeoForge::onDisconnect);
-            NeoForge.EVENT_BUS.addListener(KattonClientNeoForge::onLogin);
             NeoForge.EVENT_BUS.addListener(KattonClientNeoForge::onClientTick);
         }
     }
 
+    /** Registers the Katton pack screen keybinding. */
     @SubscribeEvent
     public static void onRegisterKeyMappings(RegisterKeyMappingsEvent event) {
         event.register(OPEN_PACK_SCREEN);
@@ -58,10 +58,6 @@ public class KattonClientNeoForge {
         while (OPEN_PACK_SCREEN.consumeClick()) {
             ScriptPackUi.openInWorldScreen();
         }
-    }
-
-    private static void onLogin(ClientPlayerNetworkEvent.LoggingIn event) {
-        Katton.reloadClientScripts();
     }
 
     private static void onDisconnect(ClientPlayerNetworkEvent.LoggingOut event) {

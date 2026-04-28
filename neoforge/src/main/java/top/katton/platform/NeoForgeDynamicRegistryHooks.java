@@ -6,12 +6,22 @@ import net.minecraft.core.IdMapper;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
 
+/**
+ * NeoForge-specific hooks for dynamically registering blocks and their block states
+ * at runtime, including cache initialization and id-map synchronization.
+ */
 public final class NeoForgeDynamicRegistryHooks {
     private static final Method INIT_CACHE_METHOD = resolveInitCacheMethod();
     private static final Field NEOFORGE_BLOCKSTATE_ID_MAP_FIELD = resolveNeoForgeBlockStateIdMapField();
 
     private NeoForgeDynamicRegistryHooks() {}
 
+    /**
+     * Called after a dynamic block is registered to initialize its state caches
+     * and add all possible block states to both the vanilla and NeoForge id maps.
+     *
+     * @param block the block that was just dynamically registered
+     */
     public static void afterDynamicBlockRegistered(Block block) {
         IdMapper<BlockState> neoforgeBlockStateMap = getNeoForgeBlockStateMap();
 

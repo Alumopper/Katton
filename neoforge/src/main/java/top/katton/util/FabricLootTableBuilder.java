@@ -113,11 +113,24 @@ public interface FabricLootTableBuilder {
         return builder;
     }
 
+    /** Accessor interface for loot table internals via mixin. */
     interface LootTableAccessor {
+        /**
+         * Gets the loot pools.
+         * @return the list of pools
+         */
         List<LootPool> fabric_getPools();
 
+        /**
+         * Gets the loot functions.
+         * @return the list of functions
+         */
         List<LootItemFunction> fabric_getFunctions();
 
+        /**
+         * Gets the random sequence identifier.
+         * @return the optional random sequence identifier
+         */
         Optional<Identifier> fabric_getRandomSequence();
     }
 

@@ -5,6 +5,8 @@ import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.loading.FMLPaths;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
+import net.neoforged.neoforge.event.entity.EntityAttributeCreationEvent;
+import net.neoforged.neoforge.event.entity.RegisterSpawnPlacementsEvent;
 import net.neoforged.neoforge.event.server.ServerStartedEvent;
 import net.neoforged.neoforge.event.server.ServerStoppedEvent;
 import top.katton.api.event.ChunkAndBlockEvent;
@@ -22,14 +24,30 @@ import top.katton.command.ScriptCommand;
 import top.katton.network.ServerNetworking;
 import top.katton.pack.ScriptPackManager;
 import top.katton.platform.DynamicRegistryHooks;
+import top.katton.platform.EntityAttributeHooks;
 import top.katton.platform.NeoForgeDynamicRegistryHooks;
+import top.katton.platform.NeoForgeEntityAttributeHooks;
+import top.katton.platform.NeoForgeSpawnPlacementHooks;
 import net.neoforged.neoforge.network.PacketDistributor;
 
+/** NeoForge mod entry point that initializes Katton and bridges NeoForge lifecycle events. */
 @Mod(Katton.MOD_ID)
 public class KattonNeoForge {
 
+    /**
+     * Constructs the mod instance, initializes Katton core, and registers event bridges.
+     *
+     * @param modEventBus the NeoForge mod event bus
+     */
     public KattonNeoForge(IEventBus modEventBus) {
         DynamicRegistryHooks.setAfterDynamicBlockRegistered(NeoForgeDynamicRegistryHooks::afterDynamicBlockRegistered);
+
+        // Mode-aware attribute registration: GLOBAL uses ModBus event, RELOADABLE uses reflection
+        EntityAttributeHooks.setGlobalRegistrar(NeoForgeEntityAttributeHooks::registerAttributesGlobal);
+        EntityAttributeHooks.setReloadableRegistrar(NeoForgeEntityAttributeHooks::registerAttributesReloadable);
+        modEventBus.addListener(this::onEntityAttributeCreation);
+        modEventBus.addListener(this::onRegisterSpawnPlacements);
+
         ServerNetworking.INSTANCE.setPlaySender(PacketDistributor::sendToPlayer);
         Katton.setGameDirectory(FMLPaths.GAMEDIR.get());
         Katton.mainInitialize();
@@ -53,6 +71,14 @@ public class KattonNeoForge {
         NeoForge.EVENT_BUS.register(ServerMessageEvent.INSTANCE);
         NeoForge.EVENT_BUS.register(ServerMobEffectEvent.INSTANCE);
         NeoForge.EVENT_BUS.register(ServerPlayerEvent.INSTANCE);
+    }
+
+    private void onEntityAttributeCreation(EntityAttributeCreationEvent event) {
+        NeoForgeEntityAttributeHooks.flushOnModBus(event);
+    }
+
+    private void onRegisterSpawnPlacements(RegisterSpawnPlacementsEvent event) {
+        NeoForgeSpawnPlacementHooks.flushOnModBus(event);
     }
 
     private void onRegisterCommands(RegisterCommandsEvent event) {

@@ -31,8 +31,12 @@ import net.minecraft.resources.ResourceKey;
 import top.katton.api.event.ItemComponentEvent;
 import top.katton.bridger.ModifyContextImpl;
 
+/** Mixin for DataComponentInitializers to fire item component modification events during registry loading. */
 @Mixin(targets = "net.minecraft.core.component.DataComponentInitializers$1")
 public abstract class DataComponentInitializersMixin {
+    /** Returns the registry key for this data component initializer.
+     * @return the resource key of the registry
+     */
     @Shadow
     public abstract ResourceKey<? extends Registry<?>> key();
 

@@ -28,14 +28,27 @@ import net.minecraft.world.level.storage.loot.LootTable;
 import net.minecraft.world.level.storage.loot.functions.LootItemFunction;
 import top.katton.util.FabricLootTableBuilder;
 
+/** Mixin accessor for {@link LootTable} internals. */
 @Mixin(LootTable.class)
 public interface LootTableAccessor extends FabricLootTableBuilder.LootTableAccessor {
+    /**
+     * Gets the loot pools.
+     * @return the list of pools
+     */
     @Accessor("pools")
     List<LootPool> fabric_getPools();
 
+    /**
+     * Gets the loot functions.
+     * @return the list of functions
+     */
     @Accessor("functions")
     List<LootItemFunction> fabric_getFunctions();
 
+    /**
+     * Gets the random sequence identifier.
+     * @return the optional random sequence identifier
+     */
     @Accessor("randomSequence")
     Optional<Identifier> fabric_getRandomSequence();
 }

@@ -39,6 +39,7 @@ import static net.minecraft.server.level.FullChunkStatus.*;
 import static net.minecraft.server.level.FullChunkStatus.BLOCK_TICKING;
 import static net.minecraft.server.level.FullChunkStatus.ENTITY_TICKING;
 
+/** Mixin into ChunkHolder to fire chunk level-type change events during chunk promotion and demotion. */
 @Mixin(ChunkHolder.class)
 public abstract class ChunkHolderMixin extends GenerationChunkHolder {
     @Shadow

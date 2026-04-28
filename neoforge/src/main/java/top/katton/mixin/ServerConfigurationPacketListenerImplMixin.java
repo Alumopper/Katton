@@ -11,16 +11,12 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import top.katton.network.ServerNetworking;
 
 /**
- * Mixin to inject Katton sync packet sending before Fabric's registry sync.
- * This ensures clients have Katton items/effects/blocks registered before the sync check.
+ * Mixin to inject Katton sync packet sending during configuration.
+ * Sends script pack hash snapshot for client-side cache negotiation.
  */
 @Mixin(ServerConfigurationPacketListenerImpl.class)
 public abstract class ServerConfigurationPacketListenerImplMixin {
 
-    /**
-     * Injects after player initialization to send item sync packet.
-     * This happens before Fabric's registry sync validation.
-     */
     @SuppressWarnings("DataFlowIssue")
     @Inject(
         method = "<init>",
@@ -28,12 +24,6 @@ public abstract class ServerConfigurationPacketListenerImplMixin {
     )
     private void katton$onInit(MinecraftServer server, Connection connection, CommonListenerCookie cookie, CallbackInfo ci) {
         var THIS = (ServerConfigurationPacketListenerImpl) (Object) this;
-        // Send item sync packet to the connecting player
-        ServerNetworking.INSTANCE.sendItemSyncPacket(THIS, ServerConfigurationPacketListenerImpl::send);
-        // Send effect sync packet to the connecting player
-        ServerNetworking.INSTANCE.sendEffectSyncPacket(THIS, ServerConfigurationPacketListenerImpl::send);
-        // Send block sync packet to the connecting player
-        ServerNetworking.INSTANCE.sendBlockSyncPacket(THIS, ServerConfigurationPacketListenerImpl::send);
         // Send script pack hash snapshot for client-side cache negotiation
         ServerNetworking.INSTANCE.sendScriptPackHashPacket(THIS, ServerConfigurationPacketListenerImpl::send);
     }
