@@ -42,7 +42,6 @@ replay_*.log
 .kilocode/
 .kotlin/
 /plans/
-examples/
 
 #
 token-usage-output.txt
