@@ -11,6 +11,8 @@
     "EnchantmentBuilderAccessor",
     "EnchantmentBuilderMixin",
     "EntityMixin",
+    "EntityRenderDispatcherMixin",
+    "EntityRenderersMixin",
     "LevelChunkMixin",
     "LivingEntityMixin",
     "LivingEntityMixin2",

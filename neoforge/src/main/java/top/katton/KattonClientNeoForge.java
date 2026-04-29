@@ -2,6 +2,7 @@ package top.katton;
 
 import net.minecraft.resources.Identifier;
 import net.minecraft.client.KeyMapping;
+import net.minecraft.client.Minecraft;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
@@ -38,9 +39,16 @@ public class KattonClientNeoForge {
     /** Ensures client-only game bus listeners are wired once during client init. */
     @SubscribeEvent
     public static void onAddClientReloadListeners(AddClientReloadListenersEvent event) {
+        // Initialize entity renderer hooks for hot-reloadable renderer registration
+        try {
+            Class.forName("top.katton.platform.NeoForgeEntityRendererHooks");
+        } catch (ClassNotFoundException ignored) {
+        }
+
         // Also wire game-bus events that are client-only (runs once per client init)
         if (!gameEventsRegistered) {
             gameEventsRegistered = true;
+            NeoForge.EVENT_BUS.addListener(KattonClientNeoForge::onLoggingIn);
             NeoForge.EVENT_BUS.addListener(KattonClientNeoForge::onDisconnect);
             NeoForge.EVENT_BUS.addListener(KattonClientNeoForge::onClientTick);
         }
@@ -57,6 +65,12 @@ public class KattonClientNeoForge {
     private static void onClientTick(ClientTickEvent.Post event) {
         while (OPEN_PACK_SCREEN.consumeClick()) {
             ScriptPackUi.openInWorldScreen();
+        }
+    }
+
+    private static void onLoggingIn(ClientPlayerNetworkEvent.LoggingIn event) {
+        if (Minecraft.getInstance().isSingleplayer()) {
+            Katton.reloadClientScriptsAsync();
         }
     }
 

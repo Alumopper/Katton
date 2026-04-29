@@ -743,6 +743,32 @@ object KattonRegistry {
         )
     }
 
+    /**
+     * Registry for Katton entity renderers.
+     *
+     * Unlike other registries, entity renderers are not stored in a
+     * Minecraft BuiltInRegistry. Instead, they are injected directly
+     * into [EntityRenderDispatcher.renderers] via platform hooks.
+     * Hot reload is handled by [EntityRendererRegistration].
+     */
+    object ENTITY_RENDERERS : KattonRegistries<Identifiable>(id(MOD_ID, "entity_renderer")) {
+        // No BuiltInRegistry delegate — entity renderers use EntityRendererRegistration
+
+        @Synchronized
+        fun beginReload() {
+            EntityRendererRegistration.beginReload()
+            EntityRendererRegistration.beginModelLayerReload()
+        }
+
+        fun registryHealth(): RegistryHealth = RegistryHealth(
+            key = "entity_renderers",
+            kattonEntries = EntityRendererRegistration.managedCount(),
+            managedTracked = EntityRendererRegistration.managedCount(),
+            staleRetained = 0,
+            pendingRegistrations = 0
+        )
+    }
+
     fun registryHealthSnapshot(): List<RegistryHealth> = listOf(
         ITEMS.registryHealth(),
         EFFECTS.registryHealth(),
@@ -752,7 +778,8 @@ object KattonRegistry {
         PARTICLE_TYPES.registryHealth(),
         BLOCK_ENTITY_TYPES.registryHealth(),
         CREATIVE_TABS.registryHealth(),
-        DATA_COMPONENT_TYPES.registryHealth()
+        DATA_COMPONENT_TYPES.registryHealth(),
+        ENTITY_RENDERERS.registryHealth()
     )
 
     /**

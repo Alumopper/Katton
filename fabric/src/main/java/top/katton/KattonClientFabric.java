@@ -27,6 +27,9 @@ public class KattonClientFabric implements ClientModInitializer {
 			)
 	);
 
+	/** Tracks whether we've handled the first join since last disconnect (avoids respawn re-trigger). */
+	private static boolean hasJoinedSinceDisconnect = false;
+
 	@Override
 	public void onInitializeClient() {
 
@@ -36,13 +39,28 @@ public class KattonClientFabric implements ClientModInitializer {
 		// Initialize client networking for item sync
 		ClientNetworkingFabric.INSTANCE.initialize();
 
-        // JOIN events also fire during respawn transitions; avoid implicit client script reload here.
-        // Client-side reload is handled by explicit actions (/katton reload, UI reload, resource reload flow).
+		// Initialize entity renderer hooks for hot-reloadable renderer registration
+		try {
+			Class.forName("top.katton.platform.FabricEntityRendererHooks");
+		} catch (ClassNotFoundException ignored) {
+		}
 
-        ClientPlayConnectionEvents.DISCONNECT.register((_, _) -> {
-            Katton.clearWorldAndServerEvents();
-            ServerPackCacheManager.INSTANCE.reset();
-        });
+		// Trigger client scripts when first joining a singleplayer world.
+		// Guarded to avoid re-triggering on respawn transitions.
+		ClientPlayConnectionEvents.JOIN.register((handler, sender, client) -> {
+			if (!hasJoinedSinceDisconnect) {
+				hasJoinedSinceDisconnect = true;
+				if (client.isSingleplayer()) {
+					Katton.reloadClientScriptsAsync();
+				}
+			}
+		});
+
+		ClientPlayConnectionEvents.DISCONNECT.register((_, _) -> {
+			hasJoinedSinceDisconnect = false;
+			Katton.clearWorldAndServerEvents();
+			ServerPackCacheManager.INSTANCE.reset();
+		});
 
 		ClientTickEvents.END_CLIENT_TICK.register(client -> {
 			while (OPEN_PACK_SCREEN.consumeClick()) {
