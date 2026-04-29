@@ -42,10 +42,12 @@ replay_*.log
 .kilocode/
 .kotlin/
 /plans/
-/examples/
+examples/
 
 #
 token-usage-output.txt
 docs/
 PLAN_registry_refactor.md
-/api/
+api
+net/
+temp_classes/
