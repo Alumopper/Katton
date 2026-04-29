@@ -3,7 +3,6 @@ package top.katton;
 // 平台无关的公共初始化适配器，供各 loader 子模块调用
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.level.storage.LevelResource;
-import net.minecraft.world.entity.AnimationState;
 import top.katton.api.KattonClientRenderApiKt;
 import top.katton.api.dpcaller.EntityEvent;
 import top.katton.client.ReloadProgressState;
@@ -25,7 +24,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -33,17 +31,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public class Katton {
     public static final String MOD_ID = "katton";
     private static final Logger LOGGER = LoggerFactory.getLogger(Katton.class);
-
-    /**
-     * Cross-ClassLoader bridge for entity animation states.
-     * Server scripts write here, client scripts read here — both share the
-     * same maps because Katton is loaded by the mod ClassLoader, not the
-     * script CompiledScriptClassLoader.
-     */
-    public static final ConcurrentHashMap<Integer, AnimationState>
-            entityIdleAnimationStates = new ConcurrentHashMap<>();
-    public static final ConcurrentHashMap<Integer, AnimationState>
-            entityWalkAnimationStates = new ConcurrentHashMap<>();
     private static final ExecutorService CLIENT_RELOAD_EXECUTOR = Executors.newSingleThreadExecutor(r -> {
         Thread thread = new Thread(r, "Katton-ClientReload");
         thread.setDaemon(true);
