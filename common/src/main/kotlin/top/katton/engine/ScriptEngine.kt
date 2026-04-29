@@ -9,6 +9,7 @@ import top.katton.client.ReloadProgressState
 import top.katton.pack.ScriptPack
 import top.katton.pack.ScriptPackKind
 import top.katton.pack.ScriptPackScope
+import top.katton.pack.ScriptPackScriptFile
 import top.katton.util.ScriptExecutionContext
 import java.io.File
 import java.lang.reflect.Method
@@ -89,8 +90,23 @@ object ScriptEngine {
         cacheDirectory = path?.toAbsolutePath()?.normalize()
     }
 
+    /**
+     * Clears all stale compilation cache jars. Keeps the cache directory
+     * tidy — only the most recent compilation artifacts survive.
+     */
+    private fun cleanStaleCaches() {
+        val dir = cacheDirectory ?: return
+        runCatching {
+            Files.newDirectoryStream(dir).use { stream ->
+                stream.filter { it.fileName.toString().let { n -> n.startsWith("source-") || n.startsWith("java-") } }
+                    .forEach { Files.deleteIfExists(it) }
+            }
+        }
+    }
+
     @JvmStatic
     fun compileAndExecuteAll(packs: Collection<ScriptPack>, environment: ScriptEnvironment) {
+        cleanStaleCaches()
         val enabledPacks = packs.filter { it.enabled }
         if (enabledPacks.isEmpty()) {
             ReloadProgressState.update("No enabled ${environment.name.lowercase()} script packs", 0.95f)
@@ -194,8 +210,12 @@ object ScriptEngine {
             .sortedBy { it.syncId }
         val scriptPaths = sourcePacks
             .flatMap { pack -> pack.scripts.sortedBy { it.relativePath }.map { it.absolutePath.toAbsolutePath().normalize().toString() } }
-        val classpathJars = binaryPacks.mapNotNull { it.compiledJar?.toAbsolutePath()?.normalize() }
+        val classpathJars = binaryPacks.mapNotNull { it.compiledJar?.toAbsolutePath()?.normalize() }.toMutableList()
         val cacheKey = buildSourceCacheKey(sourcePacks, binaryPacks)
+
+        // Compile .java files from enabled directory packs (independent of script collection)
+        val classpathFromJava = compileJavaFromPacks(packs)
+        if (classpathFromJava != null) classpathJars.add(classpathFromJava)
 
         return SourceCompilationPlan(
             sourcePacks = sourcePacks,
@@ -204,6 +224,40 @@ object ScriptEngine {
             classpathJars = classpathJars,
             cacheKey = cacheKey
         )
+    }
+
+    /**
+     * Scans enabled directory packs for `.java` files, compiles them with
+     * javac, and returns the path to the resulting jar (or null if none).
+     */
+    private fun compileJavaFromPacks(packs: Collection<ScriptPack>): Path? {
+        val javaFiles = mutableListOf<ScriptPackScriptFile>()
+        for (pack in packs) {
+            if (pack.kind != ScriptPackKind.DIRECTORY || pack.location == null) continue
+            runCatching {
+                Files.walk(pack.location).use { stream ->
+                    stream.filter { f: Path -> Files.isRegularFile(f) && f.fileName.toString().endsWith(".java") }
+                        .forEach { file: Path ->
+                            val relative = pack.location.relativize(file).toString().replace('\\', '/')
+                            javaFiles.add(
+                                ScriptPackScriptFile(
+                                    relativePath = relative,
+                                    absolutePath = file,
+                                    bytes = Files.readAllBytes(file)
+                                )
+                            )
+                        }
+                }
+            }
+        }
+        if (javaFiles.isEmpty()) {
+            LOGGER.info("No .java files found in packs")
+            return null
+        }
+        LOGGER.info("Compiling {} .java files from {} packs", javaFiles.size, packs.size)
+        val result = JavaCompilationUtil.compileToJar(javaFiles, cacheDirectory)
+        LOGGER.info("Java compilation result: {}", result)
+        return result
     }
 
     private fun loadCompiledSourceArtifact(plan: SourceCompilationPlan): CompiledScriptArtifact? {
@@ -410,8 +464,9 @@ object ScriptEngine {
 
         return ScriptCompilationConfiguration(baseConfig) {
             importScripts(orderedScriptPaths.map { File(it).toScriptSource() })
-            if (classpathJars.isNotEmpty()) {
-                jvm {
+            jvm {
+                dependenciesFromCurrentContext(wholeClasspath = true)
+                if (classpathJars.isNotEmpty()) {
                     updateClasspath(classpathJars.map(Path::toFile))
                 }
             }
