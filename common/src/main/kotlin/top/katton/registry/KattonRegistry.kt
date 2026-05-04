@@ -9,8 +9,13 @@ import net.minecraft.core.registries.Registries
 import net.minecraft.resources.Identifier
 import net.minecraft.resources.ResourceKey
 import net.minecraft.world.effect.MobEffect
+import net.minecraft.world.entity.EntityType
+import net.minecraft.world.entity.LivingEntity
+import net.minecraft.world.entity.Mob
+import net.minecraft.world.entity.ai.attributes.AttributeSupplier
 import net.minecraft.world.item.Item
 import net.minecraft.world.item.Items
+import net.minecraft.world.item.SpawnEggItem
 import net.minecraft.world.level.block.Block
 import net.minecraft.world.level.block.state.BlockBehaviour
 import top.katton.Katton
@@ -18,8 +23,8 @@ import top.katton.Katton.MOD_ID
 import top.katton.LoadState
 import top.katton.platform.DynamicRegistryHooks
 import top.katton.platform.SpawnPlacementHooks
-import top.katton.util.ReflectUtil
 import org.slf4j.LoggerFactory
+import top.katton.platform.EntityAttributeHooks
 
 /**
  * Creates an [Identifier] from a namespace and path.
@@ -178,12 +183,6 @@ object KattonRegistry {
             return entry
         }
 
-        fun flushPendingRegistrations() {
-            delegate.flushPendingRegistrations()
-        }
-
-        fun hasPendingRegistrations(): Boolean = delegate.hasPendingRegistrations()
-
         fun registryHealth(): RegistryHealth = RegistryHealth(
             key = "items",
             kattonEntries = size,
@@ -191,6 +190,13 @@ object KattonRegistry {
             staleRetained = delegate.staleManagedIdsSnapshot().size,
             pendingRegistrations = if (delegate.hasPendingRegistrations()) 1 else 0
         )
+
+        @Synchronized
+        fun flushPendingRegistrations() {
+            delegate.flushPendingRegistrations { id, item ->
+                register(KattonItemEntry(id = id, item = item))
+            }
+        }
     }
 
     /**
@@ -266,7 +272,10 @@ object KattonRegistry {
                     delegate.ensureRegistered(
                         id = id,
                         builder = { blockFactory(blockProperties(id)) },
-                        onExisting = { it.builtInRegistryHolder().tags = emptySet() }
+                        onExisting = {
+                            @Suppress("DEPRECATION")
+                            it.builtInRegistryHolder().tags = emptySet()
+                        }
                     )
                 }
                 RegisterMode.AUTO -> {
@@ -274,13 +283,17 @@ object KattonRegistry {
                         delegate.ensureRegistered(
                             id = id,
                             builder = { blockFactory(blockProperties(id)) },
-                            onExisting = { it.builtInRegistryHolder().tags = emptySet() }
+                            onExisting = {
+                                @Suppress("DEPRECATION")
+                                it.builtInRegistryHolder().tags = emptySet()
+                            }
                         )
                     } else {
                         delegate.registerGlobal(id, blockFactory(blockProperties(id)))
                     }
                 }
             }
+            @Suppress("DEPRECATION")
             block.builtInRegistryHolder().tags = emptySet()
             DynamicRegistryHooks.onDynamicBlockRegistered(block)
             val entry = KattonBlockEntry(id = id, block = block)
@@ -303,7 +316,7 @@ object KattonRegistry {
      */
     data class KattonEntityTypeEntry(
         override val id: Identifier,
-        val entityType: net.minecraft.world.entity.EntityType<*>,
+        val entityType: EntityType<*>,
         val properties: KattonEntityProperties? = null,
         val spawnEggEntry: KattonItemEntry? = null
     ) : Identifiable
@@ -353,8 +366,9 @@ object KattonRegistry {
             }
         }
 
-        private fun clearEntityTypeTags(entityType: net.minecraft.world.entity.EntityType<*>) {
+        private fun clearEntityTypeTags(entityType: EntityType<*>) {
             runCatching {
+                @Suppress("DEPRECATION")
                 entityType.builtInRegistryHolder().tags = emptySet()
             }
         }
@@ -362,7 +376,7 @@ object KattonRegistry {
         fun newNative(
             id: Identifier,
             registerMode: RegisterMode = RegisterMode.AUTO,
-            entityTypeFactory: () -> net.minecraft.world.entity.EntityType<*>
+            entityTypeFactory: () -> EntityType<*>
         ): KattonEntityTypeEntry {
             val entityType = delegate.registerWithMode(id, registerMode, entityTypeFactory)
             clearEntityTypeTags(entityType)
@@ -385,7 +399,7 @@ object KattonRegistry {
             id: Identifier,
             registerMode: RegisterMode = RegisterMode.AUTO,
             properties: KattonEntityProperties,
-            entityFactory: (KattonEntityProperties) -> net.minecraft.world.entity.EntityType<*>
+            entityFactory: (KattonEntityProperties) -> EntityType<*>
         ): KattonEntityTypeEntry {
             val entityType = delegate.registerWithMode(id, registerMode) { entityFactory(properties) }
             clearEntityTypeTags(entityType)
@@ -393,7 +407,7 @@ object KattonRegistry {
                 (registerMode == RegisterMode.AUTO && Katton.globalState.after(LoadState.INIT))
 
             @Suppress("UNCHECKED_CAST")
-            val castType = entityType as? net.minecraft.world.entity.EntityType<net.minecraft.world.entity.LivingEntity>
+            val castType = entityType as? EntityType<LivingEntity>
 
             // Register attributes if configured and entity is a LivingEntity
             if (castType != null && properties.hasAttributes) {
@@ -408,19 +422,18 @@ object KattonRegistry {
             if (castType != null && properties.spawnPlacementType != null) {
                 @Suppress("UNCHECKED_CAST")
                 registerSpawnPlacement(
-                    castType as net.minecraft.world.entity.EntityType<net.minecraft.world.entity.Mob>,
+                    castType as EntityType<Mob>,
                     properties.spawnPlacementType!!,
                     properties.spawnHeightmap,
-                    isReloadable,
-                    net.minecraft.world.entity.SpawnPlacements.SpawnPredicate<net.minecraft.world.entity.Mob> { _, _, _, _, _ -> true }
-                )
+                    isReloadable
+                ) { _, _, _, _, _ -> true }
                 registeredSpawnPlacements.add(id)
             }
 
             // Register spawn egg if configured
             var spawnEggEntry: KattonItemEntry? = null
             if (properties.spawnEgg) {
-                spawnEggEntry = registerSpawnEgg(id, properties, entityType, registerMode)
+                spawnEggEntry = registerSpawnEgg(id, entityType, registerMode)
             }
 
             val entry = KattonEntityTypeEntry(
@@ -442,11 +455,11 @@ object KattonRegistry {
          * @param reloadable true for RELOADABLE/AUTO-after-init, false for GLOBAL/AUTO-at-init
          */
         private fun registerEntityAttributes(
-            entityType: net.minecraft.world.entity.EntityType<out net.minecraft.world.entity.LivingEntity>,
-            attributeSupplier: net.minecraft.world.entity.ai.attributes.AttributeSupplier,
+            entityType: EntityType<out LivingEntity>,
+            attributeSupplier: AttributeSupplier,
             reloadable: Boolean
         ) {
-            top.katton.platform.EntityAttributeHooks.registerAttributes(entityType, attributeSupplier, reloadable)
+            EntityAttributeHooks.registerAttributes(entityType, attributeSupplier, reloadable)
         }
 
         /**
@@ -457,15 +470,15 @@ object KattonRegistry {
             registeredAttributes.remove(entityId)
             val entityType = delegate.builtInRegistry.getOptional(entityId)
             if (entityType.isPresent) {
-                top.katton.registry.DefaultAttributesHelper.unregister(entityType.get())
+                DefaultAttributesHelper.unregister(entityType.get())
             }
         }
 
         /**
          * Registers a spawn placement rule, choosing platform-specific path based on mode.
          */
-        private fun <T : net.minecraft.world.entity.Mob> registerSpawnPlacement(
-            entityType: net.minecraft.world.entity.EntityType<T>,
+        private fun <T : Mob> registerSpawnPlacement(
+            entityType: EntityType<T>,
             placementType: net.minecraft.world.entity.SpawnPlacementType,
             heightmap: net.minecraft.world.level.levelgen.Heightmap.Types,
             reloadable: Boolean,
@@ -499,8 +512,7 @@ object KattonRegistry {
          */
         private fun registerSpawnEgg(
             entityId: Identifier,
-            properties: KattonEntityProperties,
-            entityType: net.minecraft.world.entity.EntityType<*>,
+            entityType: EntityType<*>,
             registerMode: RegisterMode
         ): KattonItemEntry {
             val eggId = entityId.withPath("${entityId.path}_spawn_egg")
@@ -512,7 +524,7 @@ object KattonRegistry {
                 spawnEgg(entityType)
             }
             return ITEMS.newNative(eggProperties, registerMode) { props ->
-                net.minecraft.world.item.SpawnEggItem(props)
+                SpawnEggItem(props)
             }
         }
 
@@ -748,7 +760,7 @@ object KattonRegistry {
      *
      * Unlike other registries, entity renderers are not stored in a
      * Minecraft BuiltInRegistry. Instead, they are injected directly
-     * into [EntityRenderDispatcher.renderers] via platform hooks.
+     * into [EntityRendererRegistration.rend] via platform hooks.
      * Hot reload is handled by [EntityRendererRegistration].
      */
     object ENTITY_RENDERERS : KattonRegistries<Identifiable>(id(MOD_ID, "entity_renderer")) {
@@ -767,6 +779,12 @@ object KattonRegistry {
             staleRetained = 0,
             pendingRegistrations = 0
         )
+    }
+
+    @JvmStatic
+    fun flushPendingRegistrations() {
+        ITEMS.flushPendingRegistrations()
+        EntityRendererRegistration.flushPendingRegistrations()
     }
 
     fun registryHealthSnapshot(): List<RegistryHealth> = listOf(

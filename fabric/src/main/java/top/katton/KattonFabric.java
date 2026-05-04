@@ -13,6 +13,7 @@ import top.katton.network.ServerNetworking;
 import top.katton.pack.ScriptPackManager;
 import top.katton.platform.EntityAttributeHooks;
 import top.katton.platform.FabricEntityAttributeHooks;
+import top.katton.network.ScriptPackRequestPacket;
 
 import static top.katton.Katton.*;
 
@@ -29,12 +30,12 @@ public class KattonFabric implements ModInitializer {
         EntityAttributeHooks.setReloadableRegistrar(FabricEntityAttributeHooks::registerAttributes);
 
         Networking.initialize();
-        ServerNetworking.INSTANCE.setPlaySender(ServerPlayNetworking::send);
+        ServerNetworking.setPlaySender(ServerPlayNetworking::send);
 
         ServerConfigurationNetworking.registerGlobalReceiver(
-            top.katton.network.ScriptPackRequestPacket.TYPE,
+            ScriptPackRequestPacket.TYPE,
             (packet, context) -> context.server().execute(() ->
-                ServerNetworking.INSTANCE.sendScriptPackBundle(
+                ServerNetworking.sendScriptPackBundle(
                     context.packetListener(),
                     packet.getRequestedSyncIds(),
                     ServerConfigurationNetworking::send

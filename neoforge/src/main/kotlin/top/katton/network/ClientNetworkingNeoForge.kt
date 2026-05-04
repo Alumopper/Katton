@@ -24,18 +24,30 @@ object ClientNetworkingNeoForge {
 
         registrar.configurationToClient(ScriptPackHashListPacket.TYPE, ScriptPackHashListPacket.STREAM_CODEC) { packet, context ->
             if (context.connection().isMemoryConnection) return@configurationToClient
+            ServerPackCacheManager.prepareMainThreadSync()
             context.enqueueWork {
-                ServerPackCacheManager.handleHashList(packet) { request ->
-                    context.reply(request)
+                try {
+                    ServerPackCacheManager.handleHashList(packet) { request ->
+                        context.reply(request)
+                    }
+                } finally {
+                    ServerPackCacheManager.completeMainThreadSync()
                 }
             }
+            ServerPackCacheManager.awaitMainThreadSync()
         }
 
         registrar.configurationToClient(ScriptPackBundlePacket.TYPE, ScriptPackBundlePacket.STREAM_CODEC) { packet, context ->
             if (context.connection().isMemoryConnection) return@configurationToClient
+            ServerPackCacheManager.prepareMainThreadSync()
             context.enqueueWork {
-                ServerPackCacheManager.handleBundle(packet)
+                try {
+                    ServerPackCacheManager.handleBundle(packet)
+                } finally {
+                    ServerPackCacheManager.completeMainThreadSync()
+                }
             }
+            ServerPackCacheManager.awaitMainThreadSync()
         }
     }
 }

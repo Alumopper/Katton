@@ -15,7 +15,7 @@ import net.minecraft.client.renderer.entity.state.LivingEntityRenderState
 import net.minecraft.world.entity.AnimationState
 import net.minecraft.world.entity.Entity
 import net.minecraft.world.entity.EntityType
-import net.minecraft.world.entity.monster.Monster
+import net.minecraft.world.entity.Mob
 import net.minecraft.resources.Identifier
 import org.jetbrains.annotations.ApiStatus
 import top.katton.bridge.KattonBridge
@@ -74,10 +74,7 @@ fun <T : Entity> registerEntityRenderer(
     rendererFactory: EntityRendererProvider<T>
 ) {
     val id = Identifier.parse(entityTypeId)
-    val entityType = net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.getOptional(id)
-        .orElseThrow { IllegalStateException("Entity type not registered: $entityTypeId") }
-    @Suppress("UNCHECKED_CAST")
-    registerEntityRenderer(entityType as EntityType<T>, rendererFactory)
+    EntityRendererRegistration.register(id, rendererFactory)
 }
 
 /**
@@ -134,7 +131,7 @@ fun getBakedModelPart(layer: ModelLayerLocation): ModelPart {
  * Simplified entity renderer registration with animation support.
  *
  * One call handles model layer, renderer construction, and animation wiring.
- * Uses [Monster] as entity type internally to avoid ClassCastException across
+ * Uses [Mob] as entity type internally to avoid ClassCastException across
  * script reloads. Animation state is shared through [KattonBridge].
  *
  * **Entity side** — publish animation states in `tick()`:
@@ -183,7 +180,7 @@ fun <S : LivingEntityRenderState, M : EntityModel<S>> registerAnimatedEntityRend
     renderStateFactory: () -> S = { @Suppress("UNCHECKED_CAST") (LivingEntityRenderState() as S) },
     shadowRadius: Float = 0.5f,
     animations: Map<String, AnimationDefinition> = emptyMap(),
-    animate: ((M, Monster, S, Map<String, KeyframeAnimation>) -> Unit)? = null
+    animate: ((M, Mob, S, Map<String, KeyframeAnimation>) -> Unit)? = null
 ) {
     registerEntityModelLayer(modelLayer, bodyLayer)
     val root = getBakedModelPart(modelLayer)
@@ -195,10 +192,10 @@ fun <S : LivingEntityRenderState, M : EntityModel<S>> registerAnimatedEntityRend
             def.bake(model.root())
         }
 
-        object : MobRenderer<Monster, S, M>(ctx, model, shadowRadius) {
+        object : MobRenderer<Mob, S, M>(ctx, model, shadowRadius) {
             override fun createRenderState(): S = renderStateFactory()
 
-            override fun extractRenderState(entity: Monster, state: S, partialTick: Float) {
+            override fun extractRenderState(entity: Mob, state: S, partialTick: Float) {
                 super.extractRenderState(entity, state, partialTick)
 
                 if (animate != null) {

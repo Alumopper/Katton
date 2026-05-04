@@ -32,10 +32,9 @@ public final class FabricEntityAttributeHooks {
      * @param entityType the entity type
      * @param supplier the attribute supplier
      */
-    @SuppressWarnings("unchecked")
     public static void registerAttributes(EntityType<? extends LivingEntity> entityType, AttributeSupplier supplier) {
         try {
-            FabricDefaultAttributeRegistry.register((EntityType<? extends LivingEntity>) entityType, supplier);
+            FabricDefaultAttributeRegistry.register(entityType, supplier);
         } catch (IllegalStateException e) {
             // Duplicate registration during hot-reload — Fabric API rejects it.
             // The attribute map was already populated, so this is expected.

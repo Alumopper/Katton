@@ -39,15 +39,9 @@ public class KattonClientFabric implements ClientModInitializer {
 		// Initialize client networking for item sync
 		ClientNetworkingFabric.INSTANCE.initialize();
 
-		// Initialize entity renderer hooks for hot-reloadable renderer registration
-		try {
-			Class.forName("top.katton.platform.FabricEntityRendererHooks");
-		} catch (ClassNotFoundException ignored) {
-		}
-
 		// Trigger client scripts when first joining a singleplayer world.
 		// Guarded to avoid re-triggering on respawn transitions.
-		ClientPlayConnectionEvents.JOIN.register((handler, sender, client) -> {
+		ClientPlayConnectionEvents.JOIN.register((_, _, client) -> {
 			if (!hasJoinedSinceDisconnect) {
 				hasJoinedSinceDisconnect = true;
 				if (client.isSingleplayer()) {

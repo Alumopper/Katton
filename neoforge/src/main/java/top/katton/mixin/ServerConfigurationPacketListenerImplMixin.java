@@ -24,7 +24,7 @@ public abstract class ServerConfigurationPacketListenerImplMixin {
     )
     private void katton$onInit(MinecraftServer server, Connection connection, CommonListenerCookie cookie, CallbackInfo ci) {
         var THIS = (ServerConfigurationPacketListenerImpl) (Object) this;
-        // Send script pack hash snapshot for client-side cache negotiation
-        ServerNetworking.INSTANCE.sendScriptPackHashPacket(THIS, ServerConfigurationPacketListenerImpl::send);
+        // Send configuration-time script sync before registry validation begins.
+        ServerNetworking.sendInitialScriptPackSync(THIS, ServerConfigurationPacketListenerImpl::send);
     }
 }

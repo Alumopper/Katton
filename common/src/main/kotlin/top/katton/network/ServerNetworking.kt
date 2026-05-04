@@ -22,6 +22,7 @@ object ServerNetworking {
     @Volatile
     private var playSender: ServerPlayNetworkingSender? = null
 
+    @JvmStatic
     fun setPlaySender(sender: ServerPlayNetworkingSender?) {
         playSender = sender
     }
@@ -30,13 +31,33 @@ object ServerNetworking {
      * Sends script pack hash snapshot during configuration.
      * This packet is always sent so the client can clear stale cached packs when empty.
      */
+    @JvmStatic
     fun sendScriptPackHashPacket(handler: ServerConfigurationPacketListenerImpl, sender: ServerConfigurationNetworkingSender) {
         sender(handler, createScriptPackHashPacket())
     }
 
     /**
+     * Sends the full configuration-time script sync payload in stream order:
+     * hashes first, then the full bundle snapshot when packs exist.
+     *
+     * The client-side registry sync hook depends on the bundle packet being
+     * available before registry validation starts, so this path avoids an
+     * extra request/response round-trip during login.
+     */
+    @JvmStatic
+    fun sendInitialScriptPackSync(handler: ServerConfigurationPacketListenerImpl, sender: ServerConfigurationNetworkingSender) {
+        val hashPacket = createScriptPackHashPacket()
+        sender(handler, hashPacket)
+        if (hashPacket.entries.isEmpty()) {
+            return
+        }
+        sender(handler, createScriptPackBundlePacket(hashPacket.entries.map { it.syncId }))
+    }
+
+    /**
      * Sends scripts to client if needed.
      */
+    @JvmStatic
     fun sendScriptPackBundle(
         handler: ServerConfigurationPacketListenerImpl,
         requestedSyncIds: List<String>,

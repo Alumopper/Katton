@@ -16,6 +16,7 @@ import net.neoforged.neoforge.event.level.ChunkDataEvent
 import net.neoforged.neoforge.event.level.ChunkEvent
 import net.neoforged.neoforge.event.level.ChunkWatchEvent
 import net.neoforged.neoforge.event.level.ExplosionEvent
+import net.neoforged.neoforge.event.level.block.BreakBlockEvent
 import top.katton.Katton
 import top.katton.util.CancellableDelegateEvent
 import top.katton.util.CancellableEventArg
@@ -79,7 +80,7 @@ object ChunkAndBlockEvent {
     }
 
     @SubscribeEvent
-    private fun handleBlockBreak(e: BlockEvent.BreakEvent) {
+    private fun handleBlockBreak(e: BreakBlockEvent) {
         if (e.level is ServerLevel) {
             val arg = BlockBreakArg(
                 e.level as ServerLevel,

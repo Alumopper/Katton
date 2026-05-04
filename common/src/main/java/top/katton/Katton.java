@@ -3,6 +3,7 @@ package top.katton;
 // 平台无关的公共初始化适配器，供各 loader 子模块调用
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.level.storage.LevelResource;
+import org.jetbrains.kotlin.utils.IntArrayList;
 import top.katton.api.KattonClientRenderApiKt;
 import top.katton.api.dpcaller.EntityEvent;
 import top.katton.client.ReloadProgressState;
@@ -24,6 +25,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -37,6 +39,7 @@ public class Katton {
         return thread;
     });
     private static final AtomicBoolean CLIENT_RELOAD_RUNNING = new AtomicBoolean(false);
+    private static volatile CompletableFuture<Void> clientReloadFuture;
 
     /**
      * When true, logs every registration call (items, blocks, entities, etc.)
@@ -106,14 +109,19 @@ public class Katton {
         if (!CLIENT_RELOAD_RUNNING.compareAndSet(false, true)) {
             return true;
         }
+        CompletableFuture<Void> future = new CompletableFuture<>();
+        clientReloadFuture = future;
         CLIENT_RELOAD_EXECUTOR.execute(() -> {
             try {
                 reloadClientScripts();
+                future.complete(null);
             } catch (Throwable t) {
+                future.completeExceptionally(t);
                 LOGGER.error("Failed to reload client scripts asynchronously", t);
                 ReloadProgressState.finish("Client script reload failed");
             } finally {
                 CLIENT_RELOAD_RUNNING.set(false);
+                clientReloadFuture = null;
             }
         });
         return true;
@@ -121,6 +129,21 @@ public class Katton {
 
     public static boolean isClientReloadRunning() {
         return CLIENT_RELOAD_RUNNING.get();
+    }
+
+    /**
+     * Blocks until any in-progress async client reload completes.
+     * Safe to call from any thread — returns immediately if no reload is running.
+     */
+    public static void awaitClientReloadCompletion() {
+        CompletableFuture<Void> future = clientReloadFuture;
+        if (future != null) {
+            try {
+                future.get();
+            } catch (Exception e) {
+                // Already logged in reloadClientScriptsAsync
+            }
+        }
     }
 
     public static boolean reloadScripts(MinecraftServer server) {

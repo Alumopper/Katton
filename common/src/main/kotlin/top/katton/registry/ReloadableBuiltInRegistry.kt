@@ -130,14 +130,15 @@ internal class ReloadableBuiltInRegistry<T : Any>(
         }
     }
 
-    fun flushPendingRegistrations() {
+    fun flushPendingRegistrations(onFlushed: (Identifier, T) -> Unit = { _, _ -> }) {
         val copy = synchronized(pendingRegistrations) {
             val c = pendingRegistrations.toList()
             pendingRegistrations.clear()
             c
         }
         copy.forEach { (id, factory) ->
-            registerWithMode(id, RegisterMode.RELOADABLE, factory)
+            val value = registerWithMode(id, RegisterMode.RELOADABLE, factory)
+            onFlushed(id, value)
         }
     }
 

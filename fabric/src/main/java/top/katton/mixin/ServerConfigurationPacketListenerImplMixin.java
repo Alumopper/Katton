@@ -13,7 +13,6 @@ import top.katton.network.ServerNetworking;
 
 /**
  * Mixin to inject Katton sync packet sending before Fabric's registry sync.
- * This ensures clients have Katton items/effects/blocks registered before the sync check.
  */
 @Mixin(ServerConfigurationPacketListenerImpl.class)
 public abstract class ServerConfigurationPacketListenerImplMixin {
@@ -29,7 +28,7 @@ public abstract class ServerConfigurationPacketListenerImplMixin {
     )
     private void katton$onInit(MinecraftServer server, Connection connection, CommonListenerCookie cookie, CallbackInfo ci) {
         var THIS = (ServerConfigurationPacketListenerImpl) (Object) this;
-        // Send script pack hash snapshot for client-side cache negotiation
-        ServerNetworking.INSTANCE.sendScriptPackHashPacket(THIS, ServerConfigurationNetworking::send);
+        // Send configuration-time script sync before registry validation begins.
+        ServerNetworking.sendInitialScriptPackSync(THIS, ServerConfigurationNetworking::send);
     }
 }

@@ -10,6 +10,7 @@ import top.katton.pack.ScriptPack
 import top.katton.pack.ScriptPackKind
 import top.katton.pack.ScriptPackScope
 import top.katton.pack.ScriptPackScriptFile
+import top.katton.registry.KattonRegistry
 import top.katton.util.ScriptExecutionContext
 import java.io.File
 import java.lang.reflect.Method
@@ -381,7 +382,7 @@ object ScriptEngine {
 
         val loader = rootClass.java.classLoader
         val rootName = rootClass.qualifiedName
-        val topLevelClasses = collectTopLevelClassNames(script, artifact.cacheJar)
+        val topLevelClasses = collectTopLevelClassNames(script, artifact.cacheJar).sorted()
         LOGGER.info(
             "Discovered {} top-level compiled classes for {} in {} environment",
             topLevelClasses.size,
@@ -397,10 +398,14 @@ object ScriptEngine {
 
             runCatching {
                 val clazz = Class.forName(fqcn, false, loader)
-                val entrypoints = clazz.declaredMethods.filter { method ->
-                    Modifier.isStatic(method.modifiers) &&
-                        method.annotationClassNames().contains(environment.annotationClassName)
-                }
+                val entrypoints = clazz.declaredMethods
+                    .asSequence()
+                    .filter { method ->
+                        Modifier.isStatic(method.modifiers) &&
+                            method.annotationClassNames().contains(environment.annotationClassName)
+                    }
+                    .sortedBy { it.name }
+                    .toList()
                 if (entrypoints.isNotEmpty()) {
                     LOGGER.info(
                         "Executing {} entrypoints from {} for {}",
@@ -548,10 +553,12 @@ object ScriptEngine {
         method.isAccessible = true
         if (environment != ScriptEnvironment.CLIENT) {
             method.invoke(null)
+            KattonRegistry.flushPendingRegistrations()
             return
         }
         runOnClientMainThreadAndWait {
             method.invoke(null)
+            KattonRegistry.flushPendingRegistrations()
         }
     }
 

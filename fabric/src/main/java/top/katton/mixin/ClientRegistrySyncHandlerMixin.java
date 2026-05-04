@@ -26,8 +26,7 @@ public class ClientRegistrySyncHandlerMixin {
      */
     @Inject(
         method = "receivePacket",
-        at = @At("HEAD"),
-        remap = false
+        at = @At("HEAD")
     )
     private static void katton$onReceivePacketHead(RegistrySyncPayload payload, ClientConfigurationNetworking.Context context, CallbackInfo ci) {
         // Ensure server-transferred script packs are executed before the check proceeds

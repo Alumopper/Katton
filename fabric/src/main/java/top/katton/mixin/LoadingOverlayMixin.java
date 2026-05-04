@@ -25,7 +25,7 @@ public abstract class LoadingOverlayMixin {
 
     @Inject(method = "extractRenderState", at = @At("TAIL"))
     private void katton$renderReloadProgress(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick, CallbackInfo ci) {
-        ReloadProgressOverlay.INSTANCE.renderExtractor(graphics);
+        ReloadProgressOverlay.renderExtractor(graphics);
     }
 
     @Inject(method = "tick", at = @At("TAIL"))

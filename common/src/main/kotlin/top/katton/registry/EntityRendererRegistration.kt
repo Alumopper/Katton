@@ -10,9 +10,10 @@ import net.minecraft.core.registries.BuiltInRegistries.*
 import net.minecraft.world.entity.Entity
 import net.minecraft.world.entity.EntityType
 import net.minecraft.resources.Identifier
+import top.katton.api.LOGGER
 import top.katton.platform.EntityRendererHooks
+import java.util.LinkedHashMap
 import java.util.concurrent.ConcurrentHashMap
-import net.minecraft.client.renderer.entity.EntityRenderDispatcher
 
 /**
  * Internal registry for script-managed entity renderers.
@@ -29,6 +30,7 @@ object EntityRendererRegistration {
 
     /** Tracks which entity types have renderers managed by Katton (for cleanup). */
     private val managedEntityTypes = ConcurrentHashMap.newKeySet<Identifier>()
+    private val pendingRendererFactories = LinkedHashMap<Identifier, MutableList<EntityRendererProvider<out Entity>>>()
 
     fun isManaged(entityType: EntityType<*>): Boolean {
         val key = ENTITY_TYPE.getKey(entityType)
@@ -47,6 +49,21 @@ object EntityRendererRegistration {
         EntityRendererHooks.instance.registerRenderer(entityType, factory)
     }
 
+    @Synchronized
+    fun <T : Entity> register(entityTypeId: Identifier, factory: EntityRendererProvider<T>) {
+        val entityType = ENTITY_TYPE.getOptional(entityTypeId)
+        if (entityType.isPresent) {
+            @Suppress("UNCHECKED_CAST")
+            register(entityType.get() as EntityType<T>, factory)
+            return
+        }
+
+        @Suppress("UNCHECKED_CAST")
+        pendingRendererFactories
+            .getOrPut(entityTypeId) { mutableListOf() }
+            .add(factory as EntityRendererProvider<out Entity>)
+    }
+
     /**
      * Begins a hot reload cycle. Unregisters all Katton-managed renderers
      * from the game's rendering system so they can be re-registered fresh.
@@ -61,16 +78,46 @@ object EntityRendererRegistration {
             }
             managedEntityTypes.remove(entityId)
         }
+        synchronized(pendingRendererFactories) {
+            pendingRendererFactories.clear()
+        }
     }
 
     fun managedCount(): Int = managedEntityTypes.size
 
     fun managedIds(): Set<Identifier> = managedEntityTypes.toSet()
 
-    // ── Model Layer Support ────────────────────────────────────────────
+    @Synchronized
+    fun flushPendingRegistrations() {
+        if (pendingRendererFactories.isEmpty()) {
+            return
+        }
 
-    /** Pending model layers to register when the platform is ready. */
-    private val pendingModelLayers = ConcurrentHashMap<ModelLayerLocation, () -> LayerDefinition>()
+        val unresolved = mutableListOf<Identifier>()
+        val iterator = pendingRendererFactories.entries.iterator()
+        while (iterator.hasNext()) {
+            val (entityId, factories) = iterator.next()
+            val entityType = ENTITY_TYPE.getOptional(entityId)
+            if (entityType.isEmpty) {
+                unresolved += entityId
+                continue
+            }
+
+            @Suppress("UNCHECKED_CAST")
+            val castType = entityType.get() as EntityType<Entity>
+            factories.forEach { factory ->
+                @Suppress("UNCHECKED_CAST")
+                register(castType, factory as EntityRendererProvider<Entity>)
+            }
+            iterator.remove()
+        }
+
+        if (unresolved.isNotEmpty()) {
+            LOGGER.debug("Deferred {} entity renderer registrations until entity types are available: {}", unresolved.size, unresolved)
+        }
+    }
+
+    // ── Model Layer Support ────────────────────────────────────────────
 
     /** Tracks registered model layers for cleanup on reload. */
     private val managedModelLayers = ConcurrentHashMap.newKeySet<ModelLayerLocation>()

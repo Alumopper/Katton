@@ -187,10 +187,11 @@ object ScriptPackManager {
             LOGGER.warn("Skipping script pack {} because it contains no .kt scripts", packDirectory)
             return null
         }
-        val hash = computeScriptHash(manifestJson, scriptFiles)
+        val javaFiles = collectJavaFiles(packDirectory)
+        val hash = computeScriptHash(manifestJson, scriptFiles, javaFiles)
         val enabled = forceEnabled ?: readEnabledState(packDirectory, ScriptPackKind.DIRECTORY) ?: manifest.enabledByDefault
         val syncId = syncIdOverride ?: makeSyncId(scope, manifest.id)
-        val contentFiles = scriptFiles.map {
+        val contentFiles = (scriptFiles + javaFiles).map {
             ScriptPackContentFile(
                 relativePath = it.relativePath,
                 absolutePath = it.absolutePath,
@@ -211,12 +212,23 @@ object ScriptPackManager {
             contentFiles = contentFiles,
             compiledJar = null
         ).also {
-            LOGGER.info(
-                "Discovered source pack {} with {} script files at {}",
-                it.manifest.name,
-                it.scripts.size,
-                it.location
-            )
+            val javaCount = javaFiles.size
+            if (javaCount > 0) {
+                LOGGER.info(
+                    "Discovered source pack {} with {} .kt scripts and {} .java files at {}",
+                    it.manifest.name,
+                    it.scripts.size,
+                    javaCount,
+                    it.location
+                )
+            } else {
+                LOGGER.info(
+                    "Discovered source pack {} with {} script files at {}",
+                    it.manifest.name,
+                    it.scripts.size,
+                    it.location
+                )
+            }
         }
     }
 
@@ -285,7 +297,33 @@ object ScriptPackManager {
         }
     }
 
-    internal fun computeScriptHash(manifestJson: String, scripts: List<ScriptPackScriptFile>): String {
+    internal fun collectJavaFiles(packDirectory: Path): List<ScriptPackScriptFile> {
+        return runCatching {
+            val javaFiles = mutableListOf<ScriptPackScriptFile>()
+            Files.walk(packDirectory).use { stream ->
+                stream
+                    .filter { Files.isRegularFile(it) }
+                    .filter { it.fileName.toString().endsWith(".java") }
+                    .forEach { file ->
+                        val relative = packDirectory.relativize(file).toString().replace('\\', '/')
+                        val bytes = runCatching { Files.readAllBytes(file) }.getOrNull() ?: return@forEach
+                        javaFiles.add(
+                            ScriptPackScriptFile(
+                                relativePath = relative,
+                                absolutePath = file,
+                                bytes = bytes
+                            )
+                        )
+                    }
+            }
+            javaFiles.sortedBy { it.relativePath }
+        }.getOrElse {
+            LOGGER.warn("Failed to collect Java files from {}", packDirectory, it)
+            emptyList()
+        }
+    }
+
+    internal fun computeScriptHash(manifestJson: String, scripts: List<ScriptPackScriptFile>, javaFiles: List<ScriptPackScriptFile> = emptyList()): String {
         val digest = MessageDigest.getInstance("SHA-256")
         digest.update(manifestJson.toByteArray(StandardCharsets.UTF_8))
 
@@ -293,6 +331,13 @@ object ScriptPackManager {
             digest.update(script.relativePath.toByteArray(StandardCharsets.UTF_8))
             digest.update(0)
             digest.update(script.bytes)
+            digest.update(0)
+        }
+
+        javaFiles.sortedBy { it.relativePath }.forEach { javaFile ->
+            digest.update(javaFile.relativePath.toByteArray(StandardCharsets.UTF_8))
+            digest.update(0)
+            digest.update(javaFile.bytes)
             digest.update(0)
         }
 

@@ -13,6 +13,7 @@ import java.nio.file.StandardOpenOption
 import java.security.MessageDigest
 import java.util.Base64
 import java.util.Comparator
+import java.util.concurrent.CountDownLatch
 import kotlin.io.path.absolutePathString
 
 object ServerPackCacheManager {
@@ -32,12 +33,48 @@ object ServerPackCacheManager {
     @Volatile
     private var pendingClientReload: Boolean = false
 
+    /** Bridges the packet handler (Netty thread) to the enqueued main-thread task. */
+    @Volatile
+    private var mainThreadLatch: CountDownLatch? = null
+
+    /**
+     * Called by the packet handler on the Netty thread before [enqueueWork].
+     * Creates a latch that will be counted down after the enqueued task finishes.
+     */
+    fun prepareMainThreadSync() {
+        mainThreadLatch = CountDownLatch(1)
+    }
+
+    /**
+     * Called by the enqueued task on the main thread after [handleBundle] or
+     * [handleHashList] finishes (which may have triggered a sync reload).
+     */
+    fun completeMainThreadSync() {
+        mainThreadLatch?.countDown()
+    }
+
+    /**
+     * Called by the packet handler on the Netty thread to block until the
+     * enqueued main-thread task has finished processing.
+     */
+    fun awaitMainThreadSync() {
+        mainThreadLatch?.apply {
+            try {
+                await()
+            } catch (e: InterruptedException) {
+                Thread.currentThread().interrupt()
+            }
+            mainThreadLatch = null
+        }
+    }
+
     @Synchronized
     fun reset() {
         activeServerBucket = null
         expectedHashes = emptyMap()
         activePacks = emptyList()
         pendingClientReload = false
+        mainThreadLatch = null
     }
 
     fun listPacksForGui(): List<ScriptPackView> {
@@ -100,9 +137,11 @@ object ServerPackCacheManager {
             return
         }
 
+        // During configuration login the server already sends the full bundle
+        // snapshot right after the hash list. Leave reload pending until the
+        // ordered bundle packet fills in the missing packs.
         activePacks = emptyList()
         pendingClientReload = false
-        requestSender(ScriptPackRequestPacket(missing))
     }
 
     @Synchronized

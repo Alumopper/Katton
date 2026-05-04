@@ -17,18 +17,30 @@ object ClientNetworkingFabric {
     fun initialize() {
         ClientConfigurationNetworking.registerGlobalReceiver(ScriptPackHashListPacket.TYPE) { packet, context ->
             if (context.client().isLocalServer) return@registerGlobalReceiver
+            ServerPackCacheManager.prepareMainThreadSync()
             context.client().execute {
-                ServerPackCacheManager.handleHashList(packet) { request ->
-                    ClientConfigurationNetworking.send(request)
+                try {
+                    ServerPackCacheManager.handleHashList(packet) { request ->
+                        ClientConfigurationNetworking.send(request)
+                    }
+                } finally {
+                    ServerPackCacheManager.completeMainThreadSync()
                 }
             }
+            ServerPackCacheManager.awaitMainThreadSync()
         }
 
         ClientConfigurationNetworking.registerGlobalReceiver(ScriptPackBundlePacket.TYPE) { packet, context ->
             if (context.client().isLocalServer) return@registerGlobalReceiver
+            ServerPackCacheManager.prepareMainThreadSync()
             context.client().execute {
-                ServerPackCacheManager.handleBundle(packet)
+                try {
+                    ServerPackCacheManager.handleBundle(packet)
+                } finally {
+                    ServerPackCacheManager.completeMainThreadSync()
+                }
             }
+            ServerPackCacheManager.awaitMainThreadSync()
         }
     }
 
