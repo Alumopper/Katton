@@ -12,9 +12,15 @@ import top.katton.pack.ScriptPackScope
 import top.katton.pack.ScriptPackScriptFile
 import top.katton.registry.KattonRegistry
 import top.katton.util.ScriptExecutionContext
+import org.objectweb.asm.AnnotationVisitor
+import org.objectweb.asm.ClassReader
+import org.objectweb.asm.ClassVisitor
+import org.objectweb.asm.MethodVisitor
+import org.objectweb.asm.Opcodes
+import org.objectweb.asm.Type
 import java.io.File
-import java.lang.reflect.Method
-import java.lang.reflect.Modifier
+import java.lang.invoke.MethodHandles
+import java.lang.invoke.MethodType
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
@@ -62,6 +68,17 @@ object ScriptEngine {
         val scriptPaths: List<String>,
         val classpathJars: List<Path>,
         val cacheKey: String
+    )
+
+    private data class ClassFileEntry(
+        val className: String,
+        val bytes: ByteArray
+    )
+
+    private data class EntrypointDescriptor(
+        val className: String,
+        val methodName: String,
+        val methodDescriptor: String
     )
 
     private val compiler = JvmScriptCompiler()
@@ -382,10 +399,12 @@ object ScriptEngine {
 
         val loader = rootClass.java.classLoader
         val rootName = rootClass.qualifiedName
-        val topLevelClasses = collectTopLevelClassNames(script, artifact.cacheJar).sorted()
+        val entrypointsByClass = collectEntrypoints(script, artifact.cacheJar, environment)
+            .filterKeys { it != rootName }
+            .toSortedMap()
         LOGGER.info(
             "Discovered {} top-level compiled classes for {} in {} environment",
-            topLevelClasses.size,
+            entrypointsByClass.size,
             label,
             environment.name.lowercase()
         )
@@ -393,19 +412,9 @@ object ScriptEngine {
         var failureCount = 0
         val errorMessages = mutableListOf<String>()
 
-        for (fqcn in topLevelClasses) {
-            if (fqcn == rootName) continue
-
+        for ((fqcn, entrypoints) in entrypointsByClass) {
             runCatching {
                 val clazz = Class.forName(fqcn, false, loader)
-                val entrypoints = clazz.declaredMethods
-                    .asSequence()
-                    .filter { method ->
-                        Modifier.isStatic(method.modifiers) &&
-                            method.annotationClassNames().contains(environment.annotationClassName)
-                    }
-                    .sortedBy { it.name }
-                    .toList()
                 if (entrypoints.isNotEmpty()) {
                     LOGGER.info(
                         "Executing {} entrypoints from {} for {}",
@@ -415,15 +424,16 @@ object ScriptEngine {
                     )
                 }
 
-                for (method in entrypoints) {
-                    if (method.parameterCount != 0) {
+                for (entrypoint in entrypoints) {
+                    val methodType = MethodType.fromMethodDescriptorString(entrypoint.methodDescriptor, loader)
+                    if (methodType.parameterCount() != 0) {
                         failureCount++
-                        errorMessages += "$fqcn.${method.name}: ${environment.annotationClassName.substringAfterLast('.')} functions must not declare parameters"
+                        errorMessages += "$fqcn.${entrypoint.methodName}: ${environment.annotationClassName.substringAfterLast('.')} functions must not declare parameters"
                         continue
                     }
 
                     ScriptExecutionContext.withOwner("${scope.serializedName}:$fqcn") {
-                        invokeEntrypoint(method, environment)
+                        invokeEntrypoint(clazz, entrypoint, methodType, environment)
                     }
                     successCount++
                 }
@@ -517,13 +527,18 @@ object ScriptEngine {
         return digest.digest().joinToString("") { "%02x".format(it) }
     }
 
-    private fun collectTopLevelClassNames(script: CompiledScript, cacheJar: Path?): List<String> {
+    private fun collectTopLevelClassFiles(script: CompiledScript, cacheJar: Path?): List<ClassFileEntry> {
         val module = (script as? KJvmCompiledScript)?.getCompiledModule()
         if (module is KJvmCompiledModuleInMemoryImpl) {
-            return module.compilerOutputFiles.keys
+            return module.compilerOutputFiles.entries
                 .asSequence()
-                .filter { it.endsWith(".class") && !it.contains("$") }
-                .map { it.removeSuffix(".class").replace('/', '.') }
+                .filter { (path, _) -> path.endsWith(".class") && !path.contains("$") }
+                .map { (path, bytes) ->
+                    ClassFileEntry(
+                        className = path.removeSuffix(".class").replace('/', '.'),
+                        bytes = bytes
+                    )
+                }
                 .toList()
         }
 
@@ -531,9 +546,15 @@ object ScriptEngine {
             return runCatching {
                 JarFile(cacheJar.toFile()).use { jar ->
                     jar.entries().asSequence()
-                        .map { it.name }
-                        .filter { it.endsWith(".class") && !it.contains("$") }
-                        .map { it.removeSuffix(".class").replace('/', '.') }
+                        .filter { !it.isDirectory && it.name.endsWith(".class") && !it.name.contains("$") }
+                        .map { entry ->
+                            jar.getInputStream(entry).use { input ->
+                                ClassFileEntry(
+                                    className = entry.name.removeSuffix(".class").replace('/', '.'),
+                                    bytes = input.readAllBytes()
+                                )
+                            }
+                        }
                         .toList()
                 }
             }.getOrElse {
@@ -545,19 +566,73 @@ object ScriptEngine {
         return emptyList()
     }
 
-    private fun Method.annotationClassNames(): Set<String> {
-        return annotations.mapNotNull { it.annotationClass.qualifiedName }.toSet()
+    private fun collectEntrypoints(
+        script: CompiledScript,
+        cacheJar: Path?,
+        environment: ScriptEnvironment
+    ): Map<String, List<EntrypointDescriptor>> {
+        val annotationDescriptor = Type.getDescriptor(
+            Class.forName(environment.annotationClassName, false, javaClass.classLoader)
+        )
+        return collectTopLevelClassFiles(script, cacheJar)
+            .sortedBy { it.className }
+            .associate { classFile ->
+                classFile.className to scanEntrypoints(classFile.bytes, classFile.className, annotationDescriptor)
+            }
+            .filterValues { it.isNotEmpty() }
     }
 
-    private fun invokeEntrypoint(method: Method, environment: ScriptEnvironment) {
-        method.isAccessible = true
+    private fun scanEntrypoints(
+        classBytes: ByteArray,
+        className: String,
+        annotationDescriptor: String
+    ): List<EntrypointDescriptor> {
+        val entrypoints = mutableListOf<EntrypointDescriptor>()
+        ClassReader(classBytes).accept(object : ClassVisitor(Opcodes.ASM9) {
+            override fun visitMethod(
+                access: Int,
+                name: String,
+                descriptor: String,
+                signature: String?,
+                exceptions: Array<out String>?
+            ): MethodVisitor? {
+                if ((access and Opcodes.ACC_STATIC) == 0) {
+                    return null
+                }
+
+                return object : MethodVisitor(Opcodes.ASM9) {
+                    override fun visitAnnotation(descriptorName: String, visible: Boolean): AnnotationVisitor? {
+                        if (descriptorName == annotationDescriptor) {
+                            entrypoints += EntrypointDescriptor(
+                                className = className,
+                                methodName = name,
+                                methodDescriptor = descriptor
+                            )
+                        }
+                        return null
+                    }
+                }
+            }
+        }, ClassReader.SKIP_CODE or ClassReader.SKIP_DEBUG or ClassReader.SKIP_FRAMES)
+
+        return entrypoints.sortedBy { it.methodName }
+    }
+
+    private fun invokeEntrypoint(
+        clazz: Class<*>,
+        entrypoint: EntrypointDescriptor,
+        methodType: MethodType,
+        environment: ScriptEnvironment
+    ) {
+        val lookup = MethodHandles.privateLookupIn(clazz, MethodHandles.lookup())
+        val handle = lookup.findStatic(clazz, entrypoint.methodName, methodType)
         if (environment != ScriptEnvironment.CLIENT) {
-            method.invoke(null)
+            handle.invokeWithArguments()
             KattonRegistry.flushPendingRegistrations()
             return
         }
         runOnClientMainThreadAndWait {
-            method.invoke(null)
+            handle.invokeWithArguments()
             KattonRegistry.flushPendingRegistrations()
         }
     }

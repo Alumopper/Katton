@@ -48,7 +48,7 @@ public class KattonNeoForge {
         modEventBus.addListener(this::onEntityAttributeCreation);
         modEventBus.addListener(this::onRegisterSpawnPlacements);
 
-        ServerNetworking.INSTANCE.setPlaySender(PacketDistributor::sendToPlayer);
+        ServerNetworking.setPlaySender(PacketDistributor::sendToPlayer);
         Katton.setGameDirectory(FMLPaths.GAMEDIR.get());
         Katton.mainInitialize();
 

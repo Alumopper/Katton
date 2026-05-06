@@ -1,6 +1,5 @@
 package top.katton.registry
 
-import net.minecraft.core.component.DataComponentInitializers
 import net.minecraft.core.component.DataComponentMap
 import net.minecraft.core.component.DataComponents
 import net.minecraft.network.chat.Component

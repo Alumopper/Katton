@@ -42,7 +42,7 @@ object ItemEvent {
 
         val result = onUse(ItemUseArg(e.level, e.entity, e.hand)).getOrNull() ?: return
         if (result != InteractionResult.PASS) {
-            e.setCancellationResult(result)
+            e.cancellationResult = result
             e.isCanceled = true
         }
     }

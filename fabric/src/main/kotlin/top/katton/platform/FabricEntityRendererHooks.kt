@@ -26,10 +26,7 @@ object FabricEntityRendererHooks : EntityRendererHooks {
     fun getKattonRenderer(type: EntityType<*>): EntityRenderer<*, *>? = kattonRenderers[type]
 
     fun findKattonRendererByState(state: EntityRenderState): EntityRenderer<*, *>? {
-        for ((stateClass, renderer) in rendererByStateClass) {
-            if (stateClass.isInstance(state)) return renderer
-        }
-        return null
+        return rendererByStateClass[state.javaClass]
     }
 
     override fun <T : Entity> registerRenderer(entityType: EntityType<T>, factory: EntityRendererProvider<T>) {

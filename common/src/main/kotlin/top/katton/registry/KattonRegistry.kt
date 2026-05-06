@@ -14,7 +14,6 @@ import net.minecraft.world.entity.LivingEntity
 import net.minecraft.world.entity.Mob
 import net.minecraft.world.entity.ai.attributes.AttributeSupplier
 import net.minecraft.world.item.Item
-import net.minecraft.world.item.Items
 import net.minecraft.world.item.SpawnEggItem
 import net.minecraft.world.level.block.Block
 import net.minecraft.world.level.block.state.BlockBehaviour
@@ -105,7 +104,7 @@ object KattonRegistry {
     data class KattonItemEntry(
         override val id: Identifier,
         val item: Item,
-        private val properties: KattonItemProperties? = null
+        internal val properties: KattonItemProperties? = null
     ) : Identifiable
 
     /**
@@ -149,26 +148,31 @@ object KattonRegistry {
             holder.tags = emptySet()
         }
 
+        /**
+         * Reapplies custom ITEM_NAME and ITEM_MODEL components to all registered Katton items.
+         *
+         * This must be called from the client-side mixin (RegistryDataCollectorMixin)
+         * after DataComponentInitializers.build() has run during
+         * RegistryDataCollector.collectGameRegistries(), because Minecraft's Item
+         * constructor registers a component initializer via finalizeInitializer()
+         * that overrides custom ITEM_NAME and ITEM_MODEL with defaults.
+         *
+         * Called from RegistryDataCollectorMixin on the Fabric client thread.
+         */
+        @JvmStatic
+        fun reapplyCustomItemComponents() {
+            entries().forEach { (_, entry) ->
+                entry.properties?.let { props ->
+                    bindHolderComponents(entry.item, props)
+                }
+            }
+        }
+
         fun newNative(
             components: KattonItemProperties,
             registerMode: RegisterMode = RegisterMode.AUTO,
             itemFactory: (KattonItemProperties) -> Item
         ): KattonItemEntry {
-            if (!Katton.globalState.after(LoadState.INIT)) {
-                val placeholder = KattonItemEntry(id = components.id, item = Items.AIR, properties = components)
-                register(placeholder)
-                delegate.markManaged(components.id, registerMode)
-                delegate.addPendingRegistration(components.id) {
-                    components.setId(ResourceKey.create(Registries.ITEM, components.id))
-                    components.finalizeComponentInitializer()
-                    itemFactory(components)
-                }
-                return placeholder
-            }
-
-            // Even when RELOADABLE returns an existing registered item,
-            // the fresh KattonItemProperties used for rebinding components
-            // still needs itemId to satisfy component initializer paths.
             components.setId(ResourceKey.create(Registries.ITEM, components.id))
 
             val delayedFactory = {
@@ -188,15 +192,8 @@ object KattonRegistry {
             kattonEntries = size,
             managedTracked = delegate.managedIdsSnapshot().size,
             staleRetained = delegate.staleManagedIdsSnapshot().size,
-            pendingRegistrations = if (delegate.hasPendingRegistrations()) 1 else 0
+            pendingRegistrations = 0
         )
-
-        @Synchronized
-        fun flushPendingRegistrations() {
-            delegate.flushPendingRegistrations { id, item ->
-                register(KattonItemEntry(id = id, item = item))
-            }
-        }
     }
 
     /**
@@ -783,7 +780,6 @@ object KattonRegistry {
 
     @JvmStatic
     fun flushPendingRegistrations() {
-        ITEMS.flushPendingRegistrations()
         EntityRendererRegistration.flushPendingRegistrations()
     }
 
@@ -812,7 +808,7 @@ object KattonRegistry {
             @Suppress("UNCHECKED_CAST")
             val componentRegistry = BuiltInRegistries.DATA_COMPONENT_TYPE as net.minecraft.core.MappedRegistry<DataComponentType<*>>
 
-            RegistryMutationUtil.withUnfrozenRegistry(componentRegistry) {
+            withUnfrozenRegistry(componentRegistry) {
                 KATTON_ID = Registry.register(
                     BuiltInRegistries.DATA_COMPONENT_TYPE,
                     Identifier.fromNamespaceAndPath(MOD_ID, "id"),

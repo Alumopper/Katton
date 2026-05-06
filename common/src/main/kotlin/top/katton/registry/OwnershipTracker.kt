@@ -35,7 +35,7 @@ internal class OwnershipTracker {
     ): List<Identifier> {
         val removed = managedIds.toList()
         if (unregisterFromRegistry) {
-            RegistryMutationUtil.unregisterAll(registry, removed, resourceKey)
+            unregisterAll(registry, removed, resourceKey)
         }
         managedIds.clear()
         idsByOwner.clear()

@@ -24,7 +24,6 @@ internal class ReloadableBuiltInRegistry<T : Any>(
 ) {
     private val logger = LoggerFactory.getLogger("KattonRegistry")
     private val tracker = OwnershipTracker()
-    private val pendingRegistrations = mutableListOf<Pair<Identifier, () -> T>>()
     private val staleManagedIds = linkedSetOf<Identifier>()
 
     @Synchronized
@@ -52,7 +51,7 @@ internal class ReloadableBuiltInRegistry<T : Any>(
         return if (requiresIntrusiveHolders) {
             @Suppress("UNCHECKED_CAST")
             val registry = builtInRegistry as MappedRegistry<T>
-            RegistryMutationUtil.withUnfrozenAndHolders(registry) {
+            withUnfrozenAndHolders(registry) {
                 registry.createIntrusiveHolder(value)
                 Registry.register(builtInRegistry, id, value)
             }
@@ -84,13 +83,13 @@ internal class ReloadableBuiltInRegistry<T : Any>(
         @Suppress("UNCHECKED_CAST")
         val registry = builtInRegistry as MappedRegistry<T>
         val result = if (requiresIntrusiveHolders) {
-            RegistryMutationUtil.withUnfrozenAndHolders(registry) {
+            withUnfrozenAndHolders(registry) {
                 val value = builder()
                 registry.createIntrusiveHolder(value)
                 Registry.register(builtInRegistry, id, value)
             }
         } else {
-            RegistryMutationUtil.withUnfrozenRegistry(registry) {
+            withUnfrozenRegistry(registry) {
                 Registry.register(builtInRegistry, id, builder())
             }
         }
@@ -105,15 +104,15 @@ internal class ReloadableBuiltInRegistry<T : Any>(
     ): T {
         if (Katton.debugRegistryLogging) logger.info("registerWithMode id={} mode={}", id, mode)
         return when (mode) {
-        RegisterMode.GLOBAL -> registerGlobal(id, builder())
-        RegisterMode.RELOADABLE -> ensureRegistered(id, builder)
-        RegisterMode.AUTO -> {
-            if (Katton.globalState.after(LoadState.INIT)) {
-                ensureRegistered(id, builder)
-            } else {
-                registerGlobal(id, builder())
+            RegisterMode.GLOBAL -> registerGlobal(id, builder())
+            RegisterMode.RELOADABLE -> ensureRegistered(id, builder)
+            RegisterMode.AUTO -> {
+                if (Katton.globalState.after(LoadState.INIT)) {
+                    ensureRegistered(id, builder)
+                } else {
+                    registerGlobal(id, builder())
+                }
             }
-        }
         }
     }
 
@@ -122,28 +121,6 @@ internal class ReloadableBuiltInRegistry<T : Any>(
         if (tracked) {
             synchronized(staleManagedIds) { staleManagedIds.remove(id) }
         }
-    }
-
-    fun addPendingRegistration(id: Identifier, factory: () -> T) {
-        synchronized(pendingRegistrations) {
-            pendingRegistrations.add(id to factory)
-        }
-    }
-
-    fun flushPendingRegistrations(onFlushed: (Identifier, T) -> Unit = { _, _ -> }) {
-        val copy = synchronized(pendingRegistrations) {
-            val c = pendingRegistrations.toList()
-            pendingRegistrations.clear()
-            c
-        }
-        copy.forEach { (id, factory) ->
-            val value = registerWithMode(id, RegisterMode.RELOADABLE, factory)
-            onFlushed(id, value)
-        }
-    }
-
-    fun hasPendingRegistrations(): Boolean = synchronized(pendingRegistrations) {
-        pendingRegistrations.isNotEmpty()
     }
 
     fun staleManagedIdsSnapshot(): Set<Identifier> = synchronized(staleManagedIds) {

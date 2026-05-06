@@ -15,6 +15,7 @@
     "LivingEntityMixin",
     "LoadingOverlayMixin",
     "PlayerMixin",
+    "RegistryDataCollectorMixin",
     "ServerConfigurationPacketListenerImplMixin",
     "ServerExplosionMixin",
     "ServerLevelMixin"
