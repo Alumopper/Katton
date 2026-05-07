@@ -23,6 +23,8 @@ import top.katton.util.setCancel
     value = [Dist.DEDICATED_SERVER]
 )
 object PlayerEvent {
+
+    @JvmStatic
     @SubscribeEvent
     private fun handleAttackEntity(e: AttackEntityEvent) {
         val arg = NeoPlayerAttackEntityArg(e.entity, e.target)
@@ -30,6 +32,7 @@ object PlayerEvent {
         setCancel(onAttackEntity, e)
     }
 
+    @JvmStatic
     @SubscribeEvent
     private fun handleEntityInteract(e: PlayerInteractEvent.EntityInteract) {
         val arg = NeoPlayerInteractEntityArg(e.entity, e.target, e.hand)
@@ -37,6 +40,7 @@ object PlayerEvent {
         setCancel(onEntityInteract, e)
     }
 
+    @JvmStatic
     @SubscribeEvent
     private fun handleBlockInteract(e: PlayerInteractEvent.RightClickBlock) {
         val arg = NeoPlayerInteractBlockArg(e.entity, e.pos, e.face, e.hand)
@@ -44,6 +48,7 @@ object PlayerEvent {
         setCancel(onBlockInteract, e)
     }
 
+    @JvmStatic
     @SubscribeEvent
     private fun handleItemInteract(e: PlayerInteractEvent.RightClickItem) {
         val arg = NeoPlayerInteractItemArg(e.entity, e.hand)
@@ -51,6 +56,7 @@ object PlayerEvent {
         setCancel(onItemInteract, e)
     }
 
+    @JvmStatic
     @SubscribeEvent
     private fun handleLeftClickBlock(e: PlayerInteractEvent.LeftClickBlock) {
         val arg = NeoPlayerLeftClickBlockArg(e.entity, e.pos, e.face)
@@ -58,6 +64,7 @@ object PlayerEvent {
         setCancel(onLeftClickBlock, e)
     }
 
+    @JvmStatic
     @SubscribeEvent
     private fun handleDestroyItem(e: PlayerDestroyItemEvent) {
         val arg = PlayerDestroyItemArg(e.entity, e.original, e.hand)

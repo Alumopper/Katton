@@ -19,6 +19,7 @@ import top.katton.util.setCancel
 )
 object ServerMessageEvent {
 
+    @JvmStatic
     @SubscribeEvent
     private fun onServerChat(e: ServerChatEvent) {
         onServerChat(ServerChatArg(e.player, e.rawText, e.message))

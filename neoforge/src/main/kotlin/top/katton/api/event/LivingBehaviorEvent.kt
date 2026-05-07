@@ -37,6 +37,7 @@ object LivingBehaviorEvent {
 
     // === Animal Taming ===
 
+    @JvmStatic
     @SubscribeEvent
     private fun handleAnimalTame(e: AnimalTameEvent) {
         val arg = AnimalTameArg(e.animal, e.tamer)
@@ -44,6 +45,7 @@ object LivingBehaviorEvent {
         setCancel(onAnimalTame, e)
     }
 
+    @JvmStatic
     @SubscribeEvent
     private fun handleBabySpawn(e: BabyEntitySpawnEvent) {
         val arg = BabySpawnArg(e.parentA, e.parentB, e.child)
@@ -51,6 +53,7 @@ object LivingBehaviorEvent {
         setCancel(onBabySpawn, e)
     }
 
+    @JvmStatic
     @SubscribeEvent
     private fun handlePlayerWakeUp(e: PlayerWakeUpEvent) {
         val arg = PlayerWakeUpArg(e.entity, e.wakeImmediately(), e.updateLevel())

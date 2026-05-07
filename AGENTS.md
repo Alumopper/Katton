@@ -1,6 +1,6 @@
-# Katton — kts4mc-template-1.21.11
+# Katton
 
-Minecraft Fabric & NeoForge mod for Kotlin scripting with hot reload. Target MC 1.21.5 (version 26.1.2).
+Minecraft Fabric & NeoForge mod for Kotlin scripting with hot reload. Target MC version 26.1.2.
 
 ## Build & Run
 

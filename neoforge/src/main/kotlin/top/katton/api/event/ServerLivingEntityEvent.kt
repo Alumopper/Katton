@@ -28,12 +28,14 @@ import top.katton.util.setCancel
 )
 object ServerLivingEntityEvent {
 
+    @JvmStatic
     @SubscribeEvent
     private fun onLivingHurt(e: LivingIncomingDamageEvent) {
         onLivingHurt(LivingHurtArg(e.entity, e.source, e.amount))
         setCancel(onLivingHurt, e)
     }
 
+    @JvmStatic
     @SubscribeEvent
     private fun onLivingDrops(e: LivingDropsEvent) {
         onLivingDrops(
@@ -46,6 +48,7 @@ object ServerLivingEntityEvent {
         setCancel(onLivingDrops, e)
     }
 
+    @JvmStatic
     @SubscribeEvent
     private fun onLivingFall(e: LivingFallEvent) {
         onLivingFall(
@@ -58,11 +61,13 @@ object ServerLivingEntityEvent {
         setCancel(onLivingFall, e)
     }
 
+    @JvmStatic
     @SubscribeEvent
     private fun onLivingJump(e: LivingEvent.LivingJumpEvent) {
         onLivingJump(LivingJumpArg(e.entity))
     }
 
+    @JvmStatic
     @SubscribeEvent
     private fun onMobConversion(e: LivingConversionEvent.Post) {
         onMobConversion(MobConversionArg(e.entity as Mob, e.outcome as Mob, null))

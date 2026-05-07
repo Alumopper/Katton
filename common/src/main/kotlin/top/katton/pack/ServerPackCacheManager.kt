@@ -30,9 +30,6 @@ object ServerPackCacheManager {
     @Volatile
     private var activePacks: List<ScriptPack> = emptyList()
 
-    @Volatile
-    private var pendingClientReload: Boolean = false
-
     /** Bridges the packet handler (Netty thread) to the enqueued main-thread task. */
     @Volatile
     private var mainThreadLatch: CountDownLatch? = null
@@ -73,7 +70,6 @@ object ServerPackCacheManager {
         activeServerBucket = null
         expectedHashes = emptyMap()
         activePacks = emptyList()
-        pendingClientReload = false
         mainThreadLatch = null
     }
 
@@ -113,35 +109,16 @@ object ServerPackCacheManager {
         expectedHashes = packet.entries.associate { it.syncId to it.hash }
 
         if (packet.entries.isEmpty()) {
+            // No packs on server — clear stale cache and reload (sync on
+            // Render thread via the enqueueWork that calls this method).
             activePacks = emptyList()
-            pendingClientReload = true
+            Katton.reloadClientScripts()
             return
         }
 
-        val cachedRoot = resolveCachedRoot(bucket)
-        val resolved = mutableListOf<ScriptPack>()
-        val missing = mutableListOf<String>()
-
-        packet.entries.forEach { entry ->
-            val cached = loadCachedPack(cachedRoot, entry.syncId)
-            if (cached == null || cached.hash != entry.hash) {
-                missing += entry.syncId
-            } else {
-                resolved += cached
-            }
-        }
-
-        if (missing.isEmpty()) {
-            activePacks = resolved
-            pendingClientReload = true
-            return
-        }
-
-        // During configuration login the server already sends the full bundle
-        // snapshot right after the hash list. Leave reload pending until the
-        // ordered bundle packet fills in the missing packs.
-        activePacks = emptyList()
-        pendingClientReload = false
+        // The server sends the full bundle snapshot right after the hash list
+        // (see sendInitialScriptPackSync). handleBundle will follow shortly
+        // and perform the actual reload on this same Render thread.
     }
 
     @Synchronized
@@ -166,20 +143,30 @@ object ServerPackCacheManager {
         }
 
         activePacks = resolved
-        pendingClientReload = unresolved.isEmpty()
 
         if (unresolved.isNotEmpty()) {
             LOGGER.warn("Some server packs are still unresolved after bundle sync: {}", unresolved)
-        }
-    }
-
-    @Synchronized
-    fun executePendingScriptsBeforeRegistryCheck() {
-        if (!pendingClientReload) {
             return
         }
-        pendingClientReload = false
+
+        // All packs resolved — reload synchronously on the Render thread
+        // (this method is called from enqueueWork). After this returns,
+        // scripts are compiled, entrypoints executed, and items registered.
+        // completeMainThreadSync then releases the Netty thread, and the
+        // registry check finds items already in place.
         Katton.reloadClientScripts()
+    }
+
+    /**
+     * Called by the registry-check mixin on the Netty thread.
+     *
+     * No-op: the actual reload already happened synchronously on the Render
+     * thread inside {@link #handleBundle} (or {@link #handleHashList} for
+     * empty packs), so by the time this runs items are already registered.
+     */
+    @Synchronized
+    fun executePendingScriptsBeforeRegistryCheck() {
+        // Reload already done on Render thread via handleBundle/handleHashList.
     }
 
     private fun loadCachedPack(cachedRoot: Path, syncId: String): ScriptPack? {

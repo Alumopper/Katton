@@ -29,26 +29,31 @@ import top.katton.util.createUnit
 )
 object ServerEvent {
 
+    @JvmStatic
     @SubscribeEvent
     private fun handleServerStarting(e: ServerStartingEvent) {
         onServerStarting(ServerArg(e.server))
     }
 
+    @JvmStatic
     @SubscribeEvent
     private fun handleServerStarted(e: ServerStartedEvent) {
         onServerStarted(ServerArg(e.server))
     }
 
+    @JvmStatic
     @SubscribeEvent
     private fun handleServerStopped(e: ServerStoppedEvent) {
         onServerStopped(ServerArg(e.server))
     }
 
+    @JvmStatic
     @SubscribeEvent
     private fun handleServerStopping(e: ServerStoppingEvent) {
         onServerStopping(ServerArg(e.server))
     }
 
+    @JvmStatic
     @SubscribeEvent
     private fun handleSyncDatapackContents(e: OnDatapackSyncEvent) {
         val player = e.player
@@ -61,16 +66,19 @@ object ServerEvent {
         }
     }
 
+    @JvmStatic
     @SubscribeEvent
     private fun handleStartServerTick(e: ServerTickEvent.Pre) {
         onStartServerTick(ServerTickArg(e.server))
     }
 
+    @JvmStatic
     @SubscribeEvent
     private fun handleEndServerTick(e: ServerTickEvent.Post) {
         onEndServerTick(ServerTickArg(e.server))
     }
 
+    @JvmStatic
     @SubscribeEvent
     private fun handleStartWorldTick(e: LevelTickEvent.Pre) {
         if (e.level is ServerLevel) {
@@ -78,6 +86,7 @@ object ServerEvent {
         }
     }
 
+    @JvmStatic
     @SubscribeEvent
     private fun handleEndWorldTick(e: LevelTickEvent.Post) {
         if (e.level is ServerLevel) {
@@ -85,18 +94,21 @@ object ServerEvent {
         }
     }
 
+    @JvmStatic
     @SubscribeEvent
     private fun handleLevelLoad(e: LevelEvent.Load) {
         val level = e.level as? ServerLevel ?: return
         onLevelLoad(ServerLevelArg(level))
     }
 
+    @JvmStatic
     @SubscribeEvent
     private fun handleLevelUnload(e: LevelEvent.Unload) {
         val level = e.level as? ServerLevel ?: return
         onLevelUnload(ServerLevelArg(level))
     }
 
+    @JvmStatic
     @SubscribeEvent
     private fun handleLevelSave(e: LevelEvent.Save) {
         val level = e.level as? ServerLevel ?: return

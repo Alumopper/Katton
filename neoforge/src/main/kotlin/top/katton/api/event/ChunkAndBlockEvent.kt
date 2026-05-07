@@ -38,6 +38,7 @@ import top.katton.util.setCancel
 )
 object ChunkAndBlockEvent {
 
+    @JvmStatic
     @SubscribeEvent
     private fun handleChunkLoad(e: ChunkEvent.Load) {
         val level = e.level as? ServerLevel ?: return
@@ -45,6 +46,7 @@ object ChunkAndBlockEvent {
         onChunkLoad(ChunkLoadArg(level, chunk, e.isNewChunk))
     }
 
+    @JvmStatic
     @SubscribeEvent
     private fun handleChunkUnload(e: ChunkEvent.Unload) {
         val level = e.level as? ServerLevel ?: return
@@ -52,33 +54,39 @@ object ChunkAndBlockEvent {
         onChunkUnload(ChunkUnloadArg(level, chunk))
     }
 
+    @JvmStatic
     @SubscribeEvent
     private fun handleChunkDataLoad(e: ChunkDataEvent.Load) {
         val level = e.level as? ServerLevel ?: return
         onChunkDataLoad(NeoChunkDataLoadArg(level, e.chunk, e.data, e.type))
     }
 
+    @JvmStatic
     @SubscribeEvent
     private fun handleChunkDataSave(e: ChunkDataEvent.Save) {
         val level = e.level as? ServerLevel ?: return
         onChunkDataSave(NeoChunkDataSaveArg(level, e.chunk, e.data))
     }
 
+    @JvmStatic
     @SubscribeEvent
     private fun handleChunkWatch(e: ChunkWatchEvent.Watch) {
         onChunkWatch(NeoChunkWatchArg(e.player, e.level, e.chunk))
     }
 
+    @JvmStatic
     @SubscribeEvent
     private fun handleChunkSent(e: ChunkWatchEvent.Sent) {
         onChunkSent(NeoChunkWatchArg(e.player, e.level, e.chunk))
     }
 
+    @JvmStatic
     @SubscribeEvent
     private fun handleChunkUnWatch(e: ChunkWatchEvent.UnWatch) {
         onChunkUnWatch(NeoChunkUnWatchArg(e.player, e.level, e.pos))
     }
 
+    @JvmStatic
     @SubscribeEvent
     private fun handleBlockBreak(e: BreakBlockEvent) {
         if (e.level is ServerLevel) {
@@ -94,6 +102,7 @@ object ChunkAndBlockEvent {
         }
     }
 
+    @JvmStatic
     @SubscribeEvent
     private fun handleBlockPlace(e: BlockEvent.EntityPlaceEvent) {
         if (e.level is ServerLevel) {
@@ -109,6 +118,7 @@ object ChunkAndBlockEvent {
         }
     }
 
+    @JvmStatic
     @SubscribeEvent
     private fun handleExplosionStart(e: ExplosionEvent.Start) {
         if (e.level is ServerLevel) {
@@ -121,6 +131,7 @@ object ChunkAndBlockEvent {
         }
     }
 
+    @JvmStatic
     @SubscribeEvent
     private fun handleExplosionDetonate(e: ExplosionEvent.Detonate) {
         if (e.level is ServerLevel) {

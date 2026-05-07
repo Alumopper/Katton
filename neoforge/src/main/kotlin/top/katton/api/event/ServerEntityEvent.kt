@@ -26,6 +26,7 @@ import top.katton.util.setCancel
 )
 object ServerEntityEvent {
 
+    @JvmStatic
     @SubscribeEvent
     private fun onEntityLoad(e: EntityJoinLevelEvent) {
         if (e.level is ServerLevel) {
@@ -34,6 +35,7 @@ object ServerEntityEvent {
         }
     }
 
+    @JvmStatic
     @SubscribeEvent
     private fun onEntityUnload(e: EntityLeaveLevelEvent) {
         if (e.level is ServerLevel) {
@@ -41,6 +43,7 @@ object ServerEntityEvent {
         }
     }
 
+    @JvmStatic
     @SubscribeEvent
     private fun onEquipmentChange(e: LivingEquipmentChangeEvent) {
         onEquipmentChange(
@@ -48,6 +51,7 @@ object ServerEntityEvent {
         )
     }
 
+    @JvmStatic
     @SubscribeEvent
     private fun onEntityTeleport(e: EntityTeleportEvent) {
         onEntityTeleport(
@@ -56,6 +60,7 @@ object ServerEntityEvent {
         setCancel(onEntityTeleport, e)
     }
 
+    @JvmStatic
     @SubscribeEvent
     private fun onEndermanAnger(e: EnderManAngerEvent) {
         onEndermanAnger(

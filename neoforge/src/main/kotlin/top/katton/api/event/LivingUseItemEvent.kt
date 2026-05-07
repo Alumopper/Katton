@@ -25,6 +25,7 @@ import top.katton.util.setCancel
 )
 object LivingUseItemEvent {
 
+    @JvmStatic
     @SubscribeEvent
     private fun handleUseItemStart(e: LivingEntityUseItemEvent.Start) {
         val arg = LivingUseItemStartArg(e.entity, e.item, e.hand, e.duration)
@@ -32,6 +33,7 @@ object LivingUseItemEvent {
         setCancel(onUseItemStart, e)
     }
 
+    @JvmStatic
     @SubscribeEvent
     private fun handleUseItemTick(e: LivingEntityUseItemEvent.Tick) {
         val arg = LivingUseItemTickArg(e.entity, e.item, e.duration)
@@ -39,6 +41,7 @@ object LivingUseItemEvent {
         setCancel(onUseItemTick, e)
     }
 
+    @JvmStatic
     @SubscribeEvent
     private fun handleUseItemStop(e: LivingEntityUseItemEvent.Stop) {
         val arg = LivingUseItemStopArg(e.entity, e.item, e.duration)
@@ -46,6 +49,7 @@ object LivingUseItemEvent {
         setCancel(onUseItemStop, e)
     }
 
+    @JvmStatic
     @SubscribeEvent
     private fun handleUseItemFinish(e: LivingEntityUseItemEvent.Finish) {
         val arg = LivingUseItemFinishArg(e.entity, e.item, e.duration, e.resultStack)

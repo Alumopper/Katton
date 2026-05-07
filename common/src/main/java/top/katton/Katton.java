@@ -121,7 +121,8 @@ public class Katton {
                 ReloadProgressState.finish("Client script reload failed");
             } finally {
                 CLIENT_RELOAD_RUNNING.set(false);
-                clientReloadFuture = null;
+                // Keep clientReloadFuture set so awaitClientReloadCompletion
+                // can always find a completed future to short-circuit on.
             }
         });
         return true;

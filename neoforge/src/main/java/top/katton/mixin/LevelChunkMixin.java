@@ -28,7 +28,6 @@ import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.Redirect;
-import org.spongepowered.asm.mixin.injection.Slice;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import net.minecraft.client.multiplayer.ClientLevel;
@@ -74,16 +73,18 @@ abstract class LevelChunkMixin {
     }
 
     // Use the slice to not redirect codepath where block entity is loaded
+    // Note: this redirect also fires for pendingBlockEntities.remove() (CompoundTag), so we must
+    // guard with instanceof to avoid ClassCastException when chunk saving triggers getBlockEntity.
     @Redirect(method = "getBlockEntity(Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/chunk/LevelChunk$EntityCreationType;)Lnet/minecraft/world/level/block/entity/BlockEntity;",
             at = @At(value = "INVOKE", target = "Ljava/util/Map;remove(Ljava/lang/Object;)Ljava/lang/Object;"), order = 0)
     private <K, V> Object onRemoveBlockEntity(Map<K, V> map, K key) {
-        @Nullable final V removed = map.remove(key);
+        final V removed = map.remove(key);
 
-        if (removed != null) {
+        if (removed instanceof BlockEntity blockEntity) {
             if (this.getLevel() instanceof ServerLevel) {
-                ChunkAndBlockEvent.onBlockEntityUnload.invoke(new BlockEntityLoadArg( (BlockEntity) removed, (ServerLevel) this.getLevel()));
+                ChunkAndBlockEvent.onBlockEntityUnload.invoke(new BlockEntityLoadArg(blockEntity, (ServerLevel) this.getLevel()));
             } else if (this.getLevel() instanceof ClientLevel) {
-                //TODO: ClientBlockEntityEvents.BLOCK_ENTITY_UNLOAD.invoker().onUnload((BlockEntity) removed, (ClientLevel) this.getLevel());
+                //TODO: ClientBlockEntityEvents.BLOCK_ENTITY_UNLOAD.invoker().onUnload(blockEntity, (ClientLevel) this.getLevel());
             }
         }
 

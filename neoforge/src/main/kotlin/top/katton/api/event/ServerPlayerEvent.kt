@@ -36,18 +36,21 @@ object ServerPlayerEvent {
 
     private val respawnStateByPlayerId = mutableMapOf<java.util.UUID, RespawnState>()
 
+    @JvmStatic
     @SubscribeEvent
     private fun handlePlayerJoin(e: PlayerEvent.PlayerLoggedInEvent) {
         val player = e.entity as? ServerPlayer ?: return
         onPlayerJoin(PlayerArg(player))
     }
 
+    @JvmStatic
     @SubscribeEvent
     private fun handlePlayerLeave(e: PlayerEvent.PlayerLoggedOutEvent) {
         val player = e.entity as? ServerPlayer ?: return
         onPlayerLeave(PlayerArg(player))
     }
 
+    @JvmStatic
     @SubscribeEvent
     private fun handlePlayerCopy(e: PlayerEvent.Clone) {
         val oldPlayer = e.original as? ServerPlayer ?: return
@@ -57,6 +60,7 @@ object ServerPlayerEvent {
         onPlayerCopy(ServerPlayerCopyArg(oldPlayer, newPlayer, alive))
     }
 
+    @JvmStatic
     @SubscribeEvent
     private fun handleAfterPlayerRespawn(e: PlayerEvent.PlayerRespawnEvent) {
         val newPlayer = e.entity as? ServerPlayer ?: return
@@ -66,6 +70,7 @@ object ServerPlayerEvent {
         onAfterPlayerRespawn(ServerPlayerAfterRespawnArg(oldPlayer, newPlayer, alive))
     }
 
+    @JvmStatic
     @SubscribeEvent
     private fun handlePlayerXpChange(e: PlayerXpEvent.XpChange) {
         onPlayerXpChange(
@@ -74,6 +79,7 @@ object ServerPlayerEvent {
         setCancel(onPlayerXpChange, e)
     }
 
+    @JvmStatic
     @SubscribeEvent
     private fun handlePlayerXpLevelChange(e: PlayerXpEvent.LevelChange) {
         onPlayerXpLevelChange(
@@ -82,6 +88,7 @@ object ServerPlayerEvent {
         setCancel(onPlayerXpLevelChange, e)
     }
 
+    @JvmStatic
     @SubscribeEvent
     private fun handlePlayerPickupXp(e: PlayerXpEvent.PickupXp) {
         onPlayerPickupXp(
@@ -90,36 +97,42 @@ object ServerPlayerEvent {
         setCancel(onPlayerPickupXp, e)
     }
 
+    @JvmStatic
     @SubscribeEvent
     private fun handleStartTracking(e: PlayerEvent.StartTracking) {
         val player = e.entity as? ServerPlayer ?: return
         onStartTracking(PlayerTrackingArg(player, e.target))
     }
 
+    @JvmStatic
     @SubscribeEvent
     private fun handleStopTracking(e: PlayerEvent.StopTracking) {
         val player = e.entity as? ServerPlayer ?: return
         onStopTracking(PlayerTrackingArg(player, e.target))
     }
 
+    @JvmStatic
     @SubscribeEvent
     private fun handlePlayerLoadFromFile(e: PlayerEvent.LoadFromFile) {
         val player = e.entity as? ServerPlayer ?: return
         onPlayerLoadFromFile(PlayerFileArg(player, e.playerDirectory, e.playerUUID))
     }
 
+    @JvmStatic
     @SubscribeEvent
     private fun handlePlayerSaveToFile(e: PlayerEvent.SaveToFile) {
         val player = e.entity as? ServerPlayer ?: return
         onPlayerSaveToFile(PlayerFileArg(player, e.playerDirectory, e.playerUUID))
     }
 
+    @JvmStatic
     @SubscribeEvent
     private fun handleItemToss(e: ItemTossEvent) {
         val player = e.player as? ServerPlayer ?: return
         onItemToss(ItemTossArg(player, e.entity))
     }
 
+    @JvmStatic
     @SubscribeEvent
     private fun handleItemPickupPre(e: ItemEntityPickupEvent.Pre) {
         val player = e.player as? ServerPlayer ?: return
@@ -128,6 +141,7 @@ object ServerPlayerEvent {
         e.setCanPickup(arg.canPickup)
     }
 
+    @JvmStatic
     @SubscribeEvent
     private fun handleItemPickupPost(e: ItemEntityPickupEvent.Post) {
         val player = e.player as? ServerPlayer ?: return
@@ -141,18 +155,21 @@ object ServerPlayerEvent {
         )
     }
 
+    @JvmStatic
     @SubscribeEvent
     private fun handlePlayerItemCrafted(e: PlayerEvent.ItemCraftedEvent) {
         val player = e.entity as? ServerPlayer ?: return
         onPlayerItemCrafted(PlayerCraftedItemArg(player, e.crafting, e.inventory))
     }
 
+    @JvmStatic
     @SubscribeEvent
     private fun handlePlayerItemSmelted(e: PlayerEvent.ItemSmeltedEvent) {
         val player = e.entity as? ServerPlayer ?: return
         onPlayerItemSmelted(PlayerSmeltedItemArg(player, e.smelting, e.amountRemoved))
     }
 
+    @JvmStatic
     @SubscribeEvent
     private fun handlePlayerSpawnPhantoms(e: PlayerSpawnPhantomsEvent) {
         val player = e.entity as? ServerPlayer ?: return

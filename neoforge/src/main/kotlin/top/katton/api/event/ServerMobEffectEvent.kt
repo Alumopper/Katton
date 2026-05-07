@@ -27,6 +27,7 @@ import top.katton.util.setCancel
 )
 object ServerMobEffectEvent {
 
+    @JvmStatic
     @SubscribeEvent
     private fun handleMobEffectApplicable(e: MobEffectEvent.Applicable) {
         onMobEffectApplicable(
@@ -34,6 +35,7 @@ object ServerMobEffectEvent {
         )
     }
 
+    @JvmStatic
     @SubscribeEvent
     private fun handleMobEffectAdd(e: MobEffectEvent.Added) {
         onMobEffectAdd(
@@ -41,6 +43,7 @@ object ServerMobEffectEvent {
         )
     }
 
+    @JvmStatic
     @SubscribeEvent
     private fun handleMobEffectRemove(e: MobEffectEvent.Remove) {
         onMobEffectRemove(
@@ -49,6 +52,7 @@ object ServerMobEffectEvent {
         setCancel(onMobEffectRemove, e)
     }
 
+    @JvmStatic
     @SubscribeEvent
     private fun handleMobEffectExpire(e: MobEffectEvent.Expired) {
         onMobEffectExpire(

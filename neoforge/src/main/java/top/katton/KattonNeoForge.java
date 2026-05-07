@@ -62,17 +62,17 @@ public class KattonNeoForge {
     }
 
     private void registerGameEventBridges() {
-        NeoForge.EVENT_BUS.register(ChunkAndBlockEvent.INSTANCE);
-        NeoForge.EVENT_BUS.register(ItemEvent.INSTANCE);
-        NeoForge.EVENT_BUS.register(LivingBehaviorEvent.INSTANCE);
-        NeoForge.EVENT_BUS.register(PlayerEvent.INSTANCE);
-        NeoForge.EVENT_BUS.register(ServerEntityCombatEvent.INSTANCE);
-        NeoForge.EVENT_BUS.register(ServerEntityEvent.INSTANCE);
-        NeoForge.EVENT_BUS.register(ServerEvent.INSTANCE);
-        NeoForge.EVENT_BUS.register(ServerLivingEntityEvent.INSTANCE);
-        NeoForge.EVENT_BUS.register(ServerMessageEvent.INSTANCE);
-        NeoForge.EVENT_BUS.register(ServerMobEffectEvent.INSTANCE);
-        NeoForge.EVENT_BUS.register(ServerPlayerEvent.INSTANCE);
+        NeoForge.EVENT_BUS.register(ChunkAndBlockEvent.class);
+        NeoForge.EVENT_BUS.register(ItemEvent.class);
+        NeoForge.EVENT_BUS.register(LivingBehaviorEvent.class);
+        NeoForge.EVENT_BUS.register(PlayerEvent.class);
+        NeoForge.EVENT_BUS.register(ServerEntityCombatEvent.class);
+        NeoForge.EVENT_BUS.register(ServerEntityEvent.class);
+        NeoForge.EVENT_BUS.register(ServerEvent.class);
+        NeoForge.EVENT_BUS.register(ServerLivingEntityEvent.class);
+        NeoForge.EVENT_BUS.register(ServerMessageEvent.class);
+        NeoForge.EVENT_BUS.register(ServerMobEffectEvent.class);
+        NeoForge.EVENT_BUS.register(ServerPlayerEvent.class);
     }
 
     private void onEntityAttributeCreation(EntityAttributeCreationEvent event) {

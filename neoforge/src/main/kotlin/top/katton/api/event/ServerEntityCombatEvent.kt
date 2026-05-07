@@ -22,11 +22,13 @@ import top.katton.util.createUnit
 )
 object ServerEntityCombatEvent {
 
+    @JvmStatic
     @SubscribeEvent
     private fun handleCriticalHit(e: CriticalHitEvent) {
         onCriticalHit(CriticalHitArg(e.entity, e.target, e.isVanillaCritical))
     }
 
+    @JvmStatic
     @SubscribeEvent
     private fun handleShieldBlock(e: LivingShieldBlockEvent) {
         val result = onShieldBlock(ShieldBlockArg(e.entity, e.damageSource, e.blockedDamage, e.originalBlock))

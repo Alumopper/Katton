@@ -8,13 +8,15 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import top.katton.api.KattonClientRenderApiKt;
+import top.katton.client.ReloadProgressOverlay;
 
-/** Mixin into Gui to dispatch HUD render events during frame rendering. */
+/** Mixin into Gui to dispatch HUD render events and reload progress overlay during frame rendering. */
 @Mixin(Gui.class)
 public class GuiRenderMixin {
 
     @Inject(method = "extractRenderState", at = @At("TAIL"))
     private void katton$renderHud(GuiGraphicsExtractor guiGraphics, DeltaTracker deltaTracker, CallbackInfo ci) {
         KattonClientRenderApiKt.dispatchHudRender(guiGraphics, 0.0f);
+        ReloadProgressOverlay.INSTANCE.renderExtractor(guiGraphics);
     }
 }

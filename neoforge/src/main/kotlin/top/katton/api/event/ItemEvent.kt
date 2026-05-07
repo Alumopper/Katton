@@ -22,6 +22,7 @@ import top.katton.util.createReturnIfNot
 )
 object ItemEvent {
 
+    @JvmStatic
     @SubscribeEvent
     private fun handleUseOn(e: UseItemOnBlockEvent) {
         if (e.level.isClientSide || e.usePhase != UseItemOnBlockEvent.UsePhase.ITEM_AFTER_BLOCK) {
@@ -34,6 +35,7 @@ object ItemEvent {
         }
     }
 
+    @JvmStatic
     @SubscribeEvent
     private fun handleUse(e: PlayerInteractEvent.RightClickItem) {
         if (e.level.isClientSide) {
