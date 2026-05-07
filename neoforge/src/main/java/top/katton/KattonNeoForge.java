@@ -22,6 +22,7 @@ import top.katton.api.event.ServerMobEffectEvent;
 import top.katton.api.event.ServerPlayerEvent;
 import top.katton.command.ScriptCommand;
 import top.katton.network.ServerNetworking;
+import top.katton.network.ServerNetworkingNeoForge;
 import top.katton.pack.ScriptPackManager;
 import top.katton.platform.DynamicRegistryHooks;
 import top.katton.platform.EntityAttributeHooks;
@@ -47,6 +48,7 @@ public class KattonNeoForge {
         EntityAttributeHooks.setReloadableRegistrar(NeoForgeEntityAttributeHooks::registerAttributesReloadable);
         modEventBus.addListener(this::onEntityAttributeCreation);
         modEventBus.addListener(this::onRegisterSpawnPlacements);
+        modEventBus.addListener(ServerNetworkingNeoForge.INSTANCE::onRegisterPayloadHandlers);
 
         ServerNetworking.setPlaySender(PacketDistributor::sendToPlayer);
         Katton.setGameDirectory(FMLPaths.GAMEDIR.get());

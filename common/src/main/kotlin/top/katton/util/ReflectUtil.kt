@@ -103,9 +103,15 @@ object ReflectUtil {
         val k = FieldKey(target, fieldName, fieldType)
         val result = VAR_HANDLE_CACHE.computeIfAbsent(k) {
             try {
+                val field = target.getDeclaredField(fieldName)
                 val lookup =
                     MethodHandles.privateLookupIn(target, PUBLIC_LOOKUP)
-                Optional.ofNullable(lookup.findVarHandle(target, fieldName, fieldType))
+                val vh = if (Modifier.isStatic(field.modifiers)) {
+                    lookup.findStaticVarHandle(target, fieldName, fieldType)
+                } else {
+                    lookup.findVarHandle(target, fieldName, fieldType)
+                }
+                Optional.ofNullable(vh)
             } catch (e: ReflectiveOperationException) {
                 LOGGER.error("Failed to find varhandle for field {} in class {}", fieldName, target, e)
                 Optional.empty()
@@ -129,7 +135,12 @@ object ReflectUtil {
                 val fieldType = field.type
                 val lookup =
                     MethodHandles.privateLookupIn(field.declaringClass, PUBLIC_LOOKUP)
-                Optional.ofNullable(lookup.findVarHandle(field.declaringClass, fieldName, fieldType))
+                val vh = if (Modifier.isStatic(field.modifiers)) {
+                    lookup.findStaticVarHandle(field.declaringClass, fieldName, fieldType)
+                } else {
+                    lookup.findVarHandle(field.declaringClass, fieldName, fieldType)
+                }
+                Optional.ofNullable(vh)
             } catch (e: ReflectiveOperationException) {
                 LOGGER.error("Failed to find varhandle for field {} in class {}", fieldName, target, e)
                 Optional.empty()
@@ -160,7 +171,11 @@ object ReflectUtil {
      * @return the value of the field
      */
     private fun vhGet(vh: VarHandle, receiver: Any?): Any? {
-        return vh.get(receiver)
+        return if (vh.accessModeType(VarHandle.AccessMode.GET).parameterCount() == 0) {
+            vh.get() // static field — no instance coordinate needed
+        } else {
+            vh.get(receiver) // instance field
+        }
     }
 
     /**
@@ -243,7 +258,11 @@ object ReflectUtil {
      * @param value the value to set
      */
     private fun vhSet(vh: VarHandle, receiver: Any?, value: Any?) {
-        vh.set(receiver, value)
+        if (vh.accessModeType(VarHandle.AccessMode.SET).parameterCount() == 1) {
+            vh.set(value) // static field — value only, no instance coordinate
+        } else {
+            vh.set(receiver, value) // instance field
+        }
     }
 
     /**

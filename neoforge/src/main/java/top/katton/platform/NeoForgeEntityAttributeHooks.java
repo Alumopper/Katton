@@ -48,7 +48,6 @@ public final class NeoForgeEntityAttributeHooks {
      * happens when {@link #flushOnModBus(EntityAttributeCreationEvent)} is
      * invoked from the event listener.</p>
      */
-    @SuppressWarnings("unchecked")
     public static void registerAttributesGlobal(EntityType<? extends LivingEntity> entityType, AttributeSupplier supplier) {
         synchronized (pendingGlobal) {
             pendingGlobal.add(new PendingRegistration(entityType, supplier));
@@ -62,7 +61,6 @@ public final class NeoForgeEntityAttributeHooks {
      * {@link EntityAttributeCreationEvent} no longer fires at this point,
      * we use reflection to bypass it.</p>
      */
-    @SuppressWarnings("unchecked")
     public static void registerAttributesReloadable(EntityType<? extends LivingEntity> entityType, AttributeSupplier supplier) {
         DefaultAttributesHelper.INSTANCE.ensureMutable();
         DefaultAttributesHelper.INSTANCE.register(entityType, supplier);
@@ -77,7 +75,6 @@ public final class NeoForgeEntityAttributeHooks {
      *
      * @param event the EntityAttributeCreationEvent to submit registrations to
      */
-    @SuppressWarnings("unchecked")
     public static void flushOnModBus(EntityAttributeCreationEvent event) {
         List<PendingRegistration> copy;
         synchronized (pendingGlobal) {
@@ -96,7 +93,6 @@ public final class NeoForgeEntityAttributeHooks {
      * Legacy method: registers attributes directly via DefaultAttributesHelper
      * (same as reloadable path). Provided for backward compatibility.
      */
-    @SuppressWarnings("unchecked")
     public static void registerAttributes(EntityType<? extends LivingEntity> entityType, AttributeSupplier supplier) {
         registerAttributesReloadable(entityType, supplier);
     }

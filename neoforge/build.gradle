@@ -161,6 +161,16 @@ idea {
     }
 }
 
+tasks.named('javadoc', Javadoc) {
+    // NeoForge entrypoints and mixins are internal wiring, not published API.
+    exclude 'top/katton/KattonNeoForge.java'
+    exclude 'top/katton/KattonClientNeoForge.java'
+    exclude 'top/katton/mixin/**'
+
+    // Suppress doclint warnings — mod internals don't need full API-level javadoc.
+    options.addStringOption('Xdoclint:none', '-quiet')
+}
+
 tasks.named('jar', Jar) {
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
     from(commonMainSourceSet.output)

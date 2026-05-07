@@ -98,7 +98,7 @@ object ServerNetworking {
         return ScriptPackBundlePacket(packs)
     }
 
-    private fun createScriptPackHashPacket(): ScriptPackHashListPacket {
+    fun createScriptPackHashPacket(): ScriptPackHashListPacket {
         val entries = ScriptPackManager.collectServerSyncPacks()
             .map { pack ->
                 ScriptPackHashListPacket.HashEntry(

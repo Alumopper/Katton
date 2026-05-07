@@ -12,6 +12,7 @@ import net.minecraft.world.entity.Entity
 import net.minecraft.world.entity.EntityType
 import org.slf4j.LoggerFactory
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.CopyOnWriteArrayList
 
 object NeoForgeEntityRendererHooks : EntityRendererHooks {
 

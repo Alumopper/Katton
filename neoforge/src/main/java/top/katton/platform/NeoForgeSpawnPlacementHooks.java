@@ -44,7 +44,15 @@ public final class NeoForgeSpawnPlacementHooks {
         }
     }
 
-    /** Direct reflection call for hot-reload. */
+    /**
+     * Direct reflection call for hot-reload.
+     *
+     * @param <T>           mob type
+     * @param type          entity type
+     * @param placementType spawn placement type
+     * @param heightmap     heightmap type
+     * @param predicate     spawn predicate
+     */
     @SuppressWarnings("unchecked")
     public static <T extends Mob> void registerReloadable(
             EntityType<T> type, SpawnPlacementType placementType,
@@ -52,7 +60,11 @@ public final class NeoForgeSpawnPlacementHooks {
         SpawnPlacementHooks.registerReflective(type, placementType, heightmap, predicate);
     }
 
-    /** Flushes pending GLOBAL registrations via the event. */
+    /**
+     * Flushes pending GLOBAL registrations via the event.
+     *
+     * @param event the register spawn placements event
+     */
     @SuppressWarnings({"unchecked", "rawtypes"})
     public static void flushOnModBus(RegisterSpawnPlacementsEvent event) {
         List<Pending> copy;
