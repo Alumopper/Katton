@@ -8,6 +8,7 @@ import net.fabricmc.fabric.api.networking.v1.ServerConfigurationNetworking;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import top.katton.api.event.*;
 import top.katton.command.ScriptCommand;
+import top.katton.engine.ScriptReloadManager;
 import top.katton.network.Networking;
 import top.katton.network.ServerNetworking;
 import top.katton.pack.ScriptPackManager;
@@ -48,7 +49,7 @@ public class KattonFabric implements ModInitializer {
         ServerLifecycleEvents.SERVER_STARTED.register(serverInstance -> {
             server = serverInstance;
             globalState = LoadState.SERVER_STARTED;
-            reloadScripts(serverInstance);
+            ScriptReloadManager.reloadScripts(serverInstance);
             ScriptCommand.syncCommandTree(serverInstance);
         });
 
@@ -64,7 +65,7 @@ public class KattonFabric implements ModInitializer {
             if (!success) {
                 return;
             }
-            reloadScripts(server);
+            ScriptReloadManager.reloadScripts(server);
             ScriptCommand.syncCommandTree(server);
         });
     }

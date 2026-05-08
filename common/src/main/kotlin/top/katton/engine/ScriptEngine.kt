@@ -93,10 +93,6 @@ object ScriptEngine {
         jvm {
             dependenciesFromCurrentContext(wholeClasspath = true)
         }
-        defaultImports(
-            ClientScriptEntrypoint::class.qualifiedName!!,
-            ServerScriptEntrypoint::class.qualifiedName!!
-        )
     }
 
     private val evaluationConfig = ScriptEvaluationConfiguration {

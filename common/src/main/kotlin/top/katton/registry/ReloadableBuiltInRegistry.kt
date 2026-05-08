@@ -40,9 +40,9 @@ internal class ReloadableBuiltInRegistry<T : Any>(
                     staleManagedIds.addAll(it)
                 }
             }
-            if (!unregisterOnReload && Katton.debugRegistryLogging) {
-                logger.info("beginReload(): keeping registry entries, clearing ownership only")
-            }
+//            if (!unregisterOnReload && Katton.debugRegistryLogging) {
+//                logger.info("beginReload(): keeping registry entries, clearing ownership only")
+//            }
         }
     }
 

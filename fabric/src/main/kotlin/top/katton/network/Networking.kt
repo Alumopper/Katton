@@ -19,14 +19,19 @@ object Networking {
     fun initialize() {
         // Register payload type for server->client communication
         // This must be done on both sides before registering handlers
+
+        //when a client connects, the server will send a ScriptPackHashListPacket to the client
         if(PayloadTypeRegistryImpl.CLIENTBOUND_CONFIGURATION.get(ScriptPackHashListPacket.TYPE.id) == null){
             PayloadTypeRegistryImpl.CLIENTBOUND_CONFIGURATION.register(ScriptPackHashListPacket.TYPE, ScriptPackHashListPacket.STREAM_CODEC)
         }
-        if(PayloadTypeRegistryImpl.CLIENTBOUND_CONFIGURATION.get(ScriptPackBundlePacket.TYPE.id) == null){
-            PayloadTypeRegistryImpl.CLIENTBOUND_CONFIGURATION.register(ScriptPackBundlePacket.TYPE, ScriptPackBundlePacket.STREAM_CODEC)
-        }
+
+        //after checking the hash list, the client will request the script pack bundle if needed
         if(SERVERBOUND_CONFIGURATION.get(ScriptPackRequestPacket.TYPE.id) == null){
             SERVERBOUND_CONFIGURATION.register(ScriptPackRequestPacket.TYPE, ScriptPackRequestPacket.STREAM_CODEC)
+        }
+
+        if(PayloadTypeRegistryImpl.CLIENTBOUND_CONFIGURATION.get(ScriptPackBundlePacket.TYPE.id) == null){
+            PayloadTypeRegistryImpl.CLIENTBOUND_CONFIGURATION.register(ScriptPackBundlePacket.TYPE, ScriptPackBundlePacket.STREAM_CODEC)
         }
     }
 }

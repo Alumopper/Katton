@@ -12,6 +12,7 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import top.katton.Katton;
 import top.katton.client.ReloadProgressOverlay;
+import top.katton.engine.ScriptReloadManager;
 
 @Mixin(LoadingOverlay.class)
 public abstract class LoadingOverlayMixin {
@@ -32,7 +33,7 @@ public abstract class LoadingOverlayMixin {
     private void katton$finishOnDone(CallbackInfo ci) {
         if (reload.isDone()) {
             if (!katton$clientScriptReloaded) {
-                Katton.reloadClientScriptsAsync();
+                ScriptReloadManager.reloadClientScriptsAsync();
                 katton$clientScriptReloaded = true;
             }
         }

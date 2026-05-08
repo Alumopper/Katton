@@ -7,6 +7,7 @@ import net.minecraft.commands.Commands.literal
 import net.minecraft.network.chat.Component
 import net.minecraft.server.MinecraftServer
 import top.katton.Katton
+import top.katton.engine.ScriptReloadManager
 import top.katton.registry.KattonRegistry
 
 object ScriptCommand {
@@ -30,7 +31,7 @@ object ScriptCommand {
                             source.sendSuccess(
                                 {
                                     Component.literal(
-                                        "[Katton] state=${Katton.globalState}, serverBound=${Katton.server != null}, clientReloadRunning=${Katton.isClientReloadRunning()}"
+                                        "[Katton] state=${Katton.globalState}, serverBound=${Katton.server != null}, clientReloadRunning=${ScriptReloadManager.isClientReloadRunning()}"
                                     )
                                 },
                                 false
@@ -114,9 +115,9 @@ object ScriptCommand {
     }
 
     fun reloadScript(server: MinecraftServer): Boolean {
-        val serverReloaded = Katton.reloadScripts(server)
+        val serverReloaded = ScriptReloadManager.reloadScripts(server)
         val clientReloaded = if (!server.isDedicatedServer) {
-            Katton.reloadClientScriptsAsync()
+            ScriptReloadManager.reloadClientScriptsAsync()
         } else {
             true
         }

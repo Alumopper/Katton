@@ -3,6 +3,7 @@ package top.katton.pack
 import net.minecraft.client.Minecraft
 import top.katton.Katton
 import top.katton.api.LOGGER
+import top.katton.engine.ScriptReloadManager
 import top.katton.network.ScriptPackBundlePacket
 import top.katton.network.ScriptPackHashListPacket
 import top.katton.network.ScriptPackRequestPacket
@@ -112,7 +113,7 @@ object ServerPackCacheManager {
             // No packs on server — clear stale cache and reload (sync on
             // Render thread via the enqueueWork that calls this method).
             activePacks = emptyList()
-            Katton.reloadClientScripts()
+            ScriptReloadManager.reloadClientScripts()
             return
         }
 
@@ -154,7 +155,7 @@ object ServerPackCacheManager {
         // scripts are compiled, entrypoints executed, and items registered.
         // completeMainThreadSync then releases the Netty thread, and the
         // registry check finds items already in place.
-        Katton.reloadClientScripts()
+        ScriptReloadManager.reloadClientScripts()
     }
 
     /**

@@ -13,6 +13,7 @@ import net.neoforged.neoforge.client.event.RegisterKeyMappingsEvent;
 import net.neoforged.neoforge.common.NeoForge;
 import org.lwjgl.glfw.GLFW;
 import top.katton.client.ScriptPackUi;
+import top.katton.engine.ScriptReloadManager;
 import top.katton.pack.ServerPackCacheManager;
 
 /**
@@ -70,7 +71,7 @@ public class KattonClientNeoForge {
 
     private static void onLoggingIn(ClientPlayerNetworkEvent.LoggingIn event) {
         if (Minecraft.getInstance().isSingleplayer()) {
-            Katton.reloadClientScriptsAsync();
+            ScriptReloadManager.reloadClientScriptsAsync();
         }
     }
 

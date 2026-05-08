@@ -8,6 +8,7 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import top.katton.Katton;
 import top.katton.LoadState;
+import top.katton.engine.ScriptReloadManager;
 import top.katton.api.event.EndDatapackReloadArg;
 import top.katton.api.event.ServerSaveArg;
 import top.katton.api.event.ServerEvent;
@@ -41,7 +42,7 @@ public class MinecraftServerMixin {
             Katton.globalState = LoadState.END_DATA_PACK_RELOAD;
 
             if (success) {
-                Katton.reloadScripts(server);
+                ScriptReloadManager.reloadScripts(server);
                 ScriptCommand.syncCommandTree(server);
             }
             return v;

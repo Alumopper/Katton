@@ -11,6 +11,7 @@ import org.lwjgl.glfw.GLFW;
 import top.katton.client.ScriptPackUi;
 import top.katton.network.ClientNetworkingFabric;
 import top.katton.network.Networking;
+import top.katton.engine.ScriptReloadManager;
 import top.katton.pack.ServerPackCacheManager;
 
 public class KattonClientFabric implements ClientModInitializer {
@@ -45,7 +46,7 @@ public class KattonClientFabric implements ClientModInitializer {
 			if (!hasJoinedSinceDisconnect) {
 				hasJoinedSinceDisconnect = true;
 				if (client.isSingleplayer()) {
-					Katton.reloadClientScriptsAsync();
+					ScriptReloadManager.reloadClientScriptsAsync();
 				}
 			}
 		});
@@ -56,7 +57,7 @@ public class KattonClientFabric implements ClientModInitializer {
 			ServerPackCacheManager.INSTANCE.reset();
 		});
 
-		ClientTickEvents.END_CLIENT_TICK.register(client -> {
+		ClientTickEvents.END_CLIENT_TICK.register(_ -> {
 			while (OPEN_PACK_SCREEN.consumeClick()) {
 				ScriptPackUi.openInWorldScreen();
 			}

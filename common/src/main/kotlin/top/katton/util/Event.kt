@@ -8,7 +8,7 @@ import top.katton.util.Extension.returnIfNot
 
 /**
  * Invoker strategy: receives the full [EventHandler] array so that metadata
- * (scope, owner) is available at dispatch time without extra allocations.
+ * (scope) is available at dispatch time without extra allocations.
  */
 private typealias EventInvoker<Arg, R> = (Array<EventHandler<(Arg) -> R>>) -> (Arg) -> R
 
@@ -100,12 +100,10 @@ abstract class CancellableEventArg {
  *
  * @property handler The actual callback function.
  * @property scope The script pack scope (e.g. GLOBAL, WORLD) this handler was registered under.
- * @property owner The script owner (fqcn) this handler was registered under.
  */
 data class EventHandler<T>(
     val handler: T,
-    val scope: ScriptPackScope? = null,
-    val owner: String? = null
+    val scope: ScriptPackScope? = null
 )
 
 interface Event<Arg, R> {

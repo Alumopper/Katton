@@ -20,6 +20,10 @@ data class ScriptPackContentFile(
 )
 
 data class ScriptPack(
+    /**
+     * Identifier used for synchronization,
+     * composed of the script pack's scope name and its id configured in manifest file.
+     */
     val syncId: String,
     val scope: ScriptPackScope,
     val kind: ScriptPackKind,

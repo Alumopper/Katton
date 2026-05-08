@@ -3,23 +3,24 @@ package top.katton.registry
 import net.minecraft.core.MappedRegistry
 import net.minecraft.resources.Identifier
 import net.minecraft.resources.ResourceKey
-import java.util.concurrent.ConcurrentHashMap
+import top.katton.pack.ScriptPackScope
+import top.katton.util.ScriptExecutionContext.currentScriptScope
 
 /**
- * Tracks which registry entries belong to which script owner,
- * enabling scoped cleanup during hot-reload.
+ * Tracks which registry entries are managed for hot-reload cleanup.
+ * Only WORLD-scoped, non-GLOBAL entries are tracked.
  */
 internal class OwnershipTracker {
     private val managedIds = linkedSetOf<Identifier>()
-    private val idsByOwner = ConcurrentHashMap<String, MutableSet<Identifier>>()
 
-    fun currentOwner() = top.katton.util.ScriptExecutionContext.currentScriptOwner() ?: "global"
+    private fun currentScope(): ScriptPackScope? = currentScriptScope()
 
     fun markManaged(id: Identifier, registerMode: RegisterMode): Boolean {
-        val owner = currentOwner()
-        if (owner != "global" && registerMode != RegisterMode.GLOBAL) {
+        val scope = currentScope()
+        // Only track world-scoped, non-GLOBAL entries for reload cleanup
+        // GLOBAL-scoped entries are never reloadable (they persist forever)
+        if (scope == ScriptPackScope.WORLD && registerMode != RegisterMode.GLOBAL) {
             managedIds.add(id)
-            idsByOwner.computeIfAbsent(owner) { ConcurrentHashMap.newKeySet() }.add(id)
             return true
         }
         return false
@@ -27,6 +28,9 @@ internal class OwnershipTracker {
 
     fun managedIdsSnapshot(): Set<Identifier> = synchronized(this) { managedIds.toSet() }
 
+    /**
+     * Unregister all managed entries from the given registry if needed, and clear the tracking set.
+     */
     @Synchronized
     fun <T : Any> beginReload(
         registry: MappedRegistry<T>,
@@ -38,7 +42,6 @@ internal class OwnershipTracker {
             unregisterAll(registry, removed, resourceKey)
         }
         managedIds.clear()
-        idsByOwner.clear()
         return removed
     }
 }

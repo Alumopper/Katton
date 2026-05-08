@@ -7,6 +7,7 @@ import net.minecraft.client.input.MouseButtonEvent
 import net.minecraft.client.gui.screens.Screen
 import net.minecraft.network.chat.Component
 import top.katton.Katton
+import top.katton.engine.ScriptReloadManager
 import top.katton.pack.ScriptPackManager
 import top.katton.pack.ScriptPackScope
 import top.katton.pack.ScriptPackView
@@ -224,7 +225,7 @@ private class ScriptPackManagerScreen(
     private fun updateButtons() {
         val selected = packs.getOrNull(selectedIndex)
         toggleButton.active = selected != null && !selected.locked && selected.scope != ScriptPackScope.SERVER_CACHE
-        reloadButton.active = !reloadQueued && !Katton.isClientReloadRunning()
+        reloadButton.active = !reloadQueued && !ScriptReloadManager.isClientReloadRunning()
     }
 
     private fun toggleSelectedPack() {
@@ -245,7 +246,7 @@ private class ScriptPackManagerScreen(
 
     private fun triggerReload() {
         val mc = minecraft ?: return
-        if (reloadQueued || Katton.isClientReloadRunning()) {
+        if (reloadQueued || ScriptReloadManager.isClientReloadRunning()) {
             return
         }
 
@@ -255,8 +256,8 @@ private class ScriptPackManagerScreen(
         val integratedServer = mc.singleplayerServer
         if (integratedServer != null) {
             integratedServer.execute {
-                val serverOk = Katton.reloadScripts(integratedServer)
-                val clientOk = Katton.reloadClientScriptsAsync()
+                val serverOk = ScriptReloadManager.reloadScripts(integratedServer)
+                val clientOk = ScriptReloadManager.reloadClientScriptsAsync()
                 mc.execute {
                     val message = if (serverOk && clientOk) {
                         Component.literal("[Katton] Script reload started.")
@@ -273,7 +274,7 @@ private class ScriptPackManagerScreen(
             return
         }
 
-        val clientOk = Katton.reloadClientScriptsAsync()
+        val clientOk = ScriptReloadManager.reloadClientScriptsAsync()
         val message = if (clientOk) {
             Component.literal("[Katton] Script reload started.")
         } else {

@@ -67,6 +67,14 @@ object ScriptPackManager {
         refreshWorldPacks()
     }
 
+    fun collectExecutableWorldPacks(): List<ScriptPack> {
+        return worldPacks.asSequence().filter { it.enabled }.toList()
+    }
+
+    fun collectExecutableGlobalPacks(): List<ScriptPack> {
+        return globalPacks.asSequence().filter { it.enabled }.toList()
+    }
+
     fun collectExecutablePacks(): List<ScriptPack> {
         return (globalPacks + worldPacks)
             .asSequence()
@@ -80,7 +88,7 @@ object ScriptPackManager {
 
     fun listLocalPacksForGui(lockGlobalInWorld: Boolean): List<ScriptPackView> {
         return (globalPacks + worldPacks)
-            .sortedWith(compareBy<ScriptPack>({ it.scope.ordinal }, { it.manifest.name.lowercase() }, { it.manifest.id.lowercase() }))
+            .sortedWith(compareBy({ it.scope.ordinal }, { it.manifest.name.lowercase() }, { it.manifest.id.lowercase() }))
             .map { pack ->
                 val locked = lockGlobalInWorld && pack.scope == ScriptPackScope.GLOBAL
                 ScriptPackView(
@@ -170,6 +178,7 @@ object ScriptPackManager {
         syncIdOverride: String? = null,
         forceEnabled: Boolean? = null
     ): ScriptPack? {
+        //check manifest existence first
         val manifestFile = packDirectory.resolve(MANIFEST_FILE_NAME)
         if (!Files.isRegularFile(manifestFile)) {
             return null
@@ -181,13 +190,18 @@ object ScriptPackManager {
                 return null
             }
 
+        //parse manifest
         val manifest = ScriptPackManifest.parse(packDirectory, manifestJson)
-        val scriptFiles = collectScriptFiles(packDirectory)
-        if (scriptFiles.isEmpty()) {
-            LOGGER.warn("Skipping script pack {} because it contains no .kt scripts", packDirectory)
-            return null
-        }
-        val javaFiles = collectJavaFiles(packDirectory)
+
+        //collect script files
+        val scriptFiles = collectFiles(packDirectory, ".kt")
+        // we still try to collect java files even if there are no .kt scripts considering future
+        // support for Java script entries,
+//        if (scriptFiles.isEmpty()) {
+//            LOGGER.warn("Skipping script pack {} because it contains no .kt scripts", packDirectory)
+//            return null
+//        }
+        val javaFiles = collectFiles(packDirectory, ".java")
         val hash = computeScriptHash(manifestJson, scriptFiles, javaFiles)
         val enabled = forceEnabled ?: readEnabledState(packDirectory, ScriptPackKind.DIRECTORY) ?: manifest.enabledByDefault
         val syncId = syncIdOverride ?: makeSyncId(scope, manifest.id)
@@ -212,23 +226,13 @@ object ScriptPackManager {
             contentFiles = contentFiles,
             compiledJar = null
         ).also {
-            val javaCount = javaFiles.size
-            if (javaCount > 0) {
-                LOGGER.info(
-                    "Discovered source pack {} with {} .kt scripts and {} .java files at {}",
-                    it.manifest.name,
-                    it.scripts.size,
-                    javaCount,
-                    it.location
-                )
-            } else {
-                LOGGER.info(
-                    "Discovered source pack {} with {} script files at {}",
-                    it.manifest.name,
-                    it.scripts.size,
-                    it.location
-                )
-            }
+            LOGGER.info(
+                "Discovered source pack {} with {} .kt scripts and {} .java files at {}",
+                it.manifest.name,
+                it.scripts.size,
+                javaFiles.size,
+                it.location
+            )
         }
     }
 
@@ -271,17 +275,17 @@ object ScriptPackManager {
         }
     }
 
-    internal fun collectScriptFiles(packDirectory: Path): List<ScriptPackScriptFile> {
+    internal fun collectFiles(packDirectory: Path, extension: String): List<ScriptPackScriptFile> {
         return runCatching {
-            val scripts = mutableListOf<ScriptPackScriptFile>()
+            val files = mutableListOf<ScriptPackScriptFile>()
             Files.walk(packDirectory).use { stream ->
                 stream
                     .filter { Files.isRegularFile(it) }
-                    .filter { it.fileName.toString().endsWith(".kt") }
+                    .filter { it.fileName.toString().endsWith(extension, ignoreCase = true) }
                     .forEach { file ->
                         val relative = packDirectory.relativize(file).toString().replace('\\', '/')
                         val bytes = runCatching { Files.readAllBytes(file) }.getOrNull() ?: return@forEach
-                        scripts.add(
+                        files.add(
                             ScriptPackScriptFile(
                                 relativePath = relative,
                                 absolutePath = file,
@@ -290,35 +294,9 @@ object ScriptPackManager {
                         )
                     }
             }
-            scripts.sortedBy { it.relativePath }
+            files.sortedBy { it.relativePath }
         }.getOrElse {
-            LOGGER.warn("Failed to collect scripts from {}", packDirectory, it)
-            emptyList()
-        }
-    }
-
-    internal fun collectJavaFiles(packDirectory: Path): List<ScriptPackScriptFile> {
-        return runCatching {
-            val javaFiles = mutableListOf<ScriptPackScriptFile>()
-            Files.walk(packDirectory).use { stream ->
-                stream
-                    .filter { Files.isRegularFile(it) }
-                    .filter { it.fileName.toString().endsWith(".java") }
-                    .forEach { file ->
-                        val relative = packDirectory.relativize(file).toString().replace('\\', '/')
-                        val bytes = runCatching { Files.readAllBytes(file) }.getOrNull() ?: return@forEach
-                        javaFiles.add(
-                            ScriptPackScriptFile(
-                                relativePath = relative,
-                                absolutePath = file,
-                                bytes = bytes
-                            )
-                        )
-                    }
-            }
-            javaFiles.sortedBy { it.relativePath }
-        }.getOrElse {
-            LOGGER.warn("Failed to collect Java files from {}", packDirectory, it)
+            LOGGER.warn("Failed to collect {} files from {}", extension, packDirectory, it)
             emptyList()
         }
     }

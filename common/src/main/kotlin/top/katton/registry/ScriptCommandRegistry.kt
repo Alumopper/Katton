@@ -4,8 +4,7 @@ import com.mojang.brigadier.builder.LiteralArgumentBuilder
 import com.mojang.brigadier.tree.RootCommandNode
 import net.minecraft.commands.CommandSourceStack
 import net.minecraft.server.MinecraftServer
-import top.katton.util.ScriptExecutionContext
-import java.util.concurrent.ConcurrentHashMap
+ 
 
 /**
  * Registry for managing script-defined commands with hot-reload support.
@@ -22,7 +21,6 @@ import java.util.concurrent.ConcurrentHashMap
 object ScriptCommandRegistry {
 
     private val managedRoots = linkedSetOf<String>()
-    private val rootsByOwner = ConcurrentHashMap<String, MutableSet<String>>()
 
     /**
      * Begins a reload cycle by removing all managed commands.
@@ -38,7 +36,6 @@ object ScriptCommandRegistry {
         val dispatcherRoot = server.commands.dispatcher.root
         managedRoots.forEach { removeRootCommand(dispatcherRoot, it) }
         managedRoots.clear()
-        rootsByOwner.clear()
     }
 
     /**
@@ -59,7 +56,6 @@ object ScriptCommandRegistry {
         val rootName = rootBuilder.literal
         require(rootName.isNotBlank()) { "Command root name cannot be blank" }
 
-        val owner = ScriptExecutionContext.currentScriptOwner() ?: "global"
         val dispatcherRoot = server.commands.dispatcher.root
 
         val existingNode = dispatcherRoot.getChild(rootName)
@@ -69,12 +65,10 @@ object ScriptCommandRegistry {
 
         if (rootName in managedRoots) {
             removeRootCommand(dispatcherRoot, rootName)
-            rootsByOwner.values.forEach { it.remove(rootName) }
         }
 
         server.commands.dispatcher.register(rootBuilder)
         managedRoots.add(rootName)
-        rootsByOwner.computeIfAbsent(owner) { ConcurrentHashMap.newKeySet() }.add(rootName)
     }
 
     /**

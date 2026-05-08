@@ -23,6 +23,7 @@ import top.katton.api.event.ServerPlayerEvent;
 import top.katton.command.ScriptCommand;
 import top.katton.network.ServerNetworking;
 import top.katton.network.ServerNetworkingNeoForge;
+import top.katton.engine.ScriptReloadManager;
 import top.katton.pack.ScriptPackManager;
 import top.katton.platform.DynamicRegistryHooks;
 import top.katton.platform.EntityAttributeHooks;
@@ -90,7 +91,7 @@ public class KattonNeoForge {
     private void onServerStarted(ServerStartedEvent event) {
         Katton.server = event.getServer();
         Katton.globalState = LoadState.SERVER_STARTED;
-        Katton.reloadScripts(event.getServer());
+        ScriptReloadManager.reloadScripts(event.getServer());
         ScriptCommand.syncCommandTree(event.getServer());
     }
 
