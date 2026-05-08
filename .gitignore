@@ -45,7 +45,6 @@ replay_*.log
 
 #
 token-usage-output.txt
-docs/
 PLAN_registry_refactor.md
 api
 net/
