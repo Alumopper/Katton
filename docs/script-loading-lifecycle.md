@@ -6,7 +6,7 @@ This document traces the full execution path from mod initialization through cli
 
 Both loaders call `Katton.mainInitialize()` during mod construction:
 
-```
+```kt
 KattonRegistry.INSTANCE.initialize()          // init 10 sub-registries + custom DataComponentTypes
 ScriptPackManager.INSTANCE.setGameDirectory(...)
 ScriptEngine.setCacheDirectory(...)            // <gameDir>/.katton/compiled-script-cache/

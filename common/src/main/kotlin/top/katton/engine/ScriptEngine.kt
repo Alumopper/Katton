@@ -2,9 +2,7 @@ package top.katton.engine
 
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.kotlin.scripting.compiler.plugin.impl.KJvmCompiledModuleInMemoryImpl
-import top.katton.api.ClientScriptEntrypoint
 import top.katton.api.LOGGER
-import top.katton.api.ServerScriptEntrypoint
 import top.katton.client.ReloadProgressState
 import top.katton.pack.ScriptPack
 import top.katton.pack.ScriptPackKind
@@ -29,6 +27,8 @@ import java.util.Optional
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CountDownLatch
 import java.util.jar.JarFile
+import kotlin.io.path.absolute
+import kotlin.io.path.notExists
 import kotlin.jvm.optionals.getOrNull
 import kotlin.script.experimental.api.CompiledScript
 import kotlin.script.experimental.api.EvaluationResult
@@ -37,7 +37,6 @@ import kotlin.script.experimental.api.ResultWithDiagnostics
 import kotlin.script.experimental.api.ScriptCompilationConfiguration
 import kotlin.script.experimental.api.ScriptDiagnostic
 import kotlin.script.experimental.api.ScriptEvaluationConfiguration
-import kotlin.script.experimental.api.defaultImports
 import kotlin.script.experimental.api.enableScriptsInstancesSharing
 import kotlin.script.experimental.api.hostConfiguration
 import kotlin.script.experimental.api.importScripts
@@ -104,15 +103,21 @@ object ScriptEngine {
         cacheDirectory = path?.toAbsolutePath()?.normalize()
     }
 
-    /**
-     * Clears all stale compilation cache jars. Keeps the cache directory
-     * tidy — only the most recent compilation artifacts survive.
-     */
-    private fun cleanStaleCaches() {
+    private fun cleanStaleScriptCaches(cacheKey: String) {
         val dir = cacheDirectory ?: return
         runCatching {
             Files.newDirectoryStream(dir).use { stream ->
-                stream.filter { it.fileName.toString().let { n -> n.startsWith("source-") || n.startsWith("java-") } }
+                stream.filter { it.fileName.toString().let { n -> n.startsWith("source-") && n != "source-$cacheKey" } }
+                    .forEach { Files.deleteIfExists(it) }
+            }
+        }
+    }
+
+    private fun cleanStaleJavaCaches(cache: Path) {
+        val dir = cacheDirectory ?: return
+        runCatching {
+            Files.newDirectoryStream(dir).use { stream ->
+                stream.filter { it.fileName.toString().let { n -> n.startsWith("java-") && n != cache.fileName.toString() } }
                     .forEach { Files.deleteIfExists(it) }
             }
         }
@@ -120,45 +125,30 @@ object ScriptEngine {
 
     @JvmStatic
     fun compileAndExecuteAll(packs: Collection<ScriptPack>, environment: ScriptEnvironment) {
-        cleanStaleCaches()
-        val enabledPacks = packs.filter { it.enabled }
+        val enabledPacks = packs.filter { it.enabled }.toList()
         if (enabledPacks.isEmpty()) {
             ReloadProgressState.update("No enabled ${environment.name.lowercase()} script packs", 0.95f)
             return
         }
 
-        val scopeGroups = enabledPacks.groupBy { it.scope }
         val globalJarPacks = enabledPacks.filter { it.scope == ScriptPackScope.GLOBAL && it.kind == ScriptPackKind.JAR }
 
-        val scopeEntries = scopeGroups.entries.toList()
-        val scopeCount = scopeEntries.size.coerceAtLeast(1)
         val baseProgress = if (environment == ScriptEnvironment.SERVER) 0.50f else 0.46f
         val maxProgress = if (environment == ScriptEnvironment.SERVER) 0.80f else 0.88f
         ReloadProgressState.update(
             "Preparing ${environment.name.lowercase()} script scopes",
             baseProgress
         )
-
-        scopeEntries.forEachIndexed { index, (scope, scopePacks) ->
-            val stepProgress = baseProgress + (maxProgress - baseProgress) * (index.toFloat() / scopeCount.toFloat())
-            ReloadProgressState.update(
-                "Compiling ${environment.name.lowercase()} scope ${scope.serializedName} (${index + 1}/$scopeCount)",
-                stepProgress.coerceIn(baseProgress, maxProgress)
-            )
-            ScriptExecutionContext.withScope(scope) {
-                compileAndExecuteScope(scopePacks, environment, scope, globalJarPacks)
-            }
-        }
+        compileAndExecute(enabledPacks, environment, globalJarPacks)
         ReloadProgressState.update(
             "Finished ${environment.name.lowercase()} script execution",
             maxProgress
         )
     }
 
-    private fun compileAndExecuteScope(
+    private fun compileAndExecute(
         packs: List<ScriptPack>,
         environment: ScriptEnvironment,
-        scope: ScriptPackScope,
         extraClasspathJars: List<ScriptPack>
     ) {
         val sourcePackCount = packs.count { it.scripts.isNotEmpty() }
@@ -167,7 +157,7 @@ object ScriptEngine {
             "Preparing {} {} script packs in scope {} (source={}, jar={})",
             packs.size,
             environment.name.lowercase(),
-            scope.serializedName,
+            packs.first().scope,
             sourcePackCount,
             jarPackCount
         )
@@ -186,7 +176,7 @@ object ScriptEngine {
                     val executionResult = executeCombined(
                         artifact = artifact,
                         environment = environment,
-                        scope = scope,
+                        scope = packs.first().scope,
                         label = "source packs (${sourcePlan.sourcePacks.size})"
                     )
                     logExecutionResult("source packs", executionResult)
@@ -203,7 +193,7 @@ object ScriptEngine {
                     val executionResult = executeCombined(
                         artifact = artifact,
                         environment = environment,
-                        scope = scope,
+                        scope = packs.first().scope,
                         label = "jar pack ${pack.manifest.name}"
                     )
                     logExecutionResult(pack.manifest.name, executionResult)
@@ -211,7 +201,10 @@ object ScriptEngine {
             }
     }
 
-    private fun buildSourceCompilationPlan(packs: Collection<ScriptPack>, extraClasspathJars: List<ScriptPack> = emptyList()): SourceCompilationPlan? {
+    private fun buildSourceCompilationPlan(
+        packs: Collection<ScriptPack>,
+        extraClasspathJars: List<ScriptPack> = emptyList()
+    ): SourceCompilationPlan? {
         val sourcePacks = packs
             .filter { it.scripts.isNotEmpty() }
             .sortedBy { it.syncId }
@@ -222,9 +215,11 @@ object ScriptEngine {
         val binaryPacks = (packs.filter { it.kind == ScriptPackKind.JAR && it.compiledJar != null } + extraClasspathJars)
             .distinctBy { it.syncId }
             .sortedBy { it.syncId }
+        val classpathJars = binaryPacks.mapNotNull { it.compiledJar?.toAbsolutePath()?.normalize() }.toMutableList()
+
         val scriptPaths = sourcePacks
             .flatMap { pack -> pack.scripts.sortedBy { it.relativePath }.map { it.absolutePath.toAbsolutePath().normalize().toString() } }
-        val classpathJars = binaryPacks.mapNotNull { it.compiledJar?.toAbsolutePath()?.normalize() }.toMutableList()
+
         val cacheKey = buildSourceCacheKey(sourcePacks, binaryPacks)
 
         // Compile .java files from enabled directory packs (independent of script collection)
@@ -247,7 +242,8 @@ object ScriptEngine {
     private fun compileJavaFromPacks(packs: Collection<ScriptPack>): Path? {
         val javaFiles = mutableListOf<ScriptPackScriptFile>()
         for (pack in packs) {
-            if (pack.kind != ScriptPackKind.DIRECTORY || pack.location == null) continue
+            if (pack.kind != ScriptPackKind.DIRECTORY) continue
+            //collect all java files in a pack
             runCatching {
                 Files.walk(pack.location).use { stream ->
                     stream.filter { f: Path -> Files.isRegularFile(f) && f.fileName.toString().endsWith(".java") }
@@ -270,6 +266,7 @@ object ScriptEngine {
         }
         LOGGER.info("Compiling {} .java files from {} packs", javaFiles.size, packs.size)
         val result = JavaCompilationUtil.compileToJar(javaFiles, cacheDirectory)
+        result?.let(::cleanStaleJavaCaches)
         LOGGER.info("Java compilation result: {}", result)
         return result
     }
@@ -306,6 +303,7 @@ object ScriptEngine {
                 plan.cacheKey
             )
             sourceCompileCache[plan.cacheKey] = artifact
+            cleanStaleScriptCaches(plan.cacheKey)
         }
         return artifact
     }
@@ -496,7 +494,7 @@ object ScriptEngine {
     private fun resolveSourceCacheJar(cacheKey: String): Path? {
         val root = cacheDirectory ?: return null
         return runCatching {
-            Files.createDirectories(root)
+            if(root.notExists()) Files.createDirectories(root)
             root.resolve("source-$cacheKey.jar")
         }.getOrElse {
             LOGGER.warn("Failed to initialize script compile cache directory {}", root, it)
