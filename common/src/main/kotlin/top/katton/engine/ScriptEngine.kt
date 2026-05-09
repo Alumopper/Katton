@@ -3,7 +3,6 @@ package top.katton.engine
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.kotlin.scripting.compiler.plugin.impl.KJvmCompiledModuleInMemoryImpl
 import top.katton.api.LOGGER
-import top.katton.client.ReloadProgressState
 import top.katton.pack.ScriptPack
 import top.katton.pack.ScriptPackKind
 import top.katton.pack.ScriptPackScope
@@ -126,24 +125,10 @@ object ScriptEngine {
     @JvmStatic
     fun compileAndExecuteAll(packs: Collection<ScriptPack>, environment: ScriptEnvironment) {
         val enabledPacks = packs.filter { it.enabled }.toList()
-        if (enabledPacks.isEmpty()) {
-            ReloadProgressState.update("No enabled ${environment.name.lowercase()} script packs", 0.95f)
-            return
-        }
+        if (enabledPacks.isEmpty()) return
 
         val globalJarPacks = enabledPacks.filter { it.scope == ScriptPackScope.GLOBAL && it.kind == ScriptPackKind.JAR }
-
-        val baseProgress = if (environment == ScriptEnvironment.SERVER) 0.50f else 0.46f
-        val maxProgress = if (environment == ScriptEnvironment.SERVER) 0.80f else 0.88f
-        ReloadProgressState.update(
-            "Preparing ${environment.name.lowercase()} script scopes",
-            baseProgress
-        )
         compileAndExecute(enabledPacks, environment, globalJarPacks)
-        ReloadProgressState.update(
-            "Finished ${environment.name.lowercase()} script execution",
-            maxProgress
-        )
     }
 
     private fun compileAndExecute(
@@ -565,9 +550,7 @@ object ScriptEngine {
         cacheJar: Path?,
         environment: ScriptEnvironment
     ): Map<String, List<EntrypointDescriptor>> {
-        val annotationDescriptor = Type.getDescriptor(
-            Class.forName(environment.annotationClassName, false, javaClass.classLoader)
-        )
+        val annotationDescriptor = Type.getDescriptor(environment.annotationClass)
         return collectTopLevelClassFiles(script, cacheJar)
             .sortedBy { it.className }
             .associate { classFile ->

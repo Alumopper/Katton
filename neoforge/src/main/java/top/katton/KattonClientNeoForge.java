@@ -8,6 +8,7 @@ import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.client.event.AddClientReloadListenersEvent;
 import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
+import top.katton.util.ReflectUtil;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
 import net.neoforged.neoforge.client.event.RegisterKeyMappingsEvent;
 import net.neoforged.neoforge.common.NeoForge;
@@ -41,10 +42,9 @@ public class KattonClientNeoForge {
     @SubscribeEvent
     public static void onAddClientReloadListeners(AddClientReloadListenersEvent event) {
         // Initialize entity renderer hooks for hot-reloadable renderer registration
-        try {
-            Class.forName("top.katton.platform.NeoForgeEntityRendererHooks");
-        } catch (ClassNotFoundException ignored) {
-        }
+        ReflectUtil.INSTANCE.getPossibleClassFromNames(
+            "top.katton.platform.NeoForgeEntityRendererHooks"
+        );
 
         // Also wire game-bus events that are client-only (runs once per client init)
         if (!gameEventsRegistered) {

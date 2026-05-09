@@ -21,7 +21,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import top.katton.api.event.*;
 import top.katton.bridger.EventResult;
-import top.katton.util.JResult;
+import top.katton.util.Result;
 
 import java.util.Optional;
 
@@ -102,7 +102,7 @@ public abstract class LivingEntityMixin2 {
         }
 
         BlockState bedState = ((LivingEntity) (Object) this).level().getBlockState(sleepingPos);
-        JResult<EventResult> result = LivingBehaviorEvent.onAllowBed.invoke(new AllowBedArg((LivingEntity) (Object) this, sleepingPos, bedState, info.getReturnValueZ()));
+        Result<EventResult> result = LivingBehaviorEvent.onAllowBed.invoke(new AllowBedArg((LivingEntity) (Object) this, sleepingPos, bedState, info.getReturnValueZ()));
 
         if (result.notEmptyAndNotEquals(EventResult.PASS)) {
             info.setReturnValue(result.getOrNull().allowAction());

@@ -5,6 +5,7 @@ import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.SpawnPlacementType;
 import net.minecraft.world.entity.SpawnPlacements;
 import net.minecraft.world.level.levelgen.Heightmap;
+import top.katton.util.ReflectUtil;
 
 import java.util.function.Consumer;
 
@@ -58,20 +59,15 @@ public final class SpawnPlacementHooks {
      * Calls SpawnPlacements.register() via reflection.
      * Public so platform-specific hooks can delegate to it.
      */
-    @SuppressWarnings("unchecked")
     public static <T extends Mob> void registerReflective(
             EntityType<T> type, SpawnPlacementType placementType,
             Heightmap.Types heightmap, SpawnPlacements.SpawnPredicate<T> predicate) {
-        try {
-            var method = SpawnPlacements.class.getDeclaredMethod(
-                    "register",
-                    EntityType.class, SpawnPlacementType.class,
-                    Heightmap.Types.class, SpawnPlacements.SpawnPredicate.class);
-            method.setAccessible(true);
-            method.invoke(null, type, placementType, heightmap, predicate);
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to register spawn placement for " + type, e);
-        }
+        ReflectUtil.INSTANCE.invokeStatic(
+            SpawnPlacements.class, "register",
+            new Class<?>[] { EntityType.class, SpawnPlacementType.class,
+                             Heightmap.Types.class, SpawnPlacements.SpawnPredicate.class },
+            type, placementType, heightmap, predicate
+        ).getOrThrow();
     }
 
     /**
@@ -80,13 +76,11 @@ public final class SpawnPlacementHooks {
      */
     @SuppressWarnings("unchecked")
     public static void unregister(EntityType<?> type) {
-        try {
-            var field = SpawnPlacements.class.getDeclaredField("DATA_BY_TYPE");
-            field.setAccessible(true);
-            var map = (java.util.Map<EntityType<?>, ?>) field.get(null);
+        var map = (java.util.Map<EntityType<?>, ?>) ReflectUtil.INSTANCE
+            .getStatic(SpawnPlacements.class, "DATA_BY_TYPE")
+            .getOrNull();
+        if (map != null) {
             map.remove(type);
-        } catch (Exception ignored) {
-            // Non-critical — spawn placement will remain
         }
     }
 }

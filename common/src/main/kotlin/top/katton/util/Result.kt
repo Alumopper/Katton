@@ -4,74 +4,65 @@ import java.io.Serializable
 import java.util.Optional
 
 /**
- * A Result type that holds either a value of type [T] or an error message [String].
+ * A performant Result type holding either a value of type [T] or a failure message.
+ *
+ * Uses [String] instead of [Throwable] for failures — no stack trace overhead.
+ * Regular class (not value class) for seamless Java interop while keeping
+ * the same zero-heap-overhead-on-success semantics via lazy [isSuccess] derivation.
  */
-@OptIn(ExperimentalStdlibApi::class)
 @Suppress("unused")
-@JvmExposeBoxed
-@JvmInline
-value class Result<out T> @PublishedApi internal constructor(
-    @PublishedApi internal val value: Any?
+class Result<out T> private constructor(
+    @PublishedApi internal val value: Any?,
+    @PublishedApi internal val error: String?
 ) : Serializable {
 
-    // Internal marker for failure to distinguish from success values
-    @PublishedApi
-    internal class Failure(@PublishedApi internal val message: String) : Serializable {
-        override fun toString() = "Failure($message)"
+    // ── status queries ──────────────────────────────────────────────
 
-        override fun equals(other: Any?): Boolean {
-             if (this === other) return true
-             if (javaClass != other?.javaClass) return false
-             other as Failure
-             return message == other.message
-        }
+    val isSuccess: Boolean get() = error == null
+    val isFailure: Boolean get() = error != null
 
-        override fun hashCode(): Int = message.hashCode()
-    }
-
-    val isSuccess: Boolean get() = value !is Failure
-    val isFailure: Boolean get() = value is Failure
+    // ── value extraction ────────────────────────────────────────────
 
     @Suppress("UNCHECKED_CAST")
     fun getOrNull(): T? = if (isSuccess) value as T else null
 
-    fun errorOrNull(): String? = (value as? Failure)?.message
+    fun errorOrNull(): String? = error
 
     /**
-     * Returns the encapsulated value if this instance represents success or throws [IllegalStateException]
-     * with the failure message if it is failure.
+     * Returns the encapsulated value on success, or throws [IllegalStateException]
+     * with the failure message.
      */
     @Suppress("UNCHECKED_CAST")
     fun getOrThrow(): T {
-        if (value is Failure) error(value.message)
+        if (!isSuccess) error(error ?: "Unknown error")
         return value as T
     }
 
     @Suppress("UNCHECKED_CAST")
+    fun getOrDefault(defaultValue: @UnsafeVariance T): T {
+        return if (isSuccess) value as T else defaultValue
+    }
+
+    fun toOptional(): Optional<T & Any> = Optional.ofNullable(getOrNull())
+
+    // ── combinators ──────────────────────────────────────────────────
+
+    @Suppress("UNCHECKED_CAST")
     inline fun <R> map(transform: (T) -> R): Result<R> {
-        return if (isSuccess) {
-            success(transform(value as T))
-        } else {
-            Result(value) // Propagate failure
-        }
+        return if (isSuccess) success(transform(value as T))
+        else failure(error ?: "Unknown error")
     }
 
     @Suppress("UNCHECKED_CAST")
     inline fun <R> flatMap(transform: (T) -> Result<R>): Result<R> {
-        return if (isSuccess) {
-            transform(value as T)
-        } else {
-            Result(value) // Propagate failure
-        }
+        return if (isSuccess) transform(value as T)
+        else failure(error ?: "Unknown error")
     }
 
     @Suppress("UNCHECKED_CAST")
     inline fun recover(transform: (String) -> @UnsafeVariance T): Result<T> {
-        return if (value is Failure) {
-            success(transform(value.message))
-        } else {
-            this
-        }
+        return if (isFailure) success(transform(error ?: "Unknown error"))
+        else this
     }
 
     @Suppress("UNCHECKED_CAST")
@@ -81,43 +72,86 @@ value class Result<out T> @PublishedApi internal constructor(
     }
 
     inline fun onFailure(action: (String) -> Unit): Result<T> {
-        if (value is Failure) action(value.message)
+        if (isFailure) action(error ?: "Unknown error")
         return this
     }
 
     @Suppress("UNCHECKED_CAST")
     inline fun getOrElse(onFailure: (String) -> @UnsafeVariance T): T {
-        return if (isSuccess) {
-            value as T
-        } else {
-            onFailure((value as Failure).message)
-        }
+        return if (isSuccess) value as T
+        else onFailure(error ?: "Unknown error")
     }
 
     @Suppress("UNCHECKED_CAST")
     inline fun <R> fold(onSuccess: (T) -> R, onFailure: (String) -> R): R {
-        return if (isSuccess) {
-            onSuccess(value as T)
-        } else {
-            onFailure((value as Failure).message)
-        }
+        return if (isSuccess) onSuccess(value as T)
+        else onFailure(error ?: "Unknown error")
     }
 
+    // ── predicate combinators (Java-friendly) ────────────────────────
+
+    inline fun notEmptyAndMatch(predicate: (T?) -> Boolean): Boolean {
+        return isSuccess && predicate(getOrNull())
+    }
+
+    fun notEmptyAndNotNull(): Boolean = getOrNull() != null
+
+    fun notEmptyAndTrue(): Boolean = getOrNull() == true
+
+    fun notEmptyAndFalse(): Boolean = getOrNull() == false
+
+    fun notEmptyAndEquals(expected: @UnsafeVariance T?): Boolean = getOrNull() == expected
+
+    fun notEmptyAndNotEquals(unexpected: @UnsafeVariance T?): Boolean = getOrNull() != unexpected
+
+    inline fun emptyOrMatch(predicate: (T?) -> Boolean): Boolean {
+        return isFailure || predicate(getOrNull())
+    }
+
+    fun emptyOrTrue(): Boolean = isFailure || getOrNull() == true
+
+    fun emptyOrFalse(): Boolean = isFailure || getOrNull() == false
+
+    // ── toString / equals / hashCode ─────────────────────────────────
+
+    override fun toString(): String =
+        if (isSuccess) "Result.success($value)" else "Result.failure($error)"
+
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (other !is Result<*>) return false
+        if (value != other.value) return false
+        if (error != other.error) return false
+        return true
+    }
+
+    override fun hashCode(): Int {
+        var result = value?.hashCode() ?: 0
+        result = 31 * result + (error?.hashCode() ?: 0)
+        return result
+    }
+
+    // ── factories ────────────────────────────────────────────────────
+
     companion object {
-        fun <T> success(value: T?): Result<T> = Result(value)
+        @JvmStatic
+        fun <T> success(value: T?): Result<T> = Result(value, null)
 
-        fun success(): Result<Unit> = Result(Unit)
+        @JvmStatic
+        fun success(): Result<Unit> = Result(Unit, null)
 
-        fun failure(message: String): Result<Nothing> = Result(Failure(message))
+        @JvmStatic
+        fun <T> failure(message: String): Result<T> = Result(null, message)
 
-        // overload for compatibility with Exception-based flows
-        fun failure(exception: Throwable): Result<Nothing> = Result(Failure(exception.message ?: exception.toString()))
+        @JvmStatic
+        fun <T> failure(exception: Throwable): Result<T> =
+            Result(null, exception.message ?: exception.toString())
 
         inline fun <T> catch(block: () -> T): Result<T> {
             return try {
-                Result(block())
+                success(block())
             } catch (e: Throwable) {
-                Result(Failure(e.message ?: e.toString()))
+                failure(e)
             }
         }
     }

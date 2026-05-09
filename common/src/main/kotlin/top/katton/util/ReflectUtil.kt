@@ -618,7 +618,7 @@ object ReflectUtil {
      * This is the only reliable way to replace an `ImmutableMap` or similar
      * static final field on Java 17+ without `--add-opens` flags.
      */
-    @Suppress("DEPRECATION", "PLATFORM_CLASS_MAPPED_TO_KOTLIN")
+    @Suppress("DEPRECATION", "PLATFORM_CLASS_MAPPED_TO_KOTLIN", "removal")
     fun setStaticFinal(clazz: Class<*>, fieldName: String, newValue: Any?): Result<Unit> {
         return try {
             val field = clazz.getDeclaredField(fieldName).apply { isAccessible = true }
@@ -707,10 +707,11 @@ object ReflectUtil {
         val resolvedParamTypes = resolveConstructorParamTypes(target, args)
         val fallbackParamTypes = args.map { arg: Any? -> arg?.javaClass ?: Any::class.java }
         val paramTypes = resolvedParamTypes ?: fallbackParamTypes
-        val ctor = findConstructorHandle(target, *paramTypes.toTypedArray())
-        if (ctor == null) {
-            return failure("Constructor not found for $target with params ${paramTypes.toTypedArray().contentToString()}")
-        }
+        val ctor = findConstructorHandle(target, *paramTypes.toTypedArray()) ?: return failure(
+            "Constructor not found for $target with params ${
+                paramTypes.toTypedArray().contentToString()
+            }"
+        )
         try {
             @Suppress("UNCHECKED_CAST")
             return Result.success(invoke(ctor, *args) as T?)
@@ -742,7 +743,7 @@ object ReflectUtil {
                 }
                 //if class not found, put null into cache
                 val opt = Optional.ofNullable(loaded)
-                CLASS_CACHE.put(name, opt)
+                CLASS_CACHE[name] = opt
                 cached = opt
             }
             if (cached.isPresent) {

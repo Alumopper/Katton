@@ -37,16 +37,6 @@ import java.util.*
 import kotlin.jvm.optionals.getOrNull
 
 /**
- * Entity management API for entity operations.
- *
- * This module provides functions for working with entities including:
- * - NBT data access
- * - Attribute management
- * - Entity tick events
- * - Entity collections and queries
- */
-
-/**
  * Get/Set the NBT data of an Entity.
  */
 var Entity.nbt: CompoundTag
@@ -55,41 +45,7 @@ var Entity.nbt: CompoundTag
         setEntityNbt(this, value)
     }
 
-/**
- * Event handlers for entity lifecycle events.
- */
-object EntityEvent {
-    val onTickHandlers = mutableMapOf<Entity, EventHandler<Entity.(Level) -> Unit>>()
-
-    fun beginReload() {
-        onTickHandlers.clear()
-    }
-
-    fun rebindLoadedEntities(server: MinecraftServer) {
-        server.allLevels.forEach { level ->
-            level.allEntities.forEach { entity ->
-                onTickHandlers[entity]?.handler?.invoke(entity, level)
-            }
-        }
-    }
-}
-
-/**
- * Register or replace a tick handler for this entity.
- */
-@Suppress("NOTHING_TO_INLINE")
-inline var Entity.onTick: (Entity.(Level) -> Unit)?
-    get() = EntityEvent.onTickHandlers[this]?.handler
-    set(value) {
-        if (value != null) {
-            EntityEvent.onTickHandlers[this] = EventHandler(
-                handler = value,
-                owner = ScriptExecutionContext.currentScriptOwner()
-            )
-        } else {
-            EntityEvent.onTickHandlers.remove(this)
-        }
-    }
+//TODO: Entity tick event
 
 /**
  * Collection of all entities across all server levels.

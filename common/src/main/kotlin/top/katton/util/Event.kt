@@ -169,11 +169,6 @@ class DelegateEvent<Arg, R>(val invoker: EventInvoker<Arg, R>): Event<Arg, R> {
         if (es.isEmpty()) return Result.failure("No handler")
         return Result.success(invoker(es).invoke(arg))
     }
-
-    @JvmName("invoke")
-    fun invokeJ(arg: Arg): JResult<R> {
-        return JResult.from(invoke(arg))
-    }
 }
 
 class CancellableDelegateEvent<Arg: CancellableEventArg, R>(val invoker: EventInvoker<Arg, R>): Cancellable(), Event<Arg, R> {
@@ -212,10 +207,5 @@ class CancellableDelegateEvent<Arg: CancellableEventArg, R>(val invoker: EventIn
         val es = entries
         if (es.isEmpty()) return Result.failure("No handler")
         return Result.success(invoker(es).invoke(arg))
-    }
-
-    @JvmName("invoke")
-    fun invokeJ(arg: Arg): JResult<out R?> {
-        return JResult.from(invoke(arg))
     }
 }

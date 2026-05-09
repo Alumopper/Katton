@@ -4,6 +4,7 @@ import com.mojang.brigadier.builder.LiteralArgumentBuilder
 import com.mojang.brigadier.tree.RootCommandNode
 import net.minecraft.commands.CommandSourceStack
 import net.minecraft.server.MinecraftServer
+import top.katton.util.ReflectUtil
  
 
 /**
@@ -114,11 +115,7 @@ object ScriptCommandRegistry {
      */
     @Suppress("UNCHECKED_CAST")
     private fun removeFromMapField(target: Any, fieldName: String, key: String) {
-        runCatching {
-            val field = target.javaClass.superclass.getDeclaredField(fieldName)
-            field.isAccessible = true
-            val map = field.get(target) as? MutableMap<String, Any?> ?: return
-            map.remove(key)
-        }
+        val map = ReflectUtil.get(target, fieldName).getOrNull() as? MutableMap<String, Any?> ?: return
+        map.remove(key)
     }
 }

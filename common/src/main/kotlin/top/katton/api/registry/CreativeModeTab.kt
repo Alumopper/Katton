@@ -9,6 +9,7 @@ import org.jetbrains.annotations.ApiStatus
 import top.katton.registry.KattonRegistry
 import top.katton.registry.RegisterMode
 import top.katton.registry.id
+import top.katton.util.ReflectUtil
 
 /**
  * CreativeModeTab registration API.
@@ -67,45 +68,37 @@ fun registerNativeCreativeTab(
  */
 @ApiStatus.Experimental
 fun reorderCreativeTab(tab: CreativeModeTab, after: String? = null, before: String? = null) {
-    try {
-        val tabsClass = Class.forName("net.minecraft.world.item.CreativeModeTabs") ?: return
-        val tabsField = tabsClass.declaredFields
-            .firstOrNull {
-                List::class.java.isAssignableFrom(it.type) &&
-                java.lang.reflect.Modifier.isStatic(it.modifiers)
-            } ?: return
+    val tabsClass = ReflectUtil.getPossibleClassFromNames(
+        "net.minecraft.world.item.CreativeModeTabs"
+    ).getOrNull() ?: return
 
-        @Suppress("UNCHECKED_CAST")
-        val tabsList = tabsField.let {
-            it.isAccessible = true
-            it.get(null) as? MutableList<CreativeModeTab>
-        } ?: return
+    val vh = ReflectUtil.findFirstVarHandle(tabsClass, MutableList::class.java) ?: return
 
-        val currentIndex = tabsList.indexOf(tab)
-        if (currentIndex < 0) return
+    @Suppress("UNCHECKED_CAST")
+    val tabsList = vh.get() as? MutableList<CreativeModeTab> ?: return
 
-        tabsList.removeAt(currentIndex)
+    val currentIndex = tabsList.indexOf(tab)
+    if (currentIndex < 0) return
 
-        when {
-            after != null -> {
-                val afterId = Identifier.parse(after)
-                val targetIndex = tabsList.indexOfFirst { tabEntry ->
-                    getTabIdentifier(tabEntry) == afterId
-                }
-                if (targetIndex >= 0) tabsList.add(targetIndex + 1, tab)
-                else tabsList.add(tab)
+    tabsList.removeAt(currentIndex)
+
+    when {
+        after != null -> {
+            val afterId = Identifier.parse(after)
+            val targetIndex = tabsList.indexOfFirst { tabEntry ->
+                getTabIdentifier(tabEntry) == afterId
             }
-            before != null -> {
-                val beforeId = Identifier.parse(before)
-                val targetIndex = tabsList.indexOfFirst { tabEntry ->
-                    getTabIdentifier(tabEntry) == beforeId
-                }
-                if (targetIndex >= 0) tabsList.add(targetIndex, tab)
-                else tabsList.add(0, tab)
-            }
+            if (targetIndex >= 0) tabsList.add(targetIndex + 1, tab)
+            else tabsList.add(tab)
         }
-    } catch (_: Exception) {
-        // Gracefully degrade — tab stays at default position
+        before != null -> {
+            val beforeId = Identifier.parse(before)
+            val targetIndex = tabsList.indexOfFirst { tabEntry ->
+                getTabIdentifier(tabEntry) == beforeId
+            }
+            if (targetIndex >= 0) tabsList.add(targetIndex, tab)
+            else tabsList.add(0, tab)
+        }
     }
 }
 
