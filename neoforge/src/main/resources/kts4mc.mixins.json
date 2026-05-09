@@ -4,18 +4,11 @@
   "compatibilityLevel": "JAVA_21",
   "mixins": [
     "ChunkHolderMixin",
-    "ClientConfigurationPacketListenerImplMixin",
     "DataComponentInitializersMixin",
     "EnchantmentBuilderAccessor",
     "EnchantmentBuilderMixin",
     "EntityMixin",
-    "EntityRenderDispatcherMixin",
-    "EntityRenderersMixin",
-    "GuiRenderMixin",
     "LevelChunkMixin",
-    "LevelLoadingScreenMixin",
-    "LoadingOverlayMixin",
-    "LevelRendererMixin",
     "LivingEntityMixin",
     "LivingEntityMixin2",
     "LootPoolAccessor",
@@ -27,12 +20,21 @@
     "NetworkRegistryMixin",
     "PlayerListMixin",
     "PlayerMixin",
-    "RegistryDataCollectorMixin",
     "ReloadableServerRegistriesMixin",
     "ResourceManagerRegistryLoadTaskMixin",
     "ServerConfigurationPacketListenerImplMixin",
     "ServerGamePacketListenerImplMixin",
     "ServerPlayerMixin"
+  ],
+  "client": [
+    "ClientConfigurationPacketListenerImplMixin",
+    "EntityRenderDispatcherMixin",
+    "EntityRenderersMixin",
+    "GuiRenderMixin",
+    "LevelLoadingScreenMixin",
+    "LevelRendererMixin",
+    "LoadingOverlayMixin",
+    "RegistryDataCollectorMixin"
   ],
   "injectors": {
     "defaultRequire": 1

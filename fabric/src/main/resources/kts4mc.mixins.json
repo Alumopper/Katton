@@ -3,22 +3,24 @@
   "package": "top.katton.mixin",
   "compatibilityLevel": "JAVA_21",
   "mixins": [
-    "ClientRegistrySyncHandlerMixin",
-    "GuiRenderMixin",
-    "LevelRendererMixin",
     "EnderManMixin",
     "ExperienceOrbMixin",
-        "EntityRenderDispatcherMixin",
-        "EntityRenderersMixin",
     "ExplosionMixin",
-    "LevelLoadingScreenMixin",
     "LivingEntityMixin",
-    "LoadingOverlayMixin",
     "PlayerMixin",
-    "RegistryDataCollectorMixin",
     "ServerConfigurationPacketListenerImplMixin",
     "ServerExplosionMixin",
     "ServerLevelMixin"
+  ],
+  "client": [
+    "ClientRegistrySyncHandlerMixin",
+    "EntityRenderDispatcherMixin",
+    "EntityRenderersMixin",
+    "GuiRenderMixin",
+    "LevelLoadingScreenMixin",
+    "LevelRendererMixin",
+    "LoadingOverlayMixin",
+    "RegistryDataCollectorMixin"
   ],
   "injectors": {
     "defaultRequire": 1

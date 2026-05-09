@@ -2,6 +2,7 @@ package top.katton.engine
 
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.kotlin.scripting.compiler.plugin.impl.KJvmCompiledModuleInMemoryImpl
+import org.objectweb.asm.*
 import top.katton.api.LOGGER
 import top.katton.pack.ScriptPack
 import top.katton.pack.ScriptPackKind
@@ -9,36 +10,25 @@ import top.katton.pack.ScriptPackScope
 import top.katton.pack.ScriptPackScriptFile
 import top.katton.registry.KattonRegistry
 import top.katton.util.ScriptExecutionContext
-import org.objectweb.asm.AnnotationVisitor
-import org.objectweb.asm.ClassReader
-import org.objectweb.asm.ClassVisitor
-import org.objectweb.asm.MethodVisitor
-import org.objectweb.asm.Opcodes
-import org.objectweb.asm.Type
 import java.io.File
 import java.lang.invoke.MethodHandles
 import java.lang.invoke.MethodType
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.StandardOpenOption
 import java.security.MessageDigest
-import java.util.Optional
+import java.util.*
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CountDownLatch
+import java.util.jar.Attributes
+import java.util.jar.JarEntry
 import java.util.jar.JarFile
-import kotlin.io.path.absolute
+import java.util.jar.JarOutputStream
+import java.util.jar.Manifest
 import kotlin.io.path.notExists
 import kotlin.jvm.optionals.getOrNull
-import kotlin.script.experimental.api.CompiledScript
-import kotlin.script.experimental.api.EvaluationResult
-import kotlin.script.experimental.api.ResultValue
-import kotlin.script.experimental.api.ResultWithDiagnostics
-import kotlin.script.experimental.api.ScriptCompilationConfiguration
-import kotlin.script.experimental.api.ScriptDiagnostic
-import kotlin.script.experimental.api.ScriptEvaluationConfiguration
-import kotlin.script.experimental.api.enableScriptsInstancesSharing
-import kotlin.script.experimental.api.hostConfiguration
-import kotlin.script.experimental.api.importScripts
+import kotlin.script.experimental.api.*
 import kotlin.script.experimental.host.ScriptingHostConfiguration
 import kotlin.script.experimental.host.toScriptSource
 import kotlin.script.experimental.jvm.compilationCache
@@ -119,6 +109,35 @@ object ScriptEngine {
                 stream.filter { it.fileName.toString().let { n -> n.startsWith("java-") && n != cache.fileName.toString() } }
                     .forEach { Files.deleteIfExists(it) }
             }
+        }
+    }
+
+    /**
+     * Writes the compiled class files from an in-memory compiled module into a jar.
+     * This is the reliable way to persist source compilation results since
+     * [CompiledScriptJarsCache] doesn't write jars when [importScripts] is used.
+     */
+    private fun writeCompiledScriptToJar(script: CompiledScript, targetJar: Path) {
+        val module = (script as? KJvmCompiledScript)?.getCompiledModule() as? KJvmCompiledModuleInMemoryImpl ?: return
+        runCatching {
+            Files.createDirectories(targetJar.parent)
+            val manifest = Manifest().apply {
+                mainAttributes[Attributes.Name.MANIFEST_VERSION] = "1.0"
+                mainAttributes.putValue("Created-By", "Katton ScriptEngine")
+            }
+            JarOutputStream(
+                Files.newOutputStream(targetJar, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING),
+                manifest
+            ).use { jos ->
+                for ((entryName, bytes) in module.compilerOutputFiles) {
+                    jos.putNextEntry(JarEntry(entryName))
+                    jos.write(bytes)
+                    jos.closeEntry()
+                }
+            }
+            LOGGER.info("Persisted compiled source jar to {}", targetJar)
+        }.onFailure {
+            LOGGER.warn("Failed to persist compiled source jar to {}", targetJar, it)
         }
     }
 
@@ -263,9 +282,19 @@ object ScriptEngine {
         }
 
         val cacheJar = resolveSourceCacheJar(plan.cacheKey)
+
+        // If the cache jar already exists on disk, load it and skip compilation entirely.
         if (cacheJar != null && Files.isRegularFile(cacheJar)) {
-            LOGGER.info("Combined source cache jar available at {}", cacheJar)
+            LOGGER.info("Loading source compilation from disk cache {}", cacheJar)
+            val cachedScript = cacheJar.toFile().loadScriptFromJar()
+            if (cachedScript != null) {
+                val artifact = CompiledScriptArtifact(cachedScript, cacheJar)
+                sourceCompileCache[plan.cacheKey] = artifact
+                return artifact
+            }
+            LOGGER.error("Failed to load compiled script from cache jar {}, will recompile", cacheJar)
         }
+
         val dummyScript = "".toScriptSource()
         val compilationConfig = createCompilationConfiguration(
             orderedScriptPaths = plan.scriptPaths,
@@ -277,10 +306,8 @@ object ScriptEngine {
         }
         logCompileResult(plan.sourcePacks, compileResult)
 
-        val artifact = when (compileResult) {
-            is ResultWithDiagnostics.Success -> CompiledScriptArtifact(compileResult.value, cacheJar)
-            is ResultWithDiagnostics.Failure -> null
-        }
+        val compiledScript = (compileResult as? ResultWithDiagnostics.Success)?.value
+        val artifact = compiledScript?.let { CompiledScriptArtifact(it, cacheJar) }
         if (artifact != null) {
             LOGGER.info(
                 "Stored combined source compilation result for {} packs with cache key {}",
@@ -289,6 +316,11 @@ object ScriptEngine {
             )
             sourceCompileCache[plan.cacheKey] = artifact
             cleanStaleScriptCaches(plan.cacheKey)
+
+            // Persist the compilation result to disk so it survives restarts.
+            if (cacheJar != null) {
+                writeCompiledScriptToJar(compiledScript, cacheJar)
+            }
         }
         return artifact
     }
@@ -411,8 +443,10 @@ object ScriptEngine {
                         continue
                     }
 
-                    ScriptExecutionContext.withOwner("${scope.serializedName}:$fqcn") {
-                        invokeEntrypoint(clazz, entrypoint, methodType, environment)
+                    ScriptExecutionContext.withScope(scope) {
+                        ScriptExecutionContext.withOwner("${scope.serializedName}:$fqcn") {
+                            invokeEntrypoint(clazz, entrypoint, methodType, environment)
+                        }
                     }
                     successCount++
                 }
