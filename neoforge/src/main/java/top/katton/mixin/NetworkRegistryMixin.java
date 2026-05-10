@@ -9,6 +9,7 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import top.katton.engine.ScriptReloadManager;
 import top.katton.network.ServerNetworking;
 
 import java.util.Map;
@@ -33,6 +34,8 @@ public class NetworkRegistryMixin {
     private static void katton$afterNeoForgeNegotiation(
             ServerConfigurationPacketListener listener, Map<ConnectionProtocol, Set<ModdedNetworkQueryComponent>> clientChannels, CallbackInfo ci
     ) {
+        // Wait for any in-progress server reload so registries are complete.
+        ScriptReloadManager.awaitServerReloadCompletion();
         var impl = (ServerConfigurationPacketListenerImpl) listener;
         ServerNetworking.sendInitialScriptPackSync(impl, ServerConfigurationPacketListenerImpl::send);
     }

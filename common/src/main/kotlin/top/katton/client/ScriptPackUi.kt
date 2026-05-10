@@ -255,8 +255,7 @@ private class ScriptPackManagerScreen(
 
         val integratedServer = mc.singleplayerServer
         if (integratedServer != null) {
-            integratedServer.execute {
-                val serverOk = ScriptReloadManager.reloadScripts(integratedServer)
+            ScriptReloadManager.reloadScriptsAsync(integratedServer) { serverOk ->
                 val clientOk = ScriptReloadManager.reloadClientScriptsAsync()
                 mc.execute {
                     val message = if (serverOk && clientOk) {

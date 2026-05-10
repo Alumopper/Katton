@@ -9,6 +9,7 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import top.katton.engine.ScriptReloadManager;
 import top.katton.network.ServerNetworking;
 
 /**
@@ -19,7 +20,8 @@ public abstract class ServerConfigurationPacketListenerImplMixin {
 
     /**
      * Injects after player initialization to send item sync packet.
-     * This happens before Fabric's registry sync validation.
+     * Waits for any in-progress server reload to complete so the client
+     * receives finalized registries.
      */
     @SuppressWarnings("DataFlowIssue")
     @Inject(
@@ -27,8 +29,9 @@ public abstract class ServerConfigurationPacketListenerImplMixin {
         at = @At("RETURN")
     )
     private void katton$onInit(MinecraftServer server, Connection connection, CommonListenerCookie cookie, CallbackInfo ci) {
+        // Wait for server reload to finish so registries are complete before syncing.
+        ScriptReloadManager.awaitServerReloadCompletion();
         var THIS = (ServerConfigurationPacketListenerImpl) (Object) this;
-        // Send configuration-time script sync before registry validation begins.
         ServerNetworking.sendInitialScriptPackSync(THIS, ServerConfigurationNetworking::send);
     }
 }

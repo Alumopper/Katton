@@ -42,8 +42,12 @@ public class MinecraftServerMixin {
             Katton.globalState = LoadState.END_DATA_PACK_RELOAD;
 
             if (success) {
-                ScriptReloadManager.reloadScripts(server);
-                ScriptCommand.syncCommandTree(server);
+                ScriptReloadManager.reloadScriptsAsync(server, serverOk -> {
+                    if (serverOk) {
+                        ScriptCommand.syncCommandTree(server);
+                    }
+                    return kotlin.Unit.INSTANCE;
+                });
             }
             return v;
         }, (MinecraftServer) (Object) this);

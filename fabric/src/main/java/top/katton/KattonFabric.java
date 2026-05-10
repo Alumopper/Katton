@@ -49,8 +49,12 @@ public class KattonFabric implements ModInitializer {
         ServerLifecycleEvents.SERVER_STARTED.register(serverInstance -> {
             server = serverInstance;
             globalState = LoadState.SERVER_STARTED;
-            ScriptReloadManager.reloadScripts(serverInstance);
-            ScriptCommand.syncCommandTree(serverInstance);
+            ScriptReloadManager.reloadScriptsAsync(serverInstance, serverOk -> {
+                if (serverOk) {
+                    serverInstance.execute(() -> ScriptCommand.syncCommandTree(serverInstance));
+                }
+                return kotlin.Unit.INSTANCE;
+            });
         });
 
         ServerLifecycleEvents.SERVER_STOPPED.register(_ -> {
@@ -65,8 +69,12 @@ public class KattonFabric implements ModInitializer {
             if (!success) {
                 return;
             }
-            ScriptReloadManager.reloadScripts(server);
-            ScriptCommand.syncCommandTree(server);
+            ScriptReloadManager.reloadScriptsAsync(server, serverOk -> {
+                if (serverOk && server != null) {
+                    server.execute(() -> ScriptCommand.syncCommandTree(server));
+                }
+                return kotlin.Unit.INSTANCE;
+            });
         });
     }
 

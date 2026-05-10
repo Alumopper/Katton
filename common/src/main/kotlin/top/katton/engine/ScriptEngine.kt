@@ -29,14 +29,11 @@ import java.util.jar.Manifest
 import kotlin.io.path.notExists
 import kotlin.jvm.optionals.getOrNull
 import kotlin.script.experimental.api.*
-import kotlin.script.experimental.host.ScriptingHostConfiguration
 import kotlin.script.experimental.host.toScriptSource
-import kotlin.script.experimental.jvm.compilationCache
 import kotlin.script.experimental.jvm.dependenciesFromCurrentContext
 import kotlin.script.experimental.jvm.impl.KJvmCompiledScript
 import kotlin.script.experimental.jvm.jvm
 import kotlin.script.experimental.jvm.updateClasspath
-import kotlin.script.experimental.jvmhost.CompiledScriptJarsCache
 import kotlin.script.experimental.jvmhost.JvmScriptCompiler
 import kotlin.script.experimental.jvmhost.loadScriptFromJar
 
@@ -58,6 +55,7 @@ object ScriptEngine {
         val cacheKey: String
     )
 
+    @Suppress("ArrayInDataClass")
     private data class ClassFileEntry(
         val className: String,
         val bytes: ByteArray
@@ -113,9 +111,10 @@ object ScriptEngine {
     }
 
     /**
-     * Writes the compiled class files from an in-memory compiled module into a jar.
-     * This is the reliable way to persist source compilation results since
-     * [CompiledScriptJarsCache] doesn't write jars when [importScripts] is used.
+     * Writes the compiled class files from an in-memory compiled module into a jar
+     * for inspection. These jars are write-only — the Kotlin scripting compiler's
+     * lazily-loaded-from-classpath mechanism is incompatible with importScripts
+     * compilations, so we always compile fresh in memory.
      */
     private fun writeCompiledScriptToJar(script: CompiledScript, targetJar: Path) {
         val module = (script as? KJvmCompiledScript)?.getCompiledModule() as? KJvmCompiledModuleInMemoryImpl ?: return
@@ -282,18 +281,11 @@ object ScriptEngine {
         }
 
         val cacheJar = resolveSourceCacheJar(plan.cacheKey)
-
-        // If the cache jar already exists on disk, load it and skip compilation entirely.
-        if (cacheJar != null && Files.isRegularFile(cacheJar)) {
-            LOGGER.info("Loading source compilation from disk cache {}", cacheJar)
-            val cachedScript = cacheJar.toFile().loadScriptFromJar()
-            if (cachedScript != null) {
-                val artifact = CompiledScriptArtifact(cachedScript, cacheJar)
-                sourceCompileCache[plan.cacheKey] = artifact
-                return artifact
-            }
-            LOGGER.error("Failed to load compiled script from cache jar {}, will recompile", cacheJar)
-        }
+        // Note: disk cache is write-only for now. The Kotlin scripting compiler's
+        // lazily-loaded-from-classpath variant does not work with importScripts
+        // compilations — it fails to locate metadata for the dummy script.
+        // In-memory cache (above) handles intra-session reuse.
+        // On game restart, recompilation is sub-second and unavoidable.
 
         val dummyScript = "".toScriptSource()
         val compilationConfig = createCompilationConfiguration(
@@ -317,7 +309,8 @@ object ScriptEngine {
             sourceCompileCache[plan.cacheKey] = artifact
             cleanStaleScriptCaches(plan.cacheKey)
 
-            // Persist the compilation result to disk so it survives restarts.
+            // Persist compiled classes to disk for inspection only.
+            // These jars cannot be reloaded directly due to Kotlin compiler format constraints.
             if (cacheJar != null) {
                 writeCompiledScriptToJar(compiledScript, cacheJar)
             }
@@ -484,12 +477,6 @@ object ScriptEngine {
         cacheJar: Path?
     ): ScriptCompilationConfiguration {
         // Source packs are compiled as one unit so Kotlin symbols can be referenced across pack boundaries.
-        val jarCache = cacheJar?.let { resolvedJar ->
-            resolvedJar.parent?.let(Files::createDirectories)
-            CompiledScriptJarsCache { _, _ -> resolvedJar.toFile() }
-        }
-        val baseHostConfiguration = baseConfig[ScriptCompilationConfiguration.hostConfiguration]
-
         return ScriptCompilationConfiguration(baseConfig) {
             importScripts(orderedScriptPaths.map { File(it).toScriptSource() })
             jvm {
@@ -497,15 +484,6 @@ object ScriptEngine {
                 if (classpathJars.isNotEmpty()) {
                     updateClasspath(classpathJars.map(Path::toFile))
                 }
-            }
-            if (jarCache != null) {
-                hostConfiguration(
-                    ScriptingHostConfiguration(baseHostConfiguration ?: ScriptingHostConfiguration()) {
-                        jvm {
-                            compilationCache(jarCache)
-                        }
-                    }
-                )
             }
         }
     }

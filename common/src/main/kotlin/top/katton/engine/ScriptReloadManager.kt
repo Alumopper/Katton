@@ -30,10 +30,18 @@ object ScriptReloadManager {
         Thread(r, "Katton-ClientReload").also { it.isDaemon = true }
     }
 
+    private val serverReloadExecutor: ExecutorService = Executors.newSingleThreadExecutor { r ->
+        Thread(r, "Katton-ServerReload").also { it.isDaemon = true }
+    }
+
     private val clientReloadRunning = AtomicBoolean(false)
+    private val serverReloadRunning = AtomicBoolean(false)
 
     @Volatile
     private var clientReloadFuture: CompletableFuture<Void>? = null
+
+    @Volatile
+    private var serverReloadFuture: CompletableFuture<Void>? = null
 
     /**
      * Reloads all client-side world scripts.
@@ -110,6 +118,21 @@ object ScriptReloadManager {
     fun isClientReloadRunning(): Boolean = clientReloadRunning.get()
 
     /**
+     * Blocks the calling thread until any in-progress server reload completes.
+     * Used by registry-sensitive operations (client login, config sync) to ensure
+     * they see finalized registries after a script reload. The wait duration is
+     * bounded by the compilation time (typically < 2 seconds).
+     */
+    @JvmStatic
+    fun awaitServerReloadCompletion() {
+        val future = serverReloadFuture ?: return
+        try {
+            future.get()
+        } catch (_: Exception) {
+        }
+    }
+
+    /**
      * Compiles and executes all GLOBAL-scoped script packs.
      * Called once during mod initialization, before the server starts.
      * Global packs are never reloaded — they persist for the entire game session.
@@ -176,6 +199,106 @@ object ScriptReloadManager {
         tracker.step("Applying datapacks")
         tracker.finish("Server scripts reloaded")
         return true
+    }
+
+    /**
+     * Async variant of [reloadScripts]: runs compilation and execution on a
+     * background thread so the server main loop is not blocked.
+     *
+     * Fast setup (registries, handlers) and post-compilation steps
+     * (datapacks, entity rebinding) still run on the server thread via
+     * [MinecraftServer.execute].
+     *
+     * @param server the server instance
+     * @param onComplete callback invoked on the server thread after reload finishes
+     */
+    @JvmStatic
+    fun reloadScriptsAsync(server: MinecraftServer, onComplete: (Boolean) -> Unit) {
+        if (!serverReloadRunning.compareAndSet(false, true)) {
+            onComplete(false)
+            return
+        }
+        val future = CompletableFuture<Void>()
+        serverReloadFuture = future
+
+        // Run ALL reload work on background thread — the calling thread
+        // (server command thread) returns immediately without blocking.
+        serverReloadExecutor.execute {
+            val tracker = ReloadProgressTracker(22)
+            tracker.begin("Reloading server scripts")
+
+            try {
+                // Fast setup
+                ScriptPackManager.setGameDirectory(Katton.gameDirectory)
+                tracker.step("Setting game directory")
+                ScriptPackManager.setWorldDirectory(server.getWorldPath(LevelResource.ROOT))
+                tracker.step("Setting world directory")
+                ensureDirectory(ScriptPackManager.getWorldScriptDirectory())
+                ScriptPackManager.refreshWorldPacks()
+                tracker.step("Scanning world packs")
+
+                ScriptCommandRegistry.beginReload(server)
+                tracker.step("Resetting command registry")
+                KattonRegistry.ITEMS.beginReload()
+                tracker.step("Resetting item registry")
+                KattonRegistry.EFFECTS.beginReload()
+                KattonRegistry.BLOCKS.beginReload()
+                tracker.step("Resetting effect/block registries")
+                KattonRegistry.ENTITY_TYPES.beginReload()
+                tracker.step("Resetting entity type registry")
+                KattonRegistry.SOUND_EVENTS.beginReload()
+                KattonRegistry.PARTICLE_TYPES.beginReload()
+                tracker.step("Resetting sound/particle registries")
+                KattonRegistry.BLOCK_ENTITY_TYPES.beginReload()
+                tracker.step("Resetting block entity type registry")
+                KattonRegistry.CREATIVE_TABS.beginReload()
+                KattonRegistry.DATA_COMPONENT_TYPES.beginReload()
+                tracker.step("Resetting creative tabs & components")
+                KattonRegistry.ENTITY_RENDERERS.beginReload()
+                tracker.step("Resetting entity renderers")
+                ServerDatapackManager.beginReload()
+                tracker.step("Resetting datapack manager")
+                Event.clearHandlersByScope(ScriptPackScope.WORLD)
+                tracker.step("Clearing event handlers")
+                InjectionManager.beginReload()
+                tracker.step("Resetting injections")
+
+                val worldOnlyPacks = ScriptPackManager.collectExecutableWorldPacks()
+                tracker.step("Collecting world packs")
+
+                // Heavy compilation + execution
+                ScriptEngine.compileAndExecuteAll(worldOnlyPacks, ScriptEnvironment.SERVER)
+                tracker.step("Compiling & executing scripts")
+
+                // Post-compilation must run on server thread (registry mutations).
+                val reloadFuture = future
+                server.execute {
+                    try {
+                        ServerDatapackManager.apply(server)
+                        tracker.step("Applying datapacks")
+                        tracker.finish("Server scripts reloaded")
+                        reloadFuture.complete(null)
+                        onComplete(true)
+                    } catch (t: Throwable) {
+                        logger.error("Failed to apply datapacks after async server reload", t)
+                        ReloadProgressState.finish("Server script reload failed")
+                        reloadFuture.completeExceptionally(t)
+                        onComplete(false)
+                    } finally {
+                        serverReloadRunning.set(false)
+                    }
+                }
+            } catch (t: Throwable) {
+                logger.error("Failed to compile server scripts asynchronously", t)
+                val reloadFuture = future
+                server.execute {
+                    ReloadProgressState.finish("Server script reload failed")
+                    reloadFuture.completeExceptionally(t)
+                    onComplete(false)
+                    serverReloadRunning.set(false)
+                }
+            }
+        }
     }
 
     private fun ensureDirectory(path: Path?) {

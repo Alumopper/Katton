@@ -91,8 +91,12 @@ public class KattonNeoForge {
     private void onServerStarted(ServerStartedEvent event) {
         Katton.server = event.getServer();
         Katton.globalState = LoadState.SERVER_STARTED;
-        ScriptReloadManager.reloadScripts(event.getServer());
-        ScriptCommand.syncCommandTree(event.getServer());
+        ScriptReloadManager.reloadScriptsAsync(event.getServer(), serverOk -> {
+            if (serverOk) {
+                event.getServer().execute(() -> ScriptCommand.syncCommandTree(event.getServer()));
+            }
+            return kotlin.Unit.INSTANCE;
+        });
     }
 
     private void onServerStopped(ServerStoppedEvent event) {

@@ -115,17 +115,20 @@ object ScriptCommand {
     }
 
     fun reloadScript(server: MinecraftServer): Boolean {
-        val serverReloaded = ScriptReloadManager.reloadScripts(server)
-        val clientReloaded = if (!server.isDedicatedServer) {
-            ScriptReloadManager.reloadClientScriptsAsync()
-        } else {
-            true
+        val isDedicated = server.isDedicatedServer
+
+        ScriptReloadManager.reloadScriptsAsync(server) { serverOk ->
+            server.execute {
+                if (serverOk) {
+                    syncCommandTree(server)
+                }
+                if (!isDedicated) {
+                    ScriptReloadManager.reloadClientScriptsAsync()
+                }
+            }
         }
-        val reloaded = serverReloaded && clientReloaded
-        if (serverReloaded) {
-            syncCommandTree(server)
-        }
-        return reloaded
+
+        return true
     }
 
     @JvmStatic
