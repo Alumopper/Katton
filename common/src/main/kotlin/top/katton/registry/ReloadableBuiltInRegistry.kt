@@ -40,10 +40,16 @@ internal class ReloadableBuiltInRegistry<T : Any>(
                     staleManagedIds.addAll(it)
                 }
             }
-//            if (!unregisterOnReload && Katton.debugRegistryLogging) {
-//                logger.info("beginReload(): keeping registry entries, clearing ownership only")
-//            }
         }
+    }
+
+    @Synchronized
+    fun beginWorldCleanup(): List<Identifier> {
+        if (Katton.debugRegistryLogging) logger.info("beginWorldCleanup()")
+        return tracker.beginWorldCleanup(
+            registry = builtInRegistry as MappedRegistry<T>,
+            resourceKey = { id -> ResourceKey.create(registryKey, id) }
+        )
     }
 
     fun registerGlobal(id: Identifier, value: T): T {
@@ -97,6 +103,14 @@ internal class ReloadableBuiltInRegistry<T : Any>(
         return result
     }
 
+    /**
+     * Dispatches registration to the correct strategy based on [mode].
+     *
+     * - [RegisterMode.GLOBAL]: permanent, only allowed during [LoadState.INIT]
+     * - [RegisterMode.WORLD]: lives for one world session, survives `/katton reload` but
+     *   unregistered on world leave
+     * - [RegisterMode.RELOADABLE]: cleaned up and re-registered on `/katton reload`
+     */
     fun registerWithMode(
         id: Identifier,
         mode: RegisterMode,
@@ -104,15 +118,15 @@ internal class ReloadableBuiltInRegistry<T : Any>(
     ): T {
         if (Katton.debugRegistryLogging) logger.info("registerWithMode id={} mode={}", id, mode)
         return when (mode) {
-            RegisterMode.GLOBAL -> registerGlobal(id, builder())
-            RegisterMode.RELOADABLE -> ensureRegistered(id, builder)
-            RegisterMode.AUTO -> {
+            RegisterMode.GLOBAL -> {
                 if (Katton.globalState.after(LoadState.INIT)) {
-                    ensureRegistered(id, builder)
-                } else {
-                    registerGlobal(id, builder())
+                    error("RegisterMode.GLOBAL can only be used during the INIT phase. " +
+                        "Current state: ${Katton.globalState}. Use RegisterMode.WORLD or RegisterMode.RELOADABLE instead.")
                 }
+                registerGlobal(id, builder())
             }
+            RegisterMode.WORLD -> ensureRegistered(id, builder)
+            RegisterMode.RELOADABLE -> ensureRegistered(id, builder)
         }
     }
 

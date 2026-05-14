@@ -21,7 +21,7 @@ import top.katton.util.ReflectUtil
  * Registers a native CreativeModeTab with hot-reload support.
  *
  * @param id Tab identifier (e.g., "mymod:custom_tab")
- * @param registerMode Registration mode (GLOBAL, RELOADABLE, or AUTO)
+ * @param registerMode Registration mode (GLOBAL, WORLD, or RELOADABLE)
  * @param tabFactory Factory function to create the CreativeModeTab instance
  * @return The registered KattonCreativeTabEntry
  *
@@ -39,7 +39,7 @@ import top.katton.util.ReflectUtil
 @ApiStatus.Experimental
 fun registerNativeCreativeTab(
     id: String,
-    registerMode: RegisterMode = RegisterMode.AUTO,
+    registerMode: RegisterMode = RegisterMode.WORLD,
     tabFactory: () -> CreativeModeTab
 ): KattonRegistry.KattonCreativeTabEntry = registerNativeCreativeTab(id(id), registerMode, tabFactory)
 
@@ -49,7 +49,7 @@ fun registerNativeCreativeTab(
 @ApiStatus.Experimental
 fun registerNativeCreativeTab(
     id: Identifier,
-    registerMode: RegisterMode = RegisterMode.AUTO,
+    registerMode: RegisterMode = RegisterMode.WORLD,
     tabFactory: () -> CreativeModeTab
 ): KattonRegistry.KattonCreativeTabEntry {
     return KattonRegistry.CREATIVE_TABS.newNative(id, registerMode, tabFactory)

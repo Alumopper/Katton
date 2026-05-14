@@ -12,6 +12,7 @@ import top.katton.engine.ScriptReloadManager;
 import top.katton.network.Networking;
 import top.katton.network.ServerNetworking;
 import top.katton.pack.ScriptPackManager;
+import top.katton.registry.KattonRegistry;
 import top.katton.platform.EntityAttributeHooks;
 import top.katton.platform.FabricEntityAttributeHooks;
 import top.katton.network.ScriptPackRequestPacket;
@@ -60,6 +61,7 @@ public class KattonFabric implements ModInitializer {
         ServerLifecycleEvents.SERVER_STOPPED.register(_ -> {
             server = null;
             globalState = LoadState.SERVER_STOPPED;
+            KattonRegistry.INSTANCE.clearWorldRegistrations();
             clearWorldAndServerEvents();
             ScriptPackManager.INSTANCE.clearWorldDirectory();
         });

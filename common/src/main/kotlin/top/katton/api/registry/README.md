@@ -28,18 +28,18 @@ Every registration function accepts a `registerMode: RegisterMode` parameter tha
 ```kotlin
 enum class RegisterMode {
     GLOBAL,
-    RELOADABLE,
-    AUTO
+    WORLD,
+    RELOADABLE
 }
 ```
 
 | Mode | Behavior |
 |------|----------|
-| `GLOBAL` | The entry is registered permanently. It survives `/katton reload` and is never removed. Use this for content that should always exist, such as core mod items. |
-| `RELOADABLE` | The entry is removed and re-registered on every `/katton reload`. Use this during development so script changes take effect without restarting the game. |
-| `AUTO` | Defaults to `GLOBAL` if registration happens before the game finishes initializing (`LoadState.INIT`), otherwise defaults to `RELOADABLE`. This is the safest choice for most scripts because it automatically picks the correct behavior based on timing. |
+| `GLOBAL` | Permanent — only allowed during `LoadState.INIT`. Never affected by reload or world changes. Must be called from a global script pack or during mod initialization. |
+| `WORLD` | Registered on world enter, unregistered on world leave. Survives `/katton reload` within the same world session. This is the default for most scripts. |
+| `RELOADABLE` | Cleaned up and re-registered on every `/katton reload`. Use during development so changes take effect without restarting. |
 
-The default value for every API is `RegisterMode.AUTO`.
+The default value for every API is `RegisterMode.WORLD`.
 
 ---
 
@@ -57,7 +57,9 @@ Running `/katton reload` recompiles all source packs and refreshes every reloada
 - **Data Component Types** — Reloadable component types are unregistered from `BuiltInRegistries.DATA_COMPONENT_TYPE` and removed from Katton's internal `DATA_COMPONENT_TYPES` registry.
 - **Entity Types** — Reloadable entity types are unregistered from `BuiltInRegistries.ENTITY_TYPE` and removed from Katton's internal `ENTITY_TYPES` registry. Attributes and spawn placements tied to removed entities are also unregistered.
 
-`GLOBAL` entries are skipped during reload cleanup. `AUTO` entries follow the same path they were originally registered with.
+`GLOBAL` entries are skipped during reload cleanup (and banned outside `INIT`).  
+`WORLD` entries survive `/katton reload` — they are only cleaned up when the server stops (world leave).  
+`RELOADABLE` entries are cleaned up and re-registered on each `/katton reload`.
 
 ---
 
@@ -72,7 +74,7 @@ Registers a native `Item` with hot-reload support.
 ```kotlin
 fun registerNativeItem(
     id: String,
-    registerMode: RegisterMode = RegisterMode.AUTO,
+    registerMode: RegisterMode = RegisterMode.WORLD,
     configure: KattonItemProperties.() -> Unit = {},
     itemFactory: (KattonItemProperties) -> Item
 ): KattonRegistry.KattonItemEntry
@@ -83,7 +85,7 @@ fun registerNativeItem(
 | Name | Type | Description |
 |------|------|-------------|
 | `id` | `String` | Item identifier (for example, `"mymod:my_item"`). |
-| `registerMode` | `RegisterMode` | Registration mode (`GLOBAL`, `RELOADABLE`, or `AUTO`). |
+| `registerMode` | `RegisterMode` | Registration mode (`GLOBAL`, `WORLD`, or `RELOADABLE`). |
 | `configure` | `KattonItemProperties.() -> Unit` | Configuration lambda for item properties. |
 | `itemFactory` | `(KattonItemProperties) -> Item` | Factory function that creates the `Item` instance. |
 
@@ -115,7 +117,7 @@ registerNativeItem(
 
 - `RELOADABLE` — the item is removed and re-registered on reload. The item instance is reconstructed by calling `itemFactory` again.
 - `GLOBAL` — the item is registered once and never removed.
-- `AUTO` — behaves like `GLOBAL` during init, otherwise like `RELOADABLE`.
+- `WORLD` — survives `/katton reload`, unregistered on world leave.
 
 ---
 
@@ -128,7 +130,7 @@ Registers a native `Item` with hot-reload support (`Identifier` overload).
 ```kotlin
 fun registerNativeItem(
     id: Identifier,
-    registerMode: RegisterMode = RegisterMode.AUTO,
+    registerMode: RegisterMode = RegisterMode.WORLD,
     configure: KattonItemProperties.() -> Unit = {},
     itemFactory: (KattonItemProperties) -> Item
 ): KattonRegistry.KattonItemEntry
@@ -163,7 +165,7 @@ Registers a native `Item` with pre-configured properties.
 fun registerNativeItem(
     id: String,
     properties: KattonItemProperties,
-    registerMode: RegisterMode = RegisterMode.AUTO,
+    registerMode: RegisterMode = RegisterMode.WORLD,
     itemFactory: (KattonItemProperties) -> Item
 ): KattonRegistry.KattonItemEntry
 ```
@@ -198,7 +200,7 @@ Registers a native `Block` with hot-reload support.
 ```kotlin
 fun registerNativeBlock(
     id: String,
-    registerMode: RegisterMode = RegisterMode.AUTO,
+    registerMode: RegisterMode = RegisterMode.WORLD,
     blockFactory: (BlockBehaviour.Properties) -> Block
 ): KattonRegistry.KattonBlockEntry
 ```
@@ -229,7 +231,7 @@ registerNativeBlock("mymod:custom_block") { properties ->
 
 - `RELOADABLE` — the block is removed and re-registered on reload. Existing block states in the world may become invalid until the block is re-registered.
 - `GLOBAL` — the block persists across reloads.
-- `AUTO` — same timing rules as items.
+- `WORLD` — same timing rules as items.
 
 ---
 
@@ -242,7 +244,7 @@ Registers a native `Block` with hot-reload support (`Identifier` overload).
 ```kotlin
 fun registerNativeBlock(
     id: Identifier,
-    registerMode: RegisterMode = RegisterMode.AUTO,
+    registerMode: RegisterMode = RegisterMode.WORLD,
     blockFactory: (BlockBehaviour.Properties) -> Block
 ): KattonRegistry.KattonBlockEntry
 ```
@@ -306,7 +308,7 @@ Registers a native `MobEffect` with hot-reload support.
 ```kotlin
 fun registerNativeEffect(
     id: String,
-    registerMode: RegisterMode = RegisterMode.AUTO,
+    registerMode: RegisterMode = RegisterMode.WORLD,
     effectFactory: () -> MobEffect
 ): KattonRegistry.KattonMobEffectEntry
 ```
@@ -339,7 +341,7 @@ registerNativeEffect("mymod:custom_effect") {
 
 - `RELOADABLE` — the effect is removed and re-registered on reload. Active effect instances on entities will reference the old instance until reapplied.
 - `GLOBAL` — the effect persists across reloads.
-- `AUTO` — same timing rules as items.
+- `WORLD` — same timing rules as items.
 
 ---
 
@@ -352,7 +354,7 @@ Registers a native `MobEffect` with hot-reload support (`Identifier` overload).
 ```kotlin
 fun registerNativeEffect(
     id: Identifier,
-    registerMode: RegisterMode = RegisterMode.AUTO,
+    registerMode: RegisterMode = RegisterMode.WORLD,
     effectFactory: () -> MobEffect
 ): KattonRegistry.KattonMobEffectEntry
 ```
@@ -418,7 +420,7 @@ Registers a native `SoundEvent` with hot-reload support.
 ```kotlin
 fun registerNativeSoundEvent(
     id: String,
-    registerMode: RegisterMode = RegisterMode.AUTO,
+    registerMode: RegisterMode = RegisterMode.WORLD,
     soundEventFactory: () -> SoundEvent
 ): KattonRegistry.KattonSoundEventEntry
 ```
@@ -447,7 +449,7 @@ registerNativeSoundEvent("mymod:custom_sound") {
 
 - `RELOADABLE` — the sound event is removed and re-registered on reload.
 - `GLOBAL` — the sound event persists across reloads.
-- `AUTO` — same timing rules as items.
+- `WORLD` — same timing rules as items.
 
 ---
 
@@ -460,7 +462,7 @@ Registers a native `SoundEvent` with hot-reload support (`Identifier` overload).
 ```kotlin
 fun registerNativeSoundEvent(
     id: Identifier,
-    registerMode: RegisterMode = RegisterMode.AUTO,
+    registerMode: RegisterMode = RegisterMode.WORLD,
     soundEventFactory: () -> SoundEvent
 ): KattonRegistry.KattonSoundEventEntry
 ```
@@ -522,7 +524,7 @@ Registers a native `ParticleType` with hot-reload support.
 ```kotlin
 fun registerNativeParticleType(
     id: String,
-    registerMode: RegisterMode = RegisterMode.AUTO,
+    registerMode: RegisterMode = RegisterMode.WORLD,
     particleTypeFactory: () -> ParticleType<*>
 ): KattonRegistry.KattonParticleTypeEntry
 ```
@@ -551,7 +553,7 @@ registerNativeParticleType("mymod:sparkle") {
 
 - `RELOADABLE` — the particle type is removed and re-registered on reload. Existing particles in the world will use the old type until they despawn.
 - `GLOBAL` — the particle type persists across reloads.
-- `AUTO` — same timing rules as items.
+- `WORLD` — same timing rules as items.
 
 ---
 
@@ -564,7 +566,7 @@ Registers a native `ParticleType` with hot-reload support (`Identifier` overload
 ```kotlin
 fun registerNativeParticleType(
     id: Identifier,
-    registerMode: RegisterMode = RegisterMode.AUTO,
+    registerMode: RegisterMode = RegisterMode.WORLD,
     particleTypeFactory: () -> ParticleType<*>
 ): KattonRegistry.KattonParticleTypeEntry
 ```
@@ -598,7 +600,7 @@ Registers a native `BlockEntityType` with hot-reload support.
 ```kotlin
 fun registerNativeBlockEntityType(
     id: String,
-    registerMode: RegisterMode = RegisterMode.AUTO,
+    registerMode: RegisterMode = RegisterMode.WORLD,
     blockEntityTypeFactory: () -> BlockEntityType<*>
 ): KattonRegistry.KattonBlockEntityTypeEntry
 ```
@@ -630,7 +632,7 @@ registerNativeBlockEntityType("mymod:chest_entity") {
 
 - `RELOADABLE` — the block entity type is removed and re-registered on reload. Existing block entities in the world may become invalid until the type is re-registered.
 - `GLOBAL` — the block entity type persists across reloads.
-- `AUTO` — same timing rules as items.
+- `WORLD` — same timing rules as items.
 
 ---
 
@@ -643,7 +645,7 @@ Registers a native `BlockEntityType` with hot-reload support (`Identifier` overl
 ```kotlin
 fun registerNativeBlockEntityType(
     id: Identifier,
-    registerMode: RegisterMode = RegisterMode.AUTO,
+    registerMode: RegisterMode = RegisterMode.WORLD,
     blockEntityTypeFactory: () -> BlockEntityType<*>
 ): KattonRegistry.KattonBlockEntityTypeEntry
 ```
@@ -677,7 +679,7 @@ Registers a native `CreativeModeTab` with hot-reload support.
 ```kotlin
 fun registerNativeCreativeTab(
     id: String,
-    registerMode: RegisterMode = RegisterMode.AUTO,
+    registerMode: RegisterMode = RegisterMode.WORLD,
     tabFactory: () -> CreativeModeTab
 ): KattonRegistry.KattonCreativeTabEntry
 ```
@@ -710,7 +712,7 @@ registerNativeCreativeTab("mymod:custom_tab") {
 
 - `RELOADABLE` — the tab is removed and re-registered on reload.
 - `GLOBAL` — the tab persists across reloads.
-- `AUTO` — same timing rules as items.
+- `WORLD` — same timing rules as items.
 
 ---
 
@@ -723,7 +725,7 @@ Registers a native `CreativeModeTab` with hot-reload support (`Identifier` overl
 ```kotlin
 fun registerNativeCreativeTab(
     id: Identifier,
-    registerMode: RegisterMode = RegisterMode.AUTO,
+    registerMode: RegisterMode = RegisterMode.WORLD,
     tabFactory: () -> CreativeModeTab
 ): KattonRegistry.KattonCreativeTabEntry
 ```
@@ -800,7 +802,7 @@ Persistent components are serialized using their codec and saved with the item. 
 ```kotlin
 fun <T : Any> registerNativePersistentDataComponentType(
     id: String,
-    registerMode: RegisterMode = RegisterMode.AUTO,
+    registerMode: RegisterMode = RegisterMode.WORLD,
     codec: Codec<T>
 ): KattonRegistry.KattonDataComponentTypeEntry
 ```
@@ -830,7 +832,7 @@ registerNativePersistentDataComponentType(
 
 - `RELOADABLE` — the component type is removed and re-registered on reload. Items in the world that carry this component may lose the data until the type is re-registered.
 - `GLOBAL` — the component type persists across reloads.
-- `AUTO` — same timing rules as items.
+- `WORLD` — same timing rules as items.
 
 ---
 
@@ -843,7 +845,7 @@ Registers a persistent `DataComponentType` with hot-reload support (`Identifier`
 ```kotlin
 fun <T : Any> registerNativePersistentDataComponentType(
     id: Identifier,
-    registerMode: RegisterMode = RegisterMode.AUTO,
+    registerMode: RegisterMode = RegisterMode.WORLD,
     codec: Codec<T>
 ): KattonRegistry.KattonDataComponentTypeEntry
 ```
@@ -877,7 +879,7 @@ Network-synchronized components are sent to the client but NOT saved to disk. Us
 ```kotlin
 fun <T : Any> registerNativeNetworkDataComponentType(
     id: String,
-    registerMode: RegisterMode = RegisterMode.AUTO,
+    registerMode: RegisterMode = RegisterMode.WORLD,
     streamCodec: StreamCodec<*, T>
 ): KattonRegistry.KattonDataComponentTypeEntry
 ```
@@ -907,7 +909,7 @@ registerNativeNetworkDataComponentType(
 
 - `RELOADABLE` — the component type is removed and re-registered on reload.
 - `GLOBAL` — the component type persists across reloads.
-- `AUTO` — same timing rules as items.
+- `WORLD` — same timing rules as items.
 
 ---
 
@@ -920,7 +922,7 @@ Registers a network-synchronized `DataComponentType` with hot-reload support (`I
 ```kotlin
 fun <T : Any> registerNativeNetworkDataComponentType(
     id: Identifier,
-    registerMode: RegisterMode = RegisterMode.AUTO,
+    registerMode: RegisterMode = RegisterMode.WORLD,
     streamCodec: StreamCodec<*, T>
 ): KattonRegistry.KattonDataComponentTypeEntry
 ```
@@ -956,7 +958,7 @@ This is a lower-level API that only registers the `EntityType` itself. For compl
 ```kotlin
 fun registerNativeEntityType(
     id: String,
-    registerMode: RegisterMode = RegisterMode.AUTO,
+    registerMode: RegisterMode = RegisterMode.WORLD,
     entityTypeFactory: () -> EntityType<*>
 ): KattonRegistry.KattonEntityTypeEntry
 ```
@@ -989,7 +991,7 @@ registerNativeEntityType("mymod:projectile") {
 
 - `RELOADABLE` — the entity type is removed and re-registered on reload. Existing entities in the world may become invalid until the type is re-registered.
 - `GLOBAL` — the entity type persists across reloads.
-- `AUTO` — same timing rules as items.
+- `WORLD` — same timing rules as items.
 
 ---
 
@@ -1002,7 +1004,7 @@ Registers a native `EntityType` with hot-reload support (`Identifier` overload).
 ```kotlin
 fun registerNativeEntityType(
     id: Identifier,
-    registerMode: RegisterMode = RegisterMode.AUTO,
+    registerMode: RegisterMode = RegisterMode.WORLD,
     entityTypeFactory: () -> EntityType<*>
 ): KattonRegistry.KattonEntityTypeEntry
 ```
@@ -1038,7 +1040,7 @@ This is the primary API for registering custom entities from scripts. It handles
 ```kotlin
 fun registerNativeEntity(
     id: String,
-    registerMode: RegisterMode = RegisterMode.AUTO,
+    registerMode: RegisterMode = RegisterMode.WORLD,
     configure: KattonEntityProperties.() -> Unit = {},
     entityFactory: (KattonEntityProperties) -> EntityType<*>
 ): KattonRegistry.KattonEntityTypeEntry
@@ -1085,7 +1087,7 @@ registerNativeEntity(
 
 - `RELOADABLE` — the entity type, attributes, spawn placement, and spawn egg item are all removed and re-registered on reload.
 - `GLOBAL` — everything persists across reloads.
-- `AUTO` — same timing rules as items.
+- `WORLD` — same timing rules as items.
 
 ---
 
@@ -1098,7 +1100,7 @@ Registers a complete native `Entity` with hot-reload support (`Identifier` overl
 ```kotlin
 fun registerNativeEntity(
     id: Identifier,
-    registerMode: RegisterMode = RegisterMode.AUTO,
+    registerMode: RegisterMode = RegisterMode.WORLD,
     configure: KattonEntityProperties.() -> Unit = {},
     entityFactory: (KattonEntityProperties) -> EntityType<*>
 ): KattonRegistry.KattonEntityTypeEntry
@@ -1147,7 +1149,7 @@ fun registerEntityAttributes(
 | `id` | `String` | Entity identifier. |
 | `entityType` | `EntityType<out LivingEntity>` | The already-registered entity type. |
 | `configure` | `KattonEntityProperties.() -> Unit` | Configuration lambda for attributes. |
-| `reloadable` | `Boolean` | `true` for RELOADABLE or AUTO-after-init, `false` for GLOBAL. Defaults to `true`. |
+| `reloadable` | `Boolean` | `true` for RELOADABLE or WORLD, `false` for GLOBAL. Defaults to `true`. |
 
 **Returns**
 
@@ -1198,7 +1200,7 @@ fun <T : Mob> registerSpawnPlacement(
 | `placementType` | `SpawnPlacementType` | Where the entity can spawn (for example, `ON_GROUND`, `IN_WATER`). |
 | `heightmap` | `Heightmap.Types` | The heightmap type for spawn checks. Defaults to `MOTION_BLOCKING_NO_LEAVES`. |
 | `predicate` | `SpawnPlacements.SpawnPredicate<T>` | Custom spawn predicate. |
-| `reloadable` | `Boolean` | `true` for RELOADABLE or AUTO-after-init, `false` for GLOBAL. Defaults to `true`. |
+| `reloadable` | `Boolean` | `true` for RELOADABLE or WORLD, `false` for GLOBAL. Defaults to `true`. |
 
 **Returns**
 
@@ -1236,7 +1238,7 @@ In Minecraft 1.21.11+, spawn egg colors are derived from the entity type automat
 fun registerSpawnEgg(
     id: String,
     entityType: EntityType<out Mob>,
-    registerMode: RegisterMode = RegisterMode.AUTO
+    registerMode: RegisterMode = RegisterMode.WORLD
 ): KattonRegistry.KattonItemEntry
 ```
 
@@ -1266,7 +1268,7 @@ registerSpawnEgg(
 
 - `RELOADABLE` — the spawn egg item is removed and re-registered on reload.
 - `GLOBAL` — the spawn egg item persists across reloads.
-- `AUTO` — same timing rules as items.
+- `WORLD` — same timing rules as items.
 
 ---
 
@@ -1280,7 +1282,7 @@ Registers a spawn egg item for an entity type independently (`Identifier` overlo
 fun registerSpawnEgg(
     id: Identifier,
     entityType: EntityType<out Mob>,
-    registerMode: RegisterMode = RegisterMode.AUTO
+    registerMode: RegisterMode = RegisterMode.WORLD
 ): KattonRegistry.KattonItemEntry
 ```
 

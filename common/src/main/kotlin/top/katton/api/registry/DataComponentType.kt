@@ -17,13 +17,13 @@ import top.katton.registry.id
  * Use this for data that must survive across save/load cycles.
  *
  * @param id Component identifier (e.g., "mymod:custom_data")
- * @param registerMode Registration mode (GLOBAL, RELOADABLE, or AUTO)
+ * @param registerMode Registration mode (GLOBAL, WORLD, or RELOADABLE)
  * @param codec The codec for serializing/deserializing the component value
  * @return The registered KattonDataComponentTypeEntry
  */
 fun <T : Any> registerNativePersistentDataComponentType(
     id: String,
-    registerMode: RegisterMode = RegisterMode.AUTO,
+    registerMode: RegisterMode = RegisterMode.WORLD,
     codec: Codec<T>
 ): KattonRegistry.KattonDataComponentTypeEntry = registerNativePersistentDataComponentType(id(id), registerMode, codec)
 
@@ -37,7 +37,7 @@ fun <T : Any> registerNativePersistentDataComponentType(
  */
 fun <T : Any> registerNativePersistentDataComponentType(
     id: Identifier,
-    registerMode: RegisterMode = RegisterMode.AUTO,
+    registerMode: RegisterMode = RegisterMode.WORLD,
     codec: Codec<T>
 ): KattonRegistry.KattonDataComponentTypeEntry {
     return KattonRegistry.DATA_COMPONENT_TYPES.newNative(id, registerMode) {
@@ -52,13 +52,13 @@ fun <T : Any> registerNativePersistentDataComponentType(
  * Use this for data that is computed at runtime (e.g., render-only state).
  *
  * @param id Component identifier (e.g., "mymod:sync_data")
- * @param registerMode Registration mode (GLOBAL, RELOADABLE, or AUTO)
+ * @param registerMode Registration mode (GLOBAL, WORLD, or RELOADABLE)
  * @param streamCodec The stream codec for network synchronization
  * @return The registered KattonDataComponentTypeEntry
  */
 fun <T : Any> registerNativeNetworkDataComponentType(
     id: String,
-    registerMode: RegisterMode = RegisterMode.AUTO,
+    registerMode: RegisterMode = RegisterMode.WORLD,
     streamCodec: StreamCodec<*, T>
 ): KattonRegistry.KattonDataComponentTypeEntry = registerNativeNetworkDataComponentType(id(id), registerMode, streamCodec)
 
@@ -72,7 +72,7 @@ fun <T : Any> registerNativeNetworkDataComponentType(
  */
 fun <T : Any> registerNativeNetworkDataComponentType(
     id: Identifier,
-    registerMode: RegisterMode = RegisterMode.AUTO,
+    registerMode: RegisterMode = RegisterMode.WORLD,
     streamCodec: StreamCodec<*, T>
 ): KattonRegistry.KattonDataComponentTypeEntry {
     return KattonRegistry.DATA_COMPONENT_TYPES.newNative(id, registerMode) {

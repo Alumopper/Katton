@@ -29,7 +29,7 @@ import top.katton.registry.id
  * hot-reload capability.
  *
  * @param id Block identifier (e.g., "mymod:custom_block")
- * @param registerMode Registration mode (GLOBAL, RELOADABLE, or AUTO)
+ * @param registerMode Registration mode (GLOBAL, WORLD, or RELOADABLE)
  * @param blockFactory Factory function to create the Block instance, receives Properties
  * @return The registered KattonBlockEntry
  *
@@ -45,7 +45,7 @@ import top.katton.registry.id
 @ApiStatus.Experimental
 fun registerNativeBlock(
     id: String,
-    registerMode: RegisterMode = RegisterMode.AUTO,
+    registerMode: RegisterMode = RegisterMode.WORLD,
     blockFactory: (BlockBehaviour.Properties) -> Block
 ): KattonRegistry.KattonBlockEntry = registerNativeBlock(id(id), registerMode, blockFactory)
 
@@ -60,7 +60,7 @@ fun registerNativeBlock(
 @ApiStatus.Experimental
 fun registerNativeBlock(
     id: Identifier,
-    registerMode: RegisterMode = RegisterMode.AUTO,
+    registerMode: RegisterMode = RegisterMode.WORLD,
     blockFactory: (BlockBehaviour.Properties) -> Block
 ): KattonRegistry.KattonBlockEntry {
     return KattonRegistry.BLOCKS.newNative(id, registerMode, blockFactory)

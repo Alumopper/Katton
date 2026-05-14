@@ -12,13 +12,13 @@ import top.katton.registry.id
  * Registers a native BlockEntityType with hot-reload support.
  *
  * @param id BlockEntityType identifier (e.g., "mymod:custom_block_entity")
- * @param registerMode Registration mode (GLOBAL, RELOADABLE, or AUTO)
+ * @param registerMode Registration mode (GLOBAL, WORLD, or RELOADABLE)
  * @param blockEntityTypeFactory Factory function to create the BlockEntityType instance
  * @return The registered KattonBlockEntityTypeEntry
  */
 fun registerNativeBlockEntityType(
     id: String,
-    registerMode: RegisterMode = RegisterMode.AUTO,
+    registerMode: RegisterMode = RegisterMode.WORLD,
     blockEntityTypeFactory: () -> BlockEntityType<*>
 ): KattonRegistry.KattonBlockEntityTypeEntry = registerNativeBlockEntityType(id(id), registerMode, blockEntityTypeFactory)
 
@@ -32,7 +32,7 @@ fun registerNativeBlockEntityType(
  */
 fun registerNativeBlockEntityType(
     id: Identifier,
-    registerMode: RegisterMode = RegisterMode.AUTO,
+    registerMode: RegisterMode = RegisterMode.WORLD,
     blockEntityTypeFactory: () -> BlockEntityType<*>
 ): KattonRegistry.KattonBlockEntityTypeEntry {
     return KattonRegistry.BLOCK_ENTITY_TYPES.newNative(id, registerMode, blockEntityTypeFactory)

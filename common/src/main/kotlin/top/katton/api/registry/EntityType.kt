@@ -17,13 +17,13 @@ import top.katton.registry.id
  * spawn placement), use [registerNativeEntity] instead.
  *
  * @param id Entity identifier (e.g., "mymod:custom_entity")
- * @param registerMode Registration mode (GLOBAL, RELOADABLE, or AUTO)
+ * @param registerMode Registration mode (GLOBAL, WORLD, or RELOADABLE)
  * @param entityTypeFactory Factory function to create the EntityType instance
  * @return The registered KattonEntityTypeEntry
  */
 fun registerNativeEntityType(
     id: String,
-    registerMode: RegisterMode = RegisterMode.AUTO,
+    registerMode: RegisterMode = RegisterMode.WORLD,
     entityTypeFactory: () -> EntityType<*>
 ): KattonRegistry.KattonEntityTypeEntry = registerNativeEntityType(id(id), registerMode, entityTypeFactory)
 
@@ -37,7 +37,7 @@ fun registerNativeEntityType(
  */
 fun registerNativeEntityType(
     id: Identifier,
-    registerMode: RegisterMode = RegisterMode.AUTO,
+    registerMode: RegisterMode = RegisterMode.WORLD,
     entityTypeFactory: () -> EntityType<*>
 ): KattonRegistry.KattonEntityTypeEntry {
     return KattonRegistry.ENTITY_TYPES.newNative(id, registerMode, entityTypeFactory)

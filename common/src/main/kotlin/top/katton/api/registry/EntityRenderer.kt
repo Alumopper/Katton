@@ -20,6 +20,7 @@ import net.minecraft.resources.Identifier
 import org.jetbrains.annotations.ApiStatus
 import top.katton.bridge.KattonBridge
 import top.katton.registry.EntityRendererRegistration
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Registers a custom entity renderer for a script-registered entity type.
@@ -124,6 +125,83 @@ fun getBakedModelPart(layer: ModelLayerLocation): ModelPart {
 }
 
 // ═══════════════════════════════════════════════════════════
+//  Keyframe callback system
+// ═══════════════════════════════════════════════════════════
+
+/**
+ * A time-stamped callback that fires at a specific point during an entity animation.
+ *
+ * Created per-entity-type in [registerAnimatedEntityRenderer]'s [keyframeEvents] list.
+ * The callback receives the animated model, entity, render state, and pre-baked animations —
+ * use [top.katton.api.createBoneExecution] to get an ExecutionContext at a bone position.
+ *
+ * @property animName    the animation name matching a key in [registerAnimatedEntityRenderer.animations]
+ * @property timeSeconds time in seconds from animation start when the callback should fire
+ * @property action      the callback (entity, model, state, baked animations)
+ *
+ * @example
+ * ```kotlin
+ * KeyframeEvent("attack", 0.4f) { entity, model, state, bakedAnims ->
+ *     val ctx = createBoneExecution(
+ *         modelPart = (model as MyModel).rightArm,
+ *         entity = entity,
+ *         positionMode = BonePositionMode.BONE,
+ *         orientationMode = BoneOrientationMode.BONE
+ *     )
+ *     ctx.source().let { stack ->
+ *         ctx.server?.commands?.performCommand(
+ *             stack, "particle minecraft:flame ~ ~ ~ 0 0 0 0.1 10"
+ *         )
+ *     }
+ * }
+ * ```
+ */
+data class KeyframeEvent(
+    val animName: String,
+    val timeSeconds: Float,
+    val action: (entity: Mob, model: EntityModel<*>, state: LivingEntityRenderState, bakedAnims: Map<String, KeyframeAnimation>) -> Unit
+)
+
+/**
+ * Tracks per-entity animation timing so that each [KeyframeEvent] fires
+ * exactly once per animation playback cycle.
+ *
+ * Internally records the [LivingEntityRenderState.ageInTicks] when an animation
+ * starts playing, then computes elapsed time as `(currentAge - startAge) / 20f`.
+ * When the animation stops, all tracking state for that entity+animation is cleared.
+ */
+private class KeyframeTracker {
+    /** "entityId:animName" → ageInTicks when the animation started playing */
+    private val startAges = ConcurrentHashMap<String, Float>()
+    /** "entityId:animName" → set of timeSeconds already fired this cycle */
+    private val firedKeys = ConcurrentHashMap<String, MutableSet<Float>>()
+
+    fun isPlaying(entityId: Int, animName: String): Boolean =
+        startAges.containsKey("$entityId:$animName")
+
+    fun reset(entityId: Int, animName: String) {
+        val key = "$entityId:$animName"
+        startAges.remove(key)
+        firedKeys.remove(key)
+    }
+
+    /**
+     * Returns `true` if the keyframe at [timeSeconds] has not yet fired for this
+     * (entity, animation) pair and the animation has reached that time.
+     */
+    fun shouldFire(entityId: Int, animName: String, timeSeconds: Float, ageInTicks: Float): Boolean {
+        val key = "$entityId:$animName"
+        val startAge = startAges.getOrPut(key) { ageInTicks }
+        val elapsedSeconds = (ageInTicks - startAge) / 20f
+
+        if (elapsedSeconds < timeSeconds) return false
+
+        val fired = firedKeys.getOrPut(key) { mutableSetOf() }
+        return fired.add(timeSeconds)
+    }
+}
+
+// ═══════════════════════════════════════════════════════════
 //  High-level API: registerAnimatedEntityRenderer
 // ═══════════════════════════════════════════════════════════
 
@@ -180,7 +258,8 @@ fun <S : LivingEntityRenderState, M : EntityModel<S>> registerAnimatedEntityRend
     renderStateFactory: () -> S = { @Suppress("UNCHECKED_CAST") (LivingEntityRenderState() as S) },
     shadowRadius: Float = 0.5f,
     animations: Map<String, AnimationDefinition> = emptyMap(),
-    animate: ((M, Mob, S, Map<String, KeyframeAnimation>) -> Unit)? = null
+    animate: ((M, Mob, S, Map<String, KeyframeAnimation>) -> Unit)? = null,
+    keyframeEvents: List<KeyframeEvent> = emptyList()
 ) {
     registerEntityModelLayer(modelLayer, bodyLayer)
     val root = getBakedModelPart(modelLayer)
@@ -191,26 +270,40 @@ fun <S : LivingEntityRenderState, M : EntityModel<S>> registerAnimatedEntityRend
         val bakedAnims: Map<String, KeyframeAnimation> = animations.mapValues { (_, def) ->
             def.bake(model.root())
         }
+        val tracker = KeyframeTracker()
 
         object : MobRenderer<Mob, S, M>(ctx, model, shadowRadius) {
             override fun createRenderState(): S = renderStateFactory()
 
             override fun extractRenderState(entity: Mob, state: S, partialTick: Float) {
                 super.extractRenderState(entity, state, partialTick)
+                model.resetPose()
 
                 if (animate != null) {
-                    model.resetPose()
                     animate(model, entity, state, bakedAnims)
-                    return
+                } else {
+                    // Default animation logic
+                    val eId = entity.id
+                    val moving = entity.deltaMovement.horizontalDistanceSqr() > 1.0e-7
+                    val animName = if (moving && bakedAnims.containsKey("walk")) "walk" else "idle"
+                    val animState = KattonBridge["anim:$eId:$animName"] as? AnimationState
+                    if (animState != null) {
+                        bakedAnims[animName]?.apply(animState, state.ageInTicks)
+                    }
                 }
 
-                // Default animation logic
-                model.resetPose()
-                val eId = entity.id
-                val moving = entity.deltaMovement.horizontalDistanceSqr() > 1.0e-7
-                val animName = if (moving && bakedAnims.containsKey("walk")) "walk" else "idle"
-                val animState = KattonBridge["anim:$eId:$animName"] as? AnimationState ?: return
-                bakedAnims[animName]?.apply(animState, state.ageInTicks)
+                // Fire keyframe callbacks for registered events (after animation apply)
+                for (event in keyframeEvents) {
+                    val animState = KattonBridge["anim:${entity.id}:${event.animName}"] as? AnimationState
+                        ?: continue
+                    if (!animState.isStarted) {
+                        tracker.reset(entity.id, event.animName)
+                        continue
+                    }
+                    if (tracker.shouldFire(entity.id, event.animName, event.timeSeconds, state.ageInTicks)) {
+                        event.action(entity, model, state, bakedAnims)
+                    }
+                }
             }
 
             override fun getTextureLocation(state: S): Identifier = texture

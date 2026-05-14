@@ -26,7 +26,7 @@ import top.katton.platform.SpawnPlacementHooks
  * and spawn placement configuration in a single call.
  *
  * @param id Entity identifier (e.g., "mymod:custom_mob")
- * @param registerMode Registration mode (GLOBAL, RELOADABLE, or AUTO)
+ * @param registerMode Registration mode (GLOBAL, WORLD, or RELOADABLE)
  * @param configure Configuration lambda for entity properties (dimensions, category, attributes, etc.)
  * @param entityFactory Factory function to create the EntityType instance
  * @return The registered KattonEntityTypeEntry
@@ -57,7 +57,7 @@ import top.katton.platform.SpawnPlacementHooks
 @ApiStatus.Experimental
 fun registerNativeEntity(
     id: String,
-    registerMode: RegisterMode = RegisterMode.AUTO,
+    registerMode: RegisterMode = RegisterMode.WORLD,
     configure: KattonEntityProperties.() -> Unit = {},
     entityFactory: (KattonEntityProperties) -> EntityType<*>
 ): KattonRegistry.KattonEntityTypeEntry = registerNativeEntity(id(id), registerMode, configure, entityFactory)
@@ -67,7 +67,7 @@ fun registerNativeEntity(
  */
 fun registerNativeEntity(
     id: Identifier,
-    registerMode: RegisterMode = RegisterMode.AUTO,
+    registerMode: RegisterMode = RegisterMode.WORLD,
     configure: KattonEntityProperties.() -> Unit = {},
     entityFactory: (KattonEntityProperties) -> EntityType<*>
 ): KattonRegistry.KattonEntityTypeEntry {
@@ -90,7 +90,7 @@ fun registerNativeEntity(
  * @param id Entity identifier
  * @param entityType The already-registered entity type
  * @param configure Configuration lambda for attributes
- * @param reloadable true for RELOADABLE/AUTO-after-init, false for GLOBAL
+ * @param reloadable true for RELOADABLE, false for GLOBAL
  */
 @ApiStatus.Experimental
 fun registerEntityAttributes(
@@ -114,7 +114,7 @@ fun registerEntityAttributes(
  * @param placementType Where the entity can spawn (e.g., ON_GROUND, IN_WATER)
  * @param heightmap The heightmap type for spawn checks
  * @param predicate Custom spawn predicate
- * @param reloadable true for RELOADABLE/AUTO-after-init, false for GLOBAL
+ * @param reloadable true for RELOADABLE, false for GLOBAL
  */
 @ApiStatus.Experimental
 @Suppress("UNCHECKED_CAST")
@@ -151,7 +151,7 @@ fun <T : net.minecraft.world.entity.Mob> registerSpawnPlacement(
 fun registerSpawnEgg(
     id: String,
     entityType: EntityType<out net.minecraft.world.entity.Mob>,
-    registerMode: RegisterMode = RegisterMode.AUTO
+    registerMode: RegisterMode = RegisterMode.WORLD
 ): KattonRegistry.KattonItemEntry = registerSpawnEgg(id(id), entityType, registerMode)
 
 /**
@@ -161,7 +161,7 @@ fun registerSpawnEgg(
 fun registerSpawnEgg(
     id: Identifier,
     entityType: EntityType<out net.minecraft.world.entity.Mob>,
-    registerMode: RegisterMode = RegisterMode.AUTO
+    registerMode: RegisterMode = RegisterMode.WORLD
 ): KattonRegistry.KattonItemEntry {
     val eggProperties = KattonItemProperties(id).apply {
         stacksTo(64)

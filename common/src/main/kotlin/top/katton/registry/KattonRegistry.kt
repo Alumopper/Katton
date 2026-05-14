@@ -19,7 +19,6 @@ import net.minecraft.world.level.block.Block
 import net.minecraft.world.level.block.state.BlockBehaviour
 import top.katton.Katton
 import top.katton.Katton.MOD_ID
-import top.katton.LoadState
 import top.katton.platform.DynamicRegistryHooks
 import top.katton.platform.SpawnPlacementHooks
 import org.slf4j.LoggerFactory
@@ -54,9 +53,12 @@ interface Identifiable {
  * Registration mode for game objects.
  */
 enum class RegisterMode {
+    /** Permanent — only allowed during [LoadState.INIT]. Never affected by reload or world changes. */
     GLOBAL,
-    RELOADABLE,
-    AUTO
+    /** Registered on world enter, unregistered on world leave. Survives `/katton reload`. */
+    WORLD,
+    /** Cleaned up and re-registered on `/katton reload`. */
+    RELOADABLE
 }
 
 /**
@@ -142,6 +144,11 @@ object KattonRegistry {
             removed.forEach { remove(it) }
         }
 
+        @Synchronized
+        fun beginWorldCleanup() {
+            delegate.beginWorldCleanup().forEach { remove(it) }
+        }
+
         private fun bindHolderComponents(item: Item, properties: KattonItemProperties?) {
             val holder = item.builtInRegistryHolder
             holder.components = properties?.buildComponent() ?: DataComponentMap.EMPTY
@@ -170,7 +177,7 @@ object KattonRegistry {
 
         fun newNative(
             components: KattonItemProperties,
-            registerMode: RegisterMode = RegisterMode.AUTO,
+            registerMode: RegisterMode = RegisterMode.WORLD,
             itemFactory: (KattonItemProperties) -> Item
         ): KattonItemEntry {
             components.setId(ResourceKey.create(Registries.ITEM, components.id))
@@ -214,9 +221,15 @@ object KattonRegistry {
             removed.forEach { remove(it) }
         }
 
+        @Synchronized
+        fun beginWorldCleanup() {
+            delegate.beginWorldCleanup().forEach { remove(it) }
+        }
+
+        // EFFECTS registry
         fun newNative(
             id: Identifier,
-            registerMode: RegisterMode = RegisterMode.AUTO,
+            registerMode: RegisterMode = RegisterMode.WORLD,
             effectFactory: () -> MobEffect
         ): KattonMobEffectEntry {
             val effect = delegate.registerWithMode(id, registerMode, effectFactory)
@@ -253,42 +266,22 @@ object KattonRegistry {
             removed.forEach { remove(it) }
         }
 
+        @Synchronized
+        fun beginWorldCleanup() {
+            delegate.beginWorldCleanup().forEach { remove(it) }
+        }
+
+        // BLOCKS registry
         private fun blockProperties(id: Identifier) =
             BlockBehaviour.Properties.of().setId(ResourceKey.create(Registries.BLOCK, id))
 
         fun newNative(
             id: Identifier,
-            registerMode: RegisterMode = RegisterMode.AUTO,
+            registerMode: RegisterMode = RegisterMode.WORLD,
             blockFactory: (BlockBehaviour.Properties) -> Block
         ): KattonBlockEntry {
-            val block = when (registerMode) {
-                RegisterMode.GLOBAL -> {
-                    delegate.registerGlobal(id, blockFactory(blockProperties(id)))
-                }
-                RegisterMode.RELOADABLE -> {
-                    delegate.ensureRegistered(
-                        id = id,
-                        builder = { blockFactory(blockProperties(id)) },
-                        onExisting = {
-                            @Suppress("DEPRECATION")
-                            it.builtInRegistryHolder().tags = emptySet()
-                        }
-                    )
-                }
-                RegisterMode.AUTO -> {
-                    if (Katton.globalState.after(LoadState.INIT)) {
-                        delegate.ensureRegistered(
-                            id = id,
-                            builder = { blockFactory(blockProperties(id)) },
-                            onExisting = {
-                                @Suppress("DEPRECATION")
-                                it.builtInRegistryHolder().tags = emptySet()
-                            }
-                        )
-                    } else {
-                        delegate.registerGlobal(id, blockFactory(blockProperties(id)))
-                    }
-                }
+            val block = delegate.registerWithMode(id, registerMode) {
+                blockFactory(blockProperties(id))
             }
             @Suppress("DEPRECATION")
             block.builtInRegistryHolder().tags = emptySet()
@@ -355,7 +348,17 @@ object KattonRegistry {
         @Synchronized
         fun beginReload() {
             val removed = delegate.beginReload()
-            // Unregister attributes for removed entities
+            // Unregister attributes for removed entities (RELOADABLE only)
+            removed.forEach { entityId ->
+                unregisterAttributes(entityId)
+                unregisterSpawnPlacement(entityId)
+                remove(entityId)
+            }
+        }
+
+        @Synchronized
+        fun beginWorldCleanup() {
+            val removed = delegate.beginWorldCleanup()
             removed.forEach { entityId ->
                 unregisterAttributes(entityId)
                 unregisterSpawnPlacement(entityId)
@@ -372,7 +375,7 @@ object KattonRegistry {
 
         fun newNative(
             id: Identifier,
-            registerMode: RegisterMode = RegisterMode.AUTO,
+            registerMode: RegisterMode = RegisterMode.WORLD,
             entityTypeFactory: () -> EntityType<*>
         ): KattonEntityTypeEntry {
             val entityType = delegate.registerWithMode(id, registerMode, entityTypeFactory)
@@ -394,14 +397,14 @@ object KattonRegistry {
          */
         fun newNativeWithProperties(
             id: Identifier,
-            registerMode: RegisterMode = RegisterMode.AUTO,
+            registerMode: RegisterMode = RegisterMode.WORLD,
             properties: KattonEntityProperties,
             entityFactory: (KattonEntityProperties) -> EntityType<*>
         ): KattonEntityTypeEntry {
             val entityType = delegate.registerWithMode(id, registerMode) { entityFactory(properties) }
             clearEntityTypeTags(entityType)
             val isReloadable = registerMode == RegisterMode.RELOADABLE ||
-                (registerMode == RegisterMode.AUTO && Katton.globalState.after(LoadState.INIT))
+                registerMode == RegisterMode.WORLD
 
             @Suppress("UNCHECKED_CAST")
             val castType = entityType as? EntityType<LivingEntity>
@@ -552,9 +555,15 @@ object KattonRegistry {
             removed.forEach { remove(it) }
         }
 
+        @Synchronized
+        fun beginWorldCleanup() {
+            delegate.beginWorldCleanup().forEach { remove(it) }
+        }
+
+        // SOUND_EVENTS registry
         fun newNative(
             id: Identifier,
-            registerMode: RegisterMode = RegisterMode.AUTO,
+            registerMode: RegisterMode = RegisterMode.WORLD,
             soundEventFactory: () -> net.minecraft.sounds.SoundEvent
         ): KattonSoundEventEntry {
             val soundEvent = delegate.registerWithMode(id, registerMode, soundEventFactory)
@@ -591,9 +600,15 @@ object KattonRegistry {
             removed.forEach { remove(it) }
         }
 
+        @Synchronized
+        fun beginWorldCleanup() {
+            delegate.beginWorldCleanup().forEach { remove(it) }
+        }
+
+        // PARTICLE_TYPES registry
         fun newNative(
             id: Identifier,
-            registerMode: RegisterMode = RegisterMode.AUTO,
+            registerMode: RegisterMode = RegisterMode.WORLD,
             particleTypeFactory: () -> net.minecraft.core.particles.ParticleType<*>
         ): KattonParticleTypeEntry {
             val particleType = delegate.registerWithMode(id, registerMode, particleTypeFactory)
@@ -638,9 +653,15 @@ object KattonRegistry {
             removed.forEach { remove(it) }
         }
 
+        @Synchronized
+        fun beginWorldCleanup() {
+            delegate.beginWorldCleanup().forEach { remove(it) }
+        }
+
+        // BLOCK_ENTITY_TYPES registry
         fun newNative(
             id: Identifier,
-            registerMode: RegisterMode = RegisterMode.AUTO,
+            registerMode: RegisterMode = RegisterMode.WORLD,
             blockEntityTypeFactory: () -> net.minecraft.world.level.block.entity.BlockEntityType<*>
         ): KattonBlockEntityTypeEntry {
             val blockEntityType = delegate.registerWithMode(id, registerMode, blockEntityTypeFactory)
@@ -675,7 +696,8 @@ object KattonRegistry {
         private val delegate = ReloadableBuiltInRegistry(
             builtInRegistry = BuiltInRegistries.CREATIVE_MODE_TAB,
             registryKey = Registries.CREATIVE_MODE_TAB,
-            requiresIntrusiveHolders = false
+            requiresIntrusiveHolders = false,
+            unregisterOnReload = false
         )
 
         @Synchronized
@@ -684,9 +706,15 @@ object KattonRegistry {
             removed.forEach { remove(it) }
         }
 
+        @Synchronized
+        fun beginWorldCleanup() {
+            delegate.beginWorldCleanup().forEach { remove(it) }
+        }
+
+        // CREATIVE_TABS registry
         fun newNative(
             id: Identifier,
-            registerMode: RegisterMode = RegisterMode.AUTO,
+            registerMode: RegisterMode = RegisterMode.WORLD,
             tabFactory: () -> net.minecraft.world.item.CreativeModeTab
         ): KattonCreativeTabEntry {
             val tab = delegate.registerWithMode(id, registerMode, tabFactory)
@@ -731,9 +759,15 @@ object KattonRegistry {
             removed.forEach { remove(it) }
         }
 
+        @Synchronized
+        fun beginWorldCleanup() {
+            delegate.beginWorldCleanup().forEach { remove(it) }
+        }
+
+        // DATA_COMPONENT_TYPES registry
         fun <T : Any> newNative(
             id: Identifier,
-            registerMode: RegisterMode = RegisterMode.AUTO,
+            registerMode: RegisterMode = RegisterMode.WORLD,
             componentTypeFactory: () -> DataComponentType<T>
         ): KattonDataComponentTypeEntry {
             val componentType = delegate.registerWithMode(id, registerMode, componentTypeFactory)
@@ -769,6 +803,12 @@ object KattonRegistry {
             EntityRendererRegistration.beginModelLayerReload()
         }
 
+        @Synchronized
+        fun beginWorldCleanup() {
+            EntityRendererRegistration.beginReload()
+        }
+
+        // ENTITY_RENDERERS registry
         fun registryHealth(): RegistryHealth = RegistryHealth(
             key = "entity_renderers",
             kattonEntries = EntityRendererRegistration.managedCount(),
@@ -781,6 +821,27 @@ object KattonRegistry {
     @JvmStatic
     fun flushPendingRegistrations() {
         EntityRendererRegistration.flushPendingRegistrations()
+    }
+
+    /**
+     * Clears all WORLD-mode registrations from all sub-registries.
+     * Called when the server stops / world is left.
+     *
+     * WORLD entries are fully unregistered from the MC registry (unlike
+     * RELOADABLE entries which may persist in-registry during reload).
+     */
+    @JvmStatic
+    fun clearWorldRegistrations() {
+        ITEMS.beginWorldCleanup()
+        EFFECTS.beginWorldCleanup()
+        BLOCKS.beginWorldCleanup()
+        ENTITY_TYPES.beginWorldCleanup()
+        SOUND_EVENTS.beginWorldCleanup()
+        PARTICLE_TYPES.beginWorldCleanup()
+        BLOCK_ENTITY_TYPES.beginWorldCleanup()
+        CREATIVE_TABS.beginWorldCleanup()
+        DATA_COMPONENT_TYPES.beginWorldCleanup()
+        ENTITY_RENDERERS.beginWorldCleanup()
     }
 
     fun registryHealthSnapshot(): List<RegistryHealth> = listOf(

@@ -20,7 +20,7 @@ import java.util.*
  * hot-reload capability.
  *
  * @param id Item identifier (e.g., "mymod:my_item")
- * @param registerMode Registration mode (GLOBAL, RELOADABLE, or AUTO)
+ * @param registerMode Registration mode (GLOBAL, WORLD, or RELOADABLE)
  * @param configure Configuration lambda for item properties
  * @param itemFactory Factory function to create the Item instance
  * @return The registered KattonItemEntry
@@ -47,7 +47,7 @@ import java.util.*
 @ApiStatus.Experimental
 fun registerNativeItem(
     id: String,
-    registerMode: RegisterMode = RegisterMode.AUTO,
+    registerMode: RegisterMode = RegisterMode.WORLD,
     configure: KattonItemProperties.() -> Unit = {},
     itemFactory: (KattonItemProperties) -> Item
 ): KattonRegistry.KattonItemEntry = registerNativeItem(id(id), registerMode, configure, itemFactory)
@@ -64,7 +64,7 @@ fun registerNativeItem(
 @ApiStatus.Experimental
 fun registerNativeItem(
     id: Identifier,
-    registerMode: RegisterMode = RegisterMode.AUTO,
+    registerMode: RegisterMode = RegisterMode.WORLD,
     configure: KattonItemProperties.() -> Unit = {},
     itemFactory: (KattonItemProperties) -> Item
 ): KattonRegistry.KattonItemEntry {
@@ -85,7 +85,7 @@ fun registerNativeItem(
 fun registerNativeItem(
     id: String,
     properties: KattonItemProperties,
-    registerMode: RegisterMode = RegisterMode.AUTO,
+    registerMode: RegisterMode = RegisterMode.WORLD,
     itemFactory: (KattonItemProperties) -> Item
 ): KattonRegistry.KattonItemEntry = registerNativeItemInternal(id(id), properties, registerMode) { itemFactory(properties) }
 
@@ -93,7 +93,7 @@ fun registerNativeItem(
 private fun registerNativeItemInternal(
     id: Identifier,
     properties: KattonItemProperties,
-    registerMode: RegisterMode = RegisterMode.AUTO,
+    registerMode: RegisterMode = RegisterMode.WORLD,
     itemFactory: () -> Item
 ): KattonRegistry.KattonItemEntry {
     require(properties.id == id) {

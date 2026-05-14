@@ -12,13 +12,13 @@ import top.katton.registry.id
  * Registers a native SoundEvent with hot-reload support.
  *
  * @param id Sound identifier (e.g., "mymod:custom_sound")
- * @param registerMode Registration mode (GLOBAL, RELOADABLE, or AUTO)
+ * @param registerMode Registration mode (GLOBAL, WORLD, or RELOADABLE)
  * @param soundEventFactory Factory function to create the SoundEvent instance
  * @return The registered KattonSoundEventEntry
  */
 fun registerNativeSoundEvent(
     id: String,
-    registerMode: RegisterMode = RegisterMode.AUTO,
+    registerMode: RegisterMode = RegisterMode.WORLD,
     soundEventFactory: () -> SoundEvent
 ): KattonRegistry.KattonSoundEventEntry = registerNativeSoundEvent(id(id), registerMode, soundEventFactory)
 
@@ -32,7 +32,7 @@ fun registerNativeSoundEvent(
  */
 fun registerNativeSoundEvent(
     id: Identifier,
-    registerMode: RegisterMode = RegisterMode.AUTO,
+    registerMode: RegisterMode = RegisterMode.WORLD,
     soundEventFactory: () -> SoundEvent
 ): KattonRegistry.KattonSoundEventEntry {
     return KattonRegistry.SOUND_EVENTS.newNative(id, registerMode, soundEventFactory)

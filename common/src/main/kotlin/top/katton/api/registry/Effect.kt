@@ -26,7 +26,7 @@ import top.katton.registry.id
  * hot-reload capability.
  *
  * @param id Effect identifier (e.g., "mymod:custom_effect")
- * @param registerMode Registration mode (GLOBAL, RELOADABLE, or AUTO)
+ * @param registerMode Registration mode (GLOBAL, WORLD, or RELOADABLE)
  * @param effectFactory Factory function to create the MobEffect instance
  * @return The registered KattonMobEffectEntry
  *
@@ -43,7 +43,7 @@ import top.katton.registry.id
  */
 fun registerNativeEffect(
     id: String,
-    registerMode: RegisterMode = RegisterMode.AUTO,
+    registerMode: RegisterMode = RegisterMode.WORLD,
     effectFactory: () -> MobEffect
 ): KattonRegistry.KattonMobEffectEntry = registerNativeEffect(id(id), registerMode, effectFactory)
 
@@ -57,7 +57,7 @@ fun registerNativeEffect(
  */
 fun registerNativeEffect(
     id: Identifier,
-    registerMode: RegisterMode = RegisterMode.AUTO,
+    registerMode: RegisterMode = RegisterMode.WORLD,
     effectFactory: () -> MobEffect
 ): KattonRegistry.KattonMobEffectEntry {
     return KattonRegistry.EFFECTS.newNative(id, registerMode, effectFactory)

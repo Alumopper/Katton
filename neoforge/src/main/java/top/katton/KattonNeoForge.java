@@ -25,6 +25,7 @@ import top.katton.network.ServerNetworking;
 import top.katton.network.ServerNetworkingNeoForge;
 import top.katton.engine.ScriptReloadManager;
 import top.katton.pack.ScriptPackManager;
+import top.katton.registry.KattonRegistry;
 import top.katton.platform.DynamicRegistryHooks;
 import top.katton.platform.EntityAttributeHooks;
 import top.katton.platform.NeoForgeDynamicRegistryHooks;
@@ -102,6 +103,7 @@ public class KattonNeoForge {
     private void onServerStopped(ServerStoppedEvent event) {
         Katton.server = null;
         Katton.globalState = LoadState.SERVER_STOPPED;
+        KattonRegistry.INSTANCE.clearWorldRegistrations();
         Katton.clearWorldAndServerEvents();
         ScriptPackManager.INSTANCE.clearWorldDirectory();
     }
