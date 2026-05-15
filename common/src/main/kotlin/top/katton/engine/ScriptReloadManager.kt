@@ -45,9 +45,14 @@ object ScriptReloadManager {
 
     /**
      * Reloads all client-side world scripts.
+     * No-op on server-only platforms (Paper) where hasClient=false.
      */
     @JvmStatic
     fun reloadClientScripts(): Boolean {
+        if (!Katton.hasClient) {
+            return true
+        }
+
         val tracker = ReloadProgressTracker(16)
         tracker.begin("Reloading client scripts")
 
@@ -167,23 +172,27 @@ object ScriptReloadManager {
 
         ScriptCommandRegistry.beginReload(server)
         tracker.step("Resetting command registry")
-        KattonRegistry.ITEMS.beginReload()
-        tracker.step("Resetting item registry")
-        KattonRegistry.EFFECTS.beginReload()
-        KattonRegistry.BLOCKS.beginReload()
-        tracker.step("Resetting effect/block registries")
-        KattonRegistry.ENTITY_TYPES.beginReload()
-        tracker.step("Resetting entity type registry")
-        KattonRegistry.SOUND_EVENTS.beginReload()
-        KattonRegistry.PARTICLE_TYPES.beginReload()
-        tracker.step("Resetting sound/particle registries")
-        KattonRegistry.BLOCK_ENTITY_TYPES.beginReload()
-        tracker.step("Resetting block entity type registry")
-        KattonRegistry.CREATIVE_TABS.beginReload()
-        KattonRegistry.DATA_COMPONENT_TYPES.beginReload()
-        tracker.step("Resetting creative tabs & components")
-        KattonRegistry.ENTITY_RENDERERS.beginReload()
-        tracker.step("Resetting entity renderers")
+        if (Katton.registrationEnabled) {
+            KattonRegistry.ITEMS.beginReload()
+            tracker.step("Resetting item registry")
+            KattonRegistry.EFFECTS.beginReload()
+            KattonRegistry.BLOCKS.beginReload()
+            tracker.step("Resetting effect/block registries")
+            KattonRegistry.ENTITY_TYPES.beginReload()
+            tracker.step("Resetting entity type registry")
+            KattonRegistry.SOUND_EVENTS.beginReload()
+            KattonRegistry.PARTICLE_TYPES.beginReload()
+            tracker.step("Resetting sound/particle registries")
+            KattonRegistry.BLOCK_ENTITY_TYPES.beginReload()
+            tracker.step("Resetting block entity type registry")
+            KattonRegistry.CREATIVE_TABS.beginReload()
+            KattonRegistry.DATA_COMPONENT_TYPES.beginReload()
+            tracker.step("Resetting creative tabs & components")
+        }
+        if (Katton.hasClient) {
+            KattonRegistry.ENTITY_RENDERERS.beginReload()
+            tracker.step("Resetting entity renderers")
+        }
         ServerDatapackManager.beginReload()
         tracker.step("Resetting datapack manager")
         Event.clearHandlersByScope(ScriptPackScope.WORLD)
@@ -239,23 +248,27 @@ object ScriptReloadManager {
 
                 ScriptCommandRegistry.beginReload(server)
                 tracker.step("Resetting command registry")
-                KattonRegistry.ITEMS.beginReload()
-                tracker.step("Resetting item registry")
-                KattonRegistry.EFFECTS.beginReload()
-                KattonRegistry.BLOCKS.beginReload()
-                tracker.step("Resetting effect/block registries")
-                KattonRegistry.ENTITY_TYPES.beginReload()
-                tracker.step("Resetting entity type registry")
-                KattonRegistry.SOUND_EVENTS.beginReload()
-                KattonRegistry.PARTICLE_TYPES.beginReload()
-                tracker.step("Resetting sound/particle registries")
-                KattonRegistry.BLOCK_ENTITY_TYPES.beginReload()
-                tracker.step("Resetting block entity type registry")
-                KattonRegistry.CREATIVE_TABS.beginReload()
-                KattonRegistry.DATA_COMPONENT_TYPES.beginReload()
-                tracker.step("Resetting creative tabs & components")
-                KattonRegistry.ENTITY_RENDERERS.beginReload()
-                tracker.step("Resetting entity renderers")
+                if (Katton.registrationEnabled) {
+                    KattonRegistry.ITEMS.beginReload()
+                    tracker.step("Resetting item registry")
+                    KattonRegistry.EFFECTS.beginReload()
+                    KattonRegistry.BLOCKS.beginReload()
+                    tracker.step("Resetting effect/block registries")
+                    KattonRegistry.ENTITY_TYPES.beginReload()
+                    tracker.step("Resetting entity type registry")
+                    KattonRegistry.SOUND_EVENTS.beginReload()
+                    KattonRegistry.PARTICLE_TYPES.beginReload()
+                    tracker.step("Resetting sound/particle registries")
+                    KattonRegistry.BLOCK_ENTITY_TYPES.beginReload()
+                    tracker.step("Resetting block entity type registry")
+                    KattonRegistry.CREATIVE_TABS.beginReload()
+                    KattonRegistry.DATA_COMPONENT_TYPES.beginReload()
+                    tracker.step("Resetting creative tabs & components")
+                }
+                if (Katton.hasClient) {
+                    KattonRegistry.ENTITY_RENDERERS.beginReload()
+                    tracker.step("Resetting entity renderers")
+                }
                 ServerDatapackManager.beginReload()
                 tracker.step("Resetting datapack manager")
                 Event.clearHandlersByScope(ScriptPackScope.WORLD)

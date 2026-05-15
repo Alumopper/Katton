@@ -1,0 +1,127 @@
+buildscript {
+    repositories {
+        mavenCentral()
+        maven { url = 'https://maven.fabricmc.net/' }
+    }
+    dependencies {
+        classpath "net.fabricmc:fabric-loom:${project.loom_version}"
+    }
+}
+
+plugins {
+    id 'java-library'
+    id 'org.jetbrains.kotlin.jvm' version '2.3.10'
+    id 'maven-publish'
+    id 'com.gradleup.shadow' version '8.3.6'
+}
+
+apply plugin: 'net.fabricmc.fabric-loom'
+
+group = project.maven_group
+version = project.mod_version
+ext.useLeanMavenPublication = true
+
+def commonMainSourceSet = project(':common').sourceSets.main
+
+repositories {
+    mavenCentral()
+    maven { url = 'https://repo.papermc.io/repository/maven-public/' }
+}
+
+loom {
+    // Paper plugin, not a Fabric mod — no mixin, no access widener, no remap
+    mixin { useLegacyMixinAp = false }
+}
+
+dependencies {
+    // Minecraft (Mojang-mapped, via Fabric Loom) — compileOnly, common module provides at runtime
+    minecraft "com.mojang:minecraft:${project.minecraft_version}"
+
+    // Paper API — provided by server at runtime
+    compileOnly "io.papermc.paper:paper-api:${project.paper_api_version}"
+
+    // Katton common module
+    api project(':common')
+
+    // Kotlin scripting — shaded into the plugin jar
+    implementation 'org.jetbrains.kotlin:kotlin-compiler-embeddable'
+    implementation 'org.jetbrains.kotlin:kotlin-daemon-embeddable'
+    implementation 'org.jetbrains.kotlin:kotlin-reflect'
+    implementation 'org.jetbrains.kotlin:kotlin-script-runtime'
+    implementation 'org.jetbrains.kotlin:kotlin-scripting-common'
+    implementation 'org.jetbrains.kotlin:kotlin-scripting-compiler-embeddable'
+    implementation 'org.jetbrains.kotlin:kotlin-scripting-compiler-impl-embeddable'
+    implementation 'org.jetbrains.kotlin:kotlin-scripting-jvm'
+    implementation 'org.jetbrains.kotlin:kotlin-scripting-jvm-host'
+    implementation 'org.jetbrains.kotlin:kotlin-stdlib'
+    implementation "org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm:1.8.0"
+    implementation "org.jetbrains.kotlinx:kotlinx-coroutines-jdk8:1.8.0"
+    implementation "net.bytebuddy:byte-buddy:1.17.8"
+    implementation "net.bytebuddy:byte-buddy-agent:1.17.8"
+    implementation "org.jetbrains:annotations:26.0.2"
+
+    // ASM for bytecode injection
+    implementation "org.ow2.asm:asm:9.9.1"
+    implementation "org.ow2.asm:asm-commons:9.9.1"
+}
+
+java {
+    toolchain.languageVersion = JavaLanguageVersion.of(25)
+    withSourcesJar()
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    options.release = 25
+}
+
+tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
+    kotlinOptions {
+        jvmTarget = '25'
+    }
+}
+
+// Fat jar: include common module output + shaded Kotlin deps
+shadowJar {
+    archiveClassifier = ''
+    from(commonMainSourceSet.output)
+
+    // Relocate Kotlin to avoid conflicts with other plugins
+    relocate 'kotlin', 'top.katton.shaded.kotlin'
+    relocate 'kotlinx', 'top.katton.shaded.kotlinx'
+    relocate 'org.intellij', 'top.katton.shaded.intellij'
+    relocate 'org.jetbrains', 'top.katton.shaded.jetbrains'
+    relocate 'net.bytebuddy', 'top.katton.shaded.bytebuddy'
+    relocate 'org.objectweb.asm', 'top.katton.shaded.asm'
+
+    exclude 'META-INF/versions/**'
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+
+    manifest {
+        attributes 'paper-plugin-version': project.version
+    }
+}
+
+// Use shadow jar as the main artifact
+tasks.named('jar') {
+    enabled = false
+    dependsOn shadowJar
+}
+
+// Process plugin.yml to expand version
+processResources {
+    filesMatching('paper-plugin.yml') {
+        expand 'version': project.version
+    }
+}
+
+// Maven publication — use shadow jar
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            artifactId = "${rootProject.findProperty('archives_base_name')}-paper"
+            artifact(tasks.named('shadowJar'))
+            artifact(tasks.named('sourcesJar'))
+        }
+    }
+}

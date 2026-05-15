@@ -1,0 +1,7 @@
+name: Katton
+version: '${version}'
+main: top.katton.paper.KattonPaperPlugin
+api-version: '1.21'
+description: Kotlin scripting engine with hot reload for Paper servers
+author: Katton contributors
+website: https://github.com/Alumopper/Katton

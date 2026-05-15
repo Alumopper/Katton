@@ -168,6 +168,7 @@ object KattonRegistry {
          */
         @JvmStatic
         fun reapplyCustomItemComponents() {
+            if (!Katton.hasClient) return
             entries().forEach { (_, entry) ->
                 entry.properties?.let { props ->
                     bindHolderComponents(entry.item, props)
@@ -799,20 +800,22 @@ object KattonRegistry {
 
         @Synchronized
         fun beginReload() {
+            if (!Katton.hasClient) return
             EntityRendererRegistration.beginReload()
             EntityRendererRegistration.beginModelLayerReload()
         }
 
         @Synchronized
         fun beginWorldCleanup() {
+            if (!Katton.hasClient) return
             EntityRendererRegistration.beginReload()
         }
 
         // ENTITY_RENDERERS registry
         fun registryHealth(): RegistryHealth = RegistryHealth(
             key = "entity_renderers",
-            kattonEntries = EntityRendererRegistration.managedCount(),
-            managedTracked = EntityRendererRegistration.managedCount(),
+            kattonEntries = if (Katton.hasClient) EntityRendererRegistration.managedCount() else 0,
+            managedTracked = if (Katton.hasClient) EntityRendererRegistration.managedCount() else 0,
             staleRetained = 0,
             pendingRegistrations = 0
         )

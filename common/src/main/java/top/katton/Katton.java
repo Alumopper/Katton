@@ -29,11 +29,38 @@ public class Katton {
     public static Path gameDirectory = null;
 
     /**
+     * Set to true by client-capable platforms (Fabric, NeoForge).
+     * Paper sets this to false — it has no client renderer support.
+     */
+    public static boolean hasClient = true;
+
+    /**
+     * Set to true by platforms that support registry mutations (Fabric, NeoForge).
+     * Paper sets this to false — no item/block/entity registration to avoid
+     * registry inconsistency with vanilla clients.
+     */
+    public static boolean registrationEnabled = true;
+
+    /**
      * Platform-agnostic initialization.
      * Called once during mod initialization by both Fabric and NeoForge entrypoints.
      */
     public static void mainInitialize() {
         KattonRegistry.INSTANCE.initialize();
+        initPacks();
+    }
+
+    /**
+     * Paper-specific initialization. Paper is server-only: no registry mutation
+     * (to avoid inconsistency with vanilla clients), no client features.
+     */
+    public static void paperInitialize() {
+        registrationEnabled = false;
+        hasClient = false;
+        initPacks();
+    }
+
+    private static void initPacks() {
         ScriptPackManager.INSTANCE.setGameDirectory(gameDirectory);
         ScriptEngine.setCacheDirectory(gameDirectory == null ? null : gameDirectory.resolve(".katton").resolve("compiled-script-cache"));
         ScriptPackManager.INSTANCE.refreshGlobalPacks();

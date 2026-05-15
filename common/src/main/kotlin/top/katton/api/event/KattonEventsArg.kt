@@ -13,6 +13,7 @@ import net.minecraft.server.level.ServerPlayer
 import net.minecraft.server.packs.resources.ResourceManager
 import net.minecraft.world.InteractionHand
 import net.minecraft.world.damagesource.DamageSource
+import net.minecraft.world.effect.MobEffectInstance
 import net.minecraft.world.entity.*
 import net.minecraft.world.entity.animal.Animal
 import net.minecraft.world.entity.item.ItemEntity
@@ -171,7 +172,7 @@ data class EquipmentChangeArg(
 data class ChunkLoadArg(
     val world: ServerLevel,
     val chunk: LevelChunk,
-    val generated: Boolean
+    val generated: Boolean = false
 )
 
 /**
@@ -229,7 +230,7 @@ data class BlockBreakArg(
     val player: Player,
     val pos: BlockPos,
     val state: BlockState,
-    val blockEntity: BlockEntity?,
+    val blockEntity: BlockEntity? = null,
 ) : CancellableEventArg()
 
 /**
@@ -248,7 +249,7 @@ data class BlockPlaceArg(
     val player: Player?,
     val pos: BlockPos,
     val state: BlockState,
-    val blockEntity: BlockEntity?
+    val blockEntity: BlockEntity? = null
 ): CancellableEventArg()
 
 /**
@@ -992,7 +993,7 @@ data class ItemTossArg(
 data class PlayerDestroyItemArg(
     val player: Player,
     val item: ItemStack,
-    val hand: InteractionHand?
+    val hand: InteractionHand? = null
 )
 
 /**
@@ -1271,3 +1272,10 @@ data class ShieldBlockArg(
     val blockedDamage: Float,
     val originalBlockedState: Boolean
 )
+
+/** Placeholder mob effect argument stubs */
+data class MobEffectAllowAddArg(val entity: Any, val effect: Any)
+data class MobEffectAddArg(val entity: Any, val effect: Any)
+data class MobEffectAllowEarlyRemoveArg(val entity: Any, val effect: Any)
+data class MobEffectBeforeRemoveArg(val entity: Any, val effect: Any)
+data class MobEffectAfterRemoveArg(val entity: Any, val effect: Any)
