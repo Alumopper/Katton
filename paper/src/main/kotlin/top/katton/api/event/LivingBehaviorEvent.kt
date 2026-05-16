@@ -1,10 +1,10 @@
 package top.katton.api.event
 
 import io.papermc.paper.event.player.PlayerDeepSleepEvent
+import io.papermc.paper.event.player.PlayerBedFailEnterEvent
 import net.minecraft.world.entity.AgeableMob
 import net.minecraft.world.entity.animal.Animal
 import net.minecraft.world.entity.player.Player
-import top.katton.bridger.EventResult
 import org.bukkit.event.EventHandler
 import org.bukkit.event.EventPriority
 import org.bukkit.event.Listener
@@ -14,14 +14,9 @@ import org.bukkit.event.entity.EntityToggleGlideEvent
 import org.bukkit.event.player.PlayerBedEnterEvent
 import org.bukkit.event.player.PlayerBedLeaveEvent
 import org.bukkit.plugin.java.JavaPlugin
+import top.katton.bridger.EventResult
 import top.katton.paper.PaperNmsBridge
-import top.katton.util.create
-import top.katton.util.createAll
-import top.katton.util.createAny
-import top.katton.util.createCancellableUnit
-import top.katton.util.createFirstNotNullOfOrNull
-import top.katton.util.createReturnIfNot
-import top.katton.util.createUnit
+import top.katton.util.*
 
 object LivingBehaviorEvent {
     @JvmField
@@ -45,9 +40,9 @@ object LivingBehaviorEvent {
     @JvmField
     val onStopSleeping = createUnit<SleepingArg>()
 
-//    @JvmField
-//    val onAllowBed = createReturnIfNot<AllowBedArg, EventResult>(EventResult.PASS)
-//
+    @JvmField
+    val onAllowBed = createReturnIfNot<AllowBedArg, EventResult>(EventResult.PASS)
+
 //    @JvmField
 //    val onAllowNearbyMonsters = createReturnIfNot<AllowNearbyMonstersArg, EventResult>(EventResult.PASS)
 
@@ -81,6 +76,9 @@ object LivingBehaviorEvent {
     @JvmField
     val onPlayerWakeUp = createUnit<PlayerWakeUpArg>()
 
+    @JvmField
+    val onBedFailEnter = createUnit<Any>() // PlayerBedFailEnterEvent (Paper-specific, no fabric equivalent)
+
     @JvmStatic
     fun initialize(plugin: JavaPlugin) {
         plugin.server.pluginManager.registerEvents(object : Listener {
@@ -113,6 +111,14 @@ object LivingBehaviorEvent {
             fun onBedEnter(event: PlayerBedEnterEvent) {
                 val player = PaperNmsBridge.toNmsPlayer(event.player)
                 val pos = PaperNmsBridge.toNmsBlockPos(event.bed.location)
+                val bedState = PaperNmsBridge.toNmsBlockState(event.bed)
+                val allowBed = onAllowBed(
+                    AllowBedArg(player, pos, bedState, true)
+                ).getOrElse { EventResult.PASS }
+                if (allowBed == EventResult.DENY) {
+                    event.isCancelled = true
+                    return
+                }
                 if (onAllowSleeping(AllowSleepingArg(player, pos)).getOrNull() != null) {
                     event.isCancelled = true
                     return
@@ -132,6 +138,11 @@ object LivingBehaviorEvent {
                 val pos = PaperNmsBridge.toNmsBlockPos(event.bed.location)
                 onStopSleeping(SleepingArg(player, pos))
                 onPlayerWakeUp(PlayerWakeUpArg(player, false, false))
+            }
+
+            @EventHandler(priority = EventPriority.MONITOR)
+            fun onBedFailEnter(event: PlayerBedFailEnterEvent) {
+                onBedFailEnter(event)
             }
 
             @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)

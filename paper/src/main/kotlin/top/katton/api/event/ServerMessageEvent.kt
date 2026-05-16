@@ -17,22 +17,22 @@ import top.katton.util.createUnit
 
 object ServerMessageEvent {
     @JvmField
-    val onAllowChatMessage = createAll<Any>()
+    val onAllowChatMessage = createAll<AllowChatMessageArg>()
 
     @JvmField
-    val onAllowGameMessage = createAll<Any>()
+    val onAllowGameMessage = createAll<AllowGameMessageArg>()
 
     @JvmField
-    val onAllowCommandMessage = createAll<Any>()
+    val onAllowCommandMessage = createAll<AllowCommandMessageArg>()
 
     @JvmField
-    val onChatMessage = createUnit<Any>()
+    val onChatMessage = createUnit<ChatMessageArg>()
 
     @JvmField
-    val onGameMessage = createUnit<Any>()
+    val onGameMessage = createUnit<GameMessageArg>()
 
     @JvmField
-    val onCommandMessage = createUnit<Any>()
+    val onCommandMessage = createUnit<CommandMessageArg>()
 
     @JvmField
     val onServerChat = createCancellableUnit<ServerChatArg>()
@@ -42,61 +42,79 @@ object ServerMessageEvent {
         plugin.server.pluginManager.registerEvents(object : Listener {
             @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
             fun onChat(event: AsyncChatEvent) {
-                if (!onAllowChatMessage(event).getOrElse { true }) {
+                val player = PaperNmsBridge.toNmsPlayer(event.player)
+                val chatMessage = PaperNmsBridge.toNmsPlayerChatMessage(event.player, event.message())
+                val chatTypeBound = PaperNmsBridge.toNmsChatTypeBound(player)
+                val allowArg = AllowChatMessageArg(chatMessage, player, chatTypeBound)
+                if (!onAllowChatMessage(allowArg).getOrElse { true }) {
                     event.isCancelled = true
                     return
                 }
 
-                val arg = ServerChatArg(
-                    PaperNmsBridge.toNmsPlayer(event.player),
-                    PlainTextComponentSerializer.plainText().serialize(event.message()),
-                    PaperNmsBridge.toNmsComponent(
-                        PlainTextComponentSerializer.plainText().serialize(event.message())
-                    )
-                )
-                onServerChat(arg)
-                if (arg.isCancelled()) {
+                val plainText = PlainTextComponentSerializer.plainText().serialize(event.message())
+                val chatArg = ServerChatArg(player, plainText, PaperNmsBridge.toNmsComponent(plainText))
+                onServerChat(chatArg)
+                if (chatArg.isCancelled()) {
                     event.isCancelled = true
                     return
                 }
 
-                onChatMessage(event)
+                onChatMessage(ChatMessageArg(chatMessage, player, chatTypeBound))
             }
 
             @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
             fun onBroadcast(event: BroadcastMessageEvent) {
-                if (!onAllowGameMessage(event).getOrElse { true }) {
+                val server = PaperNmsBridge.toNmsServer(plugin.server)
+                val plainText = PlainTextComponentSerializer.plainText().serialize(event.message())
+                val component = PaperNmsBridge.toNmsComponent(plainText)
+                val arg = AllowGameMessageArg(server, component, false)
+                if (!onAllowGameMessage(arg).getOrElse { true }) {
                     event.isCancelled = true
                     return
                 }
-                onGameMessage(event)
+                onGameMessage(GameMessageArg(server, component, false))
             }
 
             @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
             fun onPlayerCommand(event: PlayerCommandPreprocessEvent) {
-                if (!onAllowCommandMessage(event).getOrElse { true }) {
+                val player = PaperNmsBridge.toNmsPlayer(event.player)
+                val chatMessage = PaperNmsBridge.toNmsPlayerChatMessage(event.message)
+                val source = PaperNmsBridge.toNmsCommandSourceStack(player)
+                val chatTypeBound = PaperNmsBridge.toNmsChatTypeBound(source)
+                val allowArg = AllowCommandMessageArg(chatMessage, source, chatTypeBound)
+                if (!onAllowCommandMessage(allowArg).getOrElse { true }) {
                     event.isCancelled = true
                     return
                 }
-                onCommandMessage(event)
+                onCommandMessage(CommandMessageArg(chatMessage, source, chatTypeBound))
             }
 
             @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
             fun onServerCommand(event: ServerCommandEvent) {
-                if (!onAllowCommandMessage(event).getOrElse { true }) {
+                val server = PaperNmsBridge.toNmsServer(plugin.server)
+                val chatMessage = PaperNmsBridge.toNmsPlayerChatMessage(event.command)
+                val source = PaperNmsBridge.toNmsCommandSourceStack(server)
+                val chatTypeBound = PaperNmsBridge.toNmsChatTypeBound(source)
+                val allowArg = AllowCommandMessageArg(chatMessage, source, chatTypeBound)
+                if (!onAllowCommandMessage(allowArg).getOrElse { true }) {
                     event.isCancelled = true
                     return
                 }
-                onCommandMessage(event)
+                onCommandMessage(CommandMessageArg(chatMessage, source, chatTypeBound))
             }
 
             @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
             fun onRemoteServerCommand(event: RemoteServerCommandEvent) {
-                if (!onAllowCommandMessage(event).getOrElse { true }) {
+                val server = PaperNmsBridge.toNmsServer(plugin.server)
+                val chatMessage = PaperNmsBridge.toNmsPlayerChatMessage(event.command)
+                val source = PaperNmsBridge.toNmsCommandSourceStack(server)
+                val chatTypeBound = PaperNmsBridge.toNmsChatTypeBound(source)
+                val allowArg = AllowCommandMessageArg(chatMessage, source, chatTypeBound)
+                if (!onAllowCommandMessage(allowArg).getOrElse { true }) {
                     event.isCancelled = true
                     return
                 }
-                onCommandMessage(event)
+                onCommandMessage(CommandMessageArg(chatMessage, source, chatTypeBound))
             }
         }, plugin)
     }

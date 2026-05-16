@@ -1,7 +1,12 @@
 package top.katton.api.event
 
+import com.destroystokyo.paper.event.player.PlayerJumpEvent
+import com.destroystokyo.paper.event.player.PlayerLaunchProjectileEvent
 import com.destroystokyo.paper.event.player.PlayerPickupExperienceEvent
 import com.destroystokyo.paper.event.player.PlayerPostRespawnEvent
+import io.papermc.paper.event.player.PlayerPickBlockEvent
+import io.papermc.paper.event.player.PlayerPickEntityEvent
+import net.minecraft.world.item.ItemStack
 import org.bukkit.event.EventHandler
 import org.bukkit.event.EventPriority
 import org.bukkit.event.Listener
@@ -9,9 +14,11 @@ import org.bukkit.event.player.PlayerExpChangeEvent
 import org.bukkit.event.player.PlayerJoinEvent
 import org.bukkit.event.player.PlayerLevelChangeEvent
 import org.bukkit.event.player.PlayerQuitEvent
+import org.bukkit.event.player.PlayerRespawnEvent
 import org.bukkit.plugin.java.JavaPlugin
 import top.katton.paper.PaperNmsBridge
 import top.katton.util.createCancellableUnit
+import top.katton.util.createFirstNotNullOfOrNull
 import top.katton.util.createUnit
 
 object ServerPlayerEvent {
@@ -24,8 +31,8 @@ object ServerPlayerEvent {
     @JvmField
     val onAfterPlayerRespawn = createUnit<ServerPlayerAfterRespawnArg>()
 
-//    @JvmField
-//    val onPlayerCopy = createUnit<ServerPlayerCopyArg>()
+    @JvmField
+    val onPlayerCopy = createUnit<ServerPlayerCopyArg>()
 
     @JvmField
     val onPlayerXpChange = createCancellableUnit<PlayerXpChangeArg>()
@@ -36,11 +43,17 @@ object ServerPlayerEvent {
     @JvmField
     val onPlayerPickupXp = createCancellableUnit<PlayerPickupXpArg>()
 
-//    @JvmField
-//    val onPickFromBlock = createFirstNotNullOfOrNull<PlayerPickFromBlockArg, ItemStack>()
-//
-//    @JvmField
-//    val onPickFromEntity = createFirstNotNullOfOrNull<PlayerPickFromEntityArg, ItemStack>()
+    @JvmField
+    val onPickFromBlock = createUnit<PlayerPickFromBlockArg>()
+
+    @JvmField
+    val onPickFromEntity = createUnit<PlayerPickFromEntityArg>()
+
+    @JvmField
+    val onPlayerJump = createUnit<Any>() // PlayerJumpEvent (Paper-specific)
+
+    @JvmField
+    val onLaunchProjectile = createUnit<Any>() // PlayerLaunchProjectileEvent (Paper-specific, cancellable via event)
 
     @JvmStatic
     fun initialize(plugin: JavaPlugin) {
@@ -59,6 +72,12 @@ object ServerPlayerEvent {
             fun onRespawn(event: PlayerPostRespawnEvent) {
                 val player = PaperNmsBridge.toNmsPlayer(event.player)
                 onAfterPlayerRespawn(ServerPlayerAfterRespawnArg(player, player, false))
+            }
+
+            @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+            fun onPlayerCopy(event: PlayerRespawnEvent) {
+                val player = PaperNmsBridge.toNmsPlayer(event.player)
+                onPlayerCopy(ServerPlayerCopyArg(player, player, true))
             }
 
             @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
@@ -89,6 +108,35 @@ object ServerPlayerEvent {
                 if (arg.isCancelled()) {
                     event.isCancelled = true
                 }
+            }
+
+            @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+            fun onPickBlock(event: PlayerPickBlockEvent) {
+                val player = PaperNmsBridge.toNmsPlayer(event.player)
+                val pos = PaperNmsBridge.toNmsBlockPos(event.block.location)
+                val state = PaperNmsBridge.toNmsWorld(event.player.world).getBlockState(pos)
+                onPickFromBlock(
+                    PlayerPickFromBlockArg(player, pos, state, event.isIncludeData)
+                )
+            }
+
+            @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+            fun onPickEntity(event: PlayerPickEntityEvent) {
+                val player = PaperNmsBridge.toNmsPlayer(event.player)
+                val entity = PaperNmsBridge.toNmsEntity(event.entity)
+                onPickFromEntity(
+                    PlayerPickFromEntityArg(player, entity, event.isIncludeData)
+                )
+            }
+
+            @EventHandler(priority = EventPriority.MONITOR)
+            fun onPlayerJump(event: PlayerJumpEvent) {
+                onPlayerJump(event)
+            }
+
+            @EventHandler(priority = EventPriority.MONITOR)
+            fun onLaunchProjectile(event: PlayerLaunchProjectileEvent) {
+                onLaunchProjectile(event)
             }
         }, plugin)
     }

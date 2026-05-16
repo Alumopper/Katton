@@ -2,6 +2,7 @@ package top.katton.api.event
 
 import com.destroystokyo.paper.event.entity.EndermanAttackPlayerEvent
 import com.destroystokyo.paper.event.entity.EntityAddToWorldEvent
+import com.destroystokyo.paper.event.entity.EntityJumpEvent
 import com.destroystokyo.paper.event.entity.EntityRemoveFromWorldEvent
 import io.papermc.paper.event.entity.EntityEquipmentChangedEvent
 import net.minecraft.world.item.ItemStack
@@ -37,6 +38,9 @@ object ServerEntityEvent {
 
     @JvmField
     val onEndermanAnger = createCancellableUnit<EndermanAngerArg>()
+
+    @JvmField
+    val onEntityJump = createUnit<EntityJumpEvent>()
 
     @JvmStatic
     fun initialize(plugin: JavaPlugin) {
@@ -137,6 +141,11 @@ object ServerEntityEvent {
                 if (arg.isCancelled()) {
                     event.isCancelled = true
                 }
+            }
+
+            @EventHandler(priority = EventPriority.MONITOR)
+            fun onEntityJump(event: EntityJumpEvent) {
+                this@ServerEntityEvent.onEntityJump(event)
             }
         }, plugin)
     }

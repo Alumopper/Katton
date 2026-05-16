@@ -3,6 +3,7 @@ package top.katton.api.event
 import com.destroystokyo.paper.event.server.ServerTickEndEvent
 import com.destroystokyo.paper.event.server.ServerTickStartEvent
 import io.papermc.paper.event.server.ServerResourcesReloadedEvent
+import net.minecraft.server.MinecraftServer
 import net.minecraft.server.level.ServerLevel
 import org.bukkit.event.EventHandler
 import org.bukkit.event.Listener
@@ -15,14 +16,14 @@ import top.katton.paper.PaperNmsBridge
 import top.katton.util.createUnit
 
 object ServerEvent {
-//    @JvmField
-//    val onServerStarting = createUnit<ServerArg>()
+    @JvmField
+    val onServerStarting = createUnit<ServerArg>()
 
     @JvmField
     val onServerStarted = createUnit<ServerArg>()
 
-//    @JvmField
-//    val onServerStopping = createUnit<ServerArg>()
+    @JvmField
+    val onServerStopping = createUnit<ServerArg>()
 
     @JvmField
     val onServerStopped = createUnit<ServerArg>()
@@ -69,6 +70,7 @@ object ServerEvent {
             @EventHandler
             fun onServerLoad(event: ServerLoadEvent) {
                 if (event.type == ServerLoadEvent.LoadType.STARTUP) {
+                    onServerStarting(ServerArg(PaperNmsBridge.toNmsServer(plugin.server)))
                     onServerStarted(ServerArg(PaperNmsBridge.toNmsServer(plugin.server)))
                 }
             }
@@ -115,9 +117,14 @@ object ServerEvent {
                 onLevelSave(ServerLevelArg(PaperNmsBridge.toNmsLevel(event.world)))
                 onAfterSave(ServerSaveArg(server, false, false))
             }
-        }, /* plugin = */ plugin)
+        }, plugin)
     }
 
     @JvmInline
     value class ServerLevelArg(val level: ServerLevel)
+
+    @JvmStatic
+    fun onDisable(server: MinecraftServer) {
+        onServerStopping(ServerArg(server))
+    }
 }

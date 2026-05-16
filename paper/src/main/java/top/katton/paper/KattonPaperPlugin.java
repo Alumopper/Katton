@@ -58,6 +58,7 @@ public class KattonPaperPlugin extends JavaPlugin implements Listener {
     public void onDisable() {
         getLogger().info("Katton Paper disabling...");
         final MinecraftServer server = Katton.server != null ? Katton.server : MinecraftServer.getServer();
+        ServerEvent.onDisable(server);
         ServerEvent.onServerStopped.invoke(new ServerArg(server));
         Katton.server = null;
         Katton.globalState = LoadState.SERVER_STOPPED;
@@ -99,9 +100,9 @@ public class KattonPaperPlugin extends JavaPlugin implements Listener {
         ServerMobEffectEvent.initialize(this);
         ServerMessageEvent.initialize(this);
         ItemEvent.initialize(this);
-//        ItemComponentEvent.initialize(this);
+        ItemComponentEvent.initialize(this);
         LivingUseItemEvent.initialize(this);
         ChunkAndBlockEvent.initialize(this);
-//        LootTableEvent.initialize(this);
+        LootTableEvent.initialize(this);
     }
 }

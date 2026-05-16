@@ -5,6 +5,8 @@ import org.bukkit.event.EventPriority
 import org.bukkit.event.Listener
 import org.bukkit.event.block.BlockBreakEvent
 import org.bukkit.event.block.BlockPlaceEvent
+import org.bukkit.event.entity.EntityExplodeEvent
+import org.bukkit.event.entity.ExplosionPrimeEvent
 import org.bukkit.event.world.ChunkLoadEvent
 import org.bukkit.event.world.ChunkUnloadEvent
 import org.bukkit.plugin.java.JavaPlugin
@@ -41,11 +43,11 @@ object ChunkAndBlockEvent {
     @JvmField
     val onBlockPlace = createCancellableUnit<BlockPlaceArg>()
 
-//    @JvmField
-//    val onExplosionStart = createCancellableUnit<ExplosionStartArg>()
-//
-//    @JvmField
-//    val onExplosionDetonate = createUnit<ExplosionDetonateArg>()
+    @JvmField
+    val onExplosionStart = createCancellableUnit<ExplosionStartArg>()
+
+    @JvmField
+    val onExplosionDetonate = createUnit<ExplosionDetonateArg>()
 
     @JvmStatic
     fun initialize(plugin: JavaPlugin) {
@@ -138,6 +140,35 @@ object ChunkAndBlockEvent {
                 if (arg.isCancelled()) {
                     event.isCancelled = true
                 }
+            }
+
+            @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+            fun onExplosionPrime(event: ExplosionPrimeEvent) {
+                val world = PaperNmsBridge.toNmsWorld(event.entity.world)
+                val x = event.entity.location.x
+                val y = event.entity.location.y
+                val z = event.entity.location.z
+                val explosion = PaperNmsBridge.toNmsExplosion(event.entity.world, x, y, z, event.radius, event.fire)
+                val arg = ExplosionStartArg(world, explosion)
+                onExplosionStart(arg)
+                if (arg.isCancelled()) {
+                    event.isCancelled = true
+                }
+            }
+
+            @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+            fun onEntityExplode(event: EntityExplodeEvent) {
+                val world = PaperNmsBridge.toNmsWorld(event.entity.world)
+                val x = event.location.x
+                val y = event.location.y
+                val z = event.location.z
+                val explosion = PaperNmsBridge.toNmsExplosion(event.entity.world, x, y, z, event.yield, false)
+                val affected = event.entity.world.getNearbyEntities(event.location,
+                    (event.yield * 2).toDouble(), (event.yield * 2).toDouble(), (event.yield * 2).toDouble()
+                )
+                    .mapNotNull { it as? org.bukkit.entity.LivingEntity }
+                    .map { PaperNmsBridge.toNmsEntity(it) }
+                onExplosionDetonate(ExplosionDetonateArg(world, explosion, affected))
             }
         }, plugin)
     }

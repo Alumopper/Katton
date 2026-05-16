@@ -1,21 +1,36 @@
 package top.katton.api.event
 
-import org.bukkit.plugin.java.JavaPlugin; import top.katton.util.createUnit
-import top.katton.util.createAll
-import top.katton.util.createCancellableUnit
-import top.katton.util.createFirstNotNullOfOrNull
-import top.katton.util.createReturnIfNot
-import top.katton.util.createTriState
+import org.bukkit.event.EventHandler
+import org.bukkit.event.EventPriority
+import org.bukkit.event.Listener
+import org.bukkit.event.enchantment.EnchantItemEvent
+import org.bukkit.event.enchantment.PrepareItemEnchantEvent
+import org.bukkit.plugin.java.JavaPlugin
+import top.katton.paper.PaperNmsBridge
+import top.katton.util.createUnit
 
-/** ALL PLACEHOLDERS. Paper has no enchantment/item-component event equivalents. */
-//object ItemComponentEvent {
+object ItemComponentEvent {
+
 //    @JvmField val onModifyComponent = createUnit<Any>()
-//    @JvmField val onAllowEnchanting = createUnit<Any>()
-//    @JvmField val onModifyEnchantment = createUnit<Any>()
-//    @JvmStatic
-//    fun initialize(plugin: JavaPlugin) {}
-//}
 
+    @JvmField
+    val onAllowEnchanting = createUnit<PrepareItemEnchantEvent>() // TODO: type as AllowEnchantingArg
 
+    @JvmField
+    val onModifyEnchantment = createUnit<EnchantItemEvent>() //TODO: type as ModifyEnchantmentArg
 
+    @JvmStatic
+    fun initialize(plugin: JavaPlugin) {
+        plugin.server.pluginManager.registerEvents(object : Listener {
+            @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+            fun onPrepareEnchant(event: PrepareItemEnchantEvent) {
+                onAllowEnchanting(event)
+            }
 
+            @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+            fun onEnchant(event: EnchantItemEvent) {
+                onModifyEnchantment(event)
+            }
+        }, plugin)
+    }
+}

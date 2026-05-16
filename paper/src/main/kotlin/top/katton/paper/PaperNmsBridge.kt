@@ -2,6 +2,7 @@ package top.katton.paper
 
 import net.minecraft.core.BlockPos
 import net.minecraft.core.Direction
+import net.minecraft.core.registries.Registries
 import net.minecraft.network.chat.Component
 import net.minecraft.server.MinecraftServer
 import net.minecraft.server.level.ServerLevel
@@ -22,14 +23,17 @@ import net.minecraft.world.phys.EntityHitResult
 import net.minecraft.world.phys.Vec3
 import net.minecraft.resources.Identifier
 import net.minecraft.resources.ResourceKey
-import net.minecraft.core.registries.Registries
 import net.minecraft.server.packs.resources.ResourceManager
 import net.minecraft.world.level.chunk.status.ChunkStatus
+import net.minecraft.world.level.Explosion
+import net.minecraft.world.level.ServerExplosion
+import net.minecraft.network.chat.PlayerChatMessage
+import net.minecraft.network.chat.ChatType
+import net.minecraft.commands.CommandSourceStack
 import org.bukkit.block.BlockFace
 import org.bukkit.craftbukkit.CraftChunk
 import org.bukkit.craftbukkit.CraftServer
 import org.bukkit.craftbukkit.CraftWorld
-import org.bukkit.craftbukkit.block.impl.CraftLever
 import org.bukkit.craftbukkit.entity.CraftEntity
 import org.bukkit.craftbukkit.entity.CraftExperienceOrb
 import org.bukkit.craftbukkit.entity.CraftLivingEntity
@@ -38,7 +42,6 @@ import org.bukkit.craftbukkit.inventory.CraftItemStack
 import org.bukkit.event.player.PlayerInteractEvent
 import org.bukkit.inventory.EquipmentSlot
 import top.katton.util.ReflectUtil
-import top.katton.util.create
 
 /**
  * Bridge converts Paper (Bukkit) types to NMS types.
@@ -214,6 +217,59 @@ object PaperNmsBridge {
     @JvmStatic
     fun getResourceManager(server: MinecraftServer): ResourceManager {
         return server.resources.resourceManager()
+    }
+
+    @JvmStatic
+    fun toNmsExplosion(world: org.bukkit.World, x: Double, y: Double, z: Double, radius: Float, fire: Boolean): Explosion {
+        val level = toNmsWorld(world)
+        return ServerExplosion(
+            level, null, null, null,
+            Vec3(x, y, z), radius, fire,
+            Explosion.BlockInteraction.KEEP
+        )
+    }
+
+    @JvmStatic
+    fun toNmsCommandSourceStack(player: ServerPlayer): CommandSourceStack {
+        return player.createCommandSourceStack()
+    }
+
+    @JvmStatic
+    fun toNmsCommandSourceStack(server: MinecraftServer): CommandSourceStack {
+        return server.createCommandSourceStack()
+    }
+
+    @JvmStatic
+    fun toNmsPlayerChatMessage(player: org.bukkit.entity.Player, adventureComponent: net.kyori.adventure.text.Component): PlayerChatMessage {
+        val nmsPlayer = toNmsPlayer(player)
+        val rawText = net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText().serialize(adventureComponent)
+        return PlayerChatMessage.unsigned(nmsPlayer.uuid, rawText)
+            .withUnsignedContent(io.papermc.paper.adventure.PaperAdventure.asVanilla(adventureComponent))
+    }
+
+    @JvmStatic
+    fun toNmsPlayerChatMessage(text: String): PlayerChatMessage {
+        return PlayerChatMessage.system(text)
+    }
+
+    @JvmStatic
+    fun toNmsPlayerChatMessage(component: Component): PlayerChatMessage {
+        return PlayerChatMessage.system(component.string)
+    }
+
+    @JvmStatic
+    fun adventureToNms(adventure: net.kyori.adventure.text.Component): Component {
+        return io.papermc.paper.adventure.PaperAdventure.asVanilla(adventure)
+    }
+
+    @JvmStatic
+    fun toNmsChatTypeBound(player: ServerPlayer): ChatType.Bound {
+        return ChatType.bind(ChatType.CHAT, player)
+    }
+
+    @JvmStatic
+    fun toNmsChatTypeBound(source: CommandSourceStack): ChatType.Bound {
+        return ChatType.bind(ChatType.CHAT, source)
     }
 
 }

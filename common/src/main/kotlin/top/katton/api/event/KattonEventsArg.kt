@@ -1038,6 +1038,12 @@ data class LivingUseItemStopArg(
     val duration: Int
 ): CancellableEventArg()
 
+data class PaperLivingUseItemStopArg(
+    val entity: LivingEntity,
+    val item: ItemStack,
+    val duration: Int
+)
+
 /**
  * Argument for item use finish event.
  *

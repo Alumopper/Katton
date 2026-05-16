@@ -1,5 +1,6 @@
 package top.katton.api.event
 
+import io.papermc.paper.event.player.PlayerStopUsingItemEvent
 import org.bukkit.event.EventHandler
 import org.bukkit.event.EventPriority
 import org.bukkit.event.Listener
@@ -15,9 +16,9 @@ object LivingUseItemEvent {
 
 //    @JvmField
 //    val onUseItemTick = createCancellableUnit<LivingUseItemTickArg>()
-//
-//    @JvmField
-//    val onUseItemStop = createCancellableUnit<LivingUseItemStopArg>()
+
+    @JvmField
+    val onUseItemStop = createUnit<PaperLivingUseItemStopArg>()
 
     @JvmField
     val onUseItemFinish = createUnit<LivingUseItemFinishArg>()
@@ -41,6 +42,14 @@ object LivingUseItemEvent {
                 val finishArg = LivingUseItemFinishArg(player, item, 0, item.copy())
                 onUseItemFinish(finishArg)
                 PaperNmsBridge.toBukkitItemStack(finishArg.result)?.let(event::setReplacement)
+            }
+
+            @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+            fun onStopUsingItem(event: PlayerStopUsingItemEvent) {
+                val player = PaperNmsBridge.toNmsPlayer(event.player)
+                val item = PaperNmsBridge.toNmsItemStack(event.item) ?: return
+                val arg = PaperLivingUseItemStopArg(player, item, event.ticksHeldFor)
+                onUseItemStop(arg)
             }
         }, plugin)
     }
