@@ -15,21 +15,6 @@ import java.util.List;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-/**
- * Paper implementation of the {@code /katton} command.
- * <p>
- * Subcommands:
- * <ul>
- *   <li>{@code help} — Show usage</li>
- *   <li>{@code status} — Show engine state</li>
- *   <li>{@code registry} — Show registry health snapshot</li>
- *   <li>{@code registry stale} — Show stale retained entries</li>
- *   <li>{@code reload} — Reload script packs (requires admin permission)</li>
- *   <li>{@code debug registryLogging [on|off]} — Toggle verbose registration logging</li>
- * </ul>
- * <p>
- * Note: Paper is server-only — there is no client-side script reload.
- */
 public class KattonPaperCommand implements BasicCommand {
 
     @Override
@@ -38,7 +23,7 @@ public class KattonPaperCommand implements BasicCommand {
 
         if (args.length == 0 || "help".equalsIgnoreCase(args[0])) {
             sender.sendMessage(Component.text(
-                "[Katton] /katton help | status | registry | registry stale | reload | debug registryLogging [on|off]"
+                "[Katton] /katton help | status | reload"
             ));
             return;
         }
@@ -48,17 +33,8 @@ public class KattonPaperCommand implements BasicCommand {
             case "status" -> {
                 sender.sendMessage(Component.text(
                     "[Katton] state=" + Katton.globalState +
-                    ", serverBound=" + (Katton.server != null) +
-                    ", registrationEnabled=" + Katton.registrationEnabled +
-                    ", hasClient=" + Katton.hasClient
+                    ", serverBound=" + (Katton.server != null)
                 ));
-            }
-            case "registry" -> {
-                if (args.length > 1 && "stale".equalsIgnoreCase(args[1])) {
-                    handleRegistryStale(sender);
-                } else {
-                    handleRegistry(sender);
-                }
             }
             case "reload" -> {
                 if (!sender.hasPermission("katton.admin") && !sender.isOp()) {
@@ -74,13 +50,6 @@ public class KattonPaperCommand implements BasicCommand {
                     sender.sendMessage(Component.text("[Katton] Reload started."));
                 } else {
                     sender.sendMessage(Component.text("[Katton] Failed to reload script packs."));
-                }
-            }
-            case "debug" -> {
-                if (args.length > 1 && "registryLogging".equalsIgnoreCase(args[1])) {
-                    handleDebugRegistryLogging(sender, args);
-                } else {
-                    sender.sendMessage(Component.text("[Katton] Usage: /katton debug registryLogging [on|off]"));
                 }
             }
             default -> sender.sendMessage(Component.text(
@@ -99,23 +68,6 @@ public class KattonPaperCommand implements BasicCommand {
                 .filter(s -> s.startsWith(prefix))
                 .collect(Collectors.toList());
         }
-
-        String sub = args[0].toLowerCase();
-        if ("registry".equals(sub) && args.length == 2) {
-            return Stream.of("stale")
-                .filter(s -> s.startsWith(args[1].toLowerCase()))
-                .collect(Collectors.toList());
-        }
-        if ("debug".equals(sub) && args.length == 2) {
-            return Stream.of("registryLogging")
-                .filter(s -> s.startsWith(args[1].toLowerCase()))
-                .collect(Collectors.toList());
-        }
-        if ("debug".equals(sub) && "registryLogging".equalsIgnoreCase(args[1]) && args.length == 3) {
-            return Stream.of("on", "off")
-                .filter(s -> s.startsWith(args[2].toLowerCase()))
-                .collect(Collectors.toList());
-        }
         return List.of();
     }
 
@@ -126,46 +78,6 @@ public class KattonPaperCommand implements BasicCommand {
 
     @Override
     public boolean canUse(@NonNull CommandSender sender) {
-        return true;
-    }
-
-    private void handleRegistry(CommandSender sender) {
-        var rows = KattonRegistry.INSTANCE.registryHealthSnapshot();
-        String summary = rows.stream()
-            .map(row -> row.getKey() + ": entries=" + row.getKattonEntries() +
-                ", managed=" + row.getManagedTracked() +
-                ", stale=" + row.getStaleRetained())
-            .collect(Collectors.joining(" | "));
-        sender.sendMessage(Component.text("[Katton] " + summary));
-    }
-
-    private void handleRegistryStale(CommandSender sender) {
-        var staleRows = KattonRegistry.INSTANCE.registryHealthSnapshot().stream()
-            .filter(row -> row.getStaleRetained() > 0)
-            .toList();
-        if (staleRows.isEmpty()) {
-            sender.sendMessage(Component.text("[Katton] No stale retained registry entries."));
-        } else {
-            String text = staleRows.stream()
-                .map(row -> row.getKey() + "=" + row.getStaleRetained())
-                .collect(Collectors.joining(" | "));
-            sender.sendMessage(Component.text("[Katton] Stale retained entries: " + text));
-        }
-    }
-
-    private void handleDebugRegistryLogging(CommandSender sender, String[] args) {
-        if (args.length < 3) {
-            sender.sendMessage(Component.text("[Katton] debugRegistryLogging=" + Katton.debugRegistryLogging));
-            return;
-        }
-        if ("on".equalsIgnoreCase(args[2])) {
-            Katton.debugRegistryLogging = true;
-            sender.sendMessage(Component.text("[Katton] debugRegistryLogging=true"));
-        } else if ("off".equalsIgnoreCase(args[2])) {
-            Katton.debugRegistryLogging = false;
-            sender.sendMessage(Component.text("[Katton] debugRegistryLogging=false"));
-        } else {
-            sender.sendMessage(Component.text("[Katton] Usage: /katton debug registryLogging [on|off]"));
-        }
+        return sender.isOp();
     }
 }

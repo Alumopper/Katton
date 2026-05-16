@@ -45,38 +45,38 @@ object LivingBehaviorEvent {
     @JvmField
     val onStopSleeping = createUnit<SleepingArg>()
 
-    @JvmField
-    val onAllowBed = createReturnIfNot<AllowBedArg, EventResult>(EventResult.PASS)
-
-    @JvmField
-    val onAllowNearbyMonsters = createReturnIfNot<AllowNearbyMonstersArg, EventResult>(EventResult.PASS)
+//    @JvmField
+//    val onAllowBed = createReturnIfNot<AllowBedArg, EventResult>(EventResult.PASS)
+//
+//    @JvmField
+//    val onAllowNearbyMonsters = createReturnIfNot<AllowNearbyMonstersArg, EventResult>(EventResult.PASS)
 
     @JvmField
     val onAllowResettingTime = createAll<AllowResettingTimeArg>()
 
-    @JvmField
-    val onModifySleepingDirection = create { events ->
-        { arg: ModifySleepingDirectionArg ->
-            var direction = arg.direction
-            events.forEach { direction = it.handler(arg.copy(direction = direction)) }
-            direction
-        }
-    }
+//    @JvmField
+//    val onModifySleepingDirection = create { events ->
+//        { arg: ModifySleepingDirectionArg ->
+//            var direction = arg.direction
+//            events.forEach { direction = it.handler(arg.copy(direction = direction)) }
+//            direction
+//        }
+//    }
 
     @JvmField
     val onAllowSettingSpawn = createAll<AllowSettingSpawnArg>()
 
-    @JvmField
-    val onSetBedOccupationState = createAny<SetBedOccupationStateArg>()
+//    @JvmField
+//    val onSetBedOccupationState = createAny<SetBedOccupationStateArg>()
 
-    @JvmField
-    val onModifyWakeUpPosition = create { events ->
-        { arg: ModifyWakeUpPositionArg ->
-            var wakeUpPos = arg.wakeUpPos
-            events.forEach { wakeUpPos = it.handler(arg.copy(wakeUpPos = wakeUpPos)) }
-            wakeUpPos
-        }
-    }
+//    @JvmField
+//    val onModifyWakeUpPosition = create { events ->
+//        { arg: ModifyWakeUpPositionArg ->
+//            var wakeUpPos = arg.wakeUpPos
+//            events.forEach { wakeUpPos = it.handler(arg.copy(wakeUpPos = wakeUpPos)) }
+//            wakeUpPos
+//        }
+//    }
 
     @JvmField
     val onPlayerWakeUp = createUnit<PlayerWakeUpArg>()

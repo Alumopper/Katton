@@ -51,8 +51,7 @@ import top.katton.util.CancellableEventArg
  *
  * @property server The MinecraftServer instance
  */
-@JvmInline
-value class ServerArg(val server: MinecraftServer)
+data class ServerArg(val server: MinecraftServer)
 
 /**
  * Argument for datapack contents synchronization event.

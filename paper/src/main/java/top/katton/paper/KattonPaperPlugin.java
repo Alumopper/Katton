@@ -14,18 +14,12 @@ import top.katton.engine.ScriptReloadManager;
 import top.katton.pack.ScriptPackManager;
 import top.katton.registry.KattonRegistry;
 
+import java.util.List;
+
 import static io.papermc.paper.plugin.lifecycle.event.types.LifecycleEvents.*;
 
 /**
  * Paper plugin entrypoint for Katton.
- * <p>
- * Paper is a server-only platform. This entrypoint:
- * <ul>
- *   <li>Calls {@link Katton#paperInitialize()} instead of {@link Katton#mainInitialize()}
- *       — no registry mutation to avoid inconsistency with vanilla clients.</li>
- *   <li>Does NOT initialize client features (renderers, GUI, client APIs).</li>
- *   <li>Wires Paper lifecycle events to Katton's script engine.</li>
- * </ul>
  */
 public class KattonPaperPlugin extends JavaPlugin implements Listener {
 
@@ -37,27 +31,24 @@ public class KattonPaperPlugin extends JavaPlugin implements Listener {
     @Override
     public void onEnable() {
         getLogger().info("Katton Paper enabling...");
-
-        // 1. Set game directory (plugins/.. = server root)
         Katton.setGameDirectory(getDataFolder().getParentFile().toPath());
-        // 2. Paper-specific initialization — no registry mutation
         Katton.paperInitialize();
 
-        // 3. Register commands via Paper lifecycle manager
+        //command registration
         getLifecycleManager().registerEventHandler(
             COMMANDS,
             event -> event.registrar().register(
                 "katton",
                 "Katton script management",
-                java.util.List.of("kts"),
+                List.of("kts"),
                 new KattonPaperCommand()
             )
         );
 
-        // 4. Register event listeners for server lifecycle
+        // Register event listeners for server lifecycle
         getServer().getPluginManager().registerEvents(this, this);
 
-        // 5. Initialize Paper event bridges
+        // Initialize Paper event bridges
         initEventBridges();
 
         getLogger().info("Katton Paper enabled. Use /katton reload to reload scripts.");
@@ -67,12 +58,7 @@ public class KattonPaperPlugin extends JavaPlugin implements Listener {
     public void onDisable() {
         getLogger().info("Katton Paper disabling...");
         final MinecraftServer server = Katton.server != null ? Katton.server : MinecraftServer.getServer();
-        if (Katton.server != null) {
-            ServerEvent.onServerStopping.invoke(new ServerArg(Katton.server));
-        }
-        if (server != null) {
-            ServerEvent.onServerStopped.invoke(new ServerArg(server));
-        }
+        ServerEvent.onServerStopped.invoke(new ServerArg(server));
         Katton.server = null;
         Katton.globalState = LoadState.SERVER_STOPPED;
         KattonRegistry.clearWorldRegistrations();
@@ -113,9 +99,9 @@ public class KattonPaperPlugin extends JavaPlugin implements Listener {
         ServerMobEffectEvent.initialize(this);
         ServerMessageEvent.initialize(this);
         ItemEvent.initialize(this);
-        ItemComponentEvent.initialize(this);
+//        ItemComponentEvent.initialize(this);
         LivingUseItemEvent.initialize(this);
         ChunkAndBlockEvent.initialize(this);
-        LootTableEvent.initialize(this);
+//        LootTableEvent.initialize(this);
     }
 }

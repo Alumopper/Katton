@@ -26,7 +26,7 @@ object ServerEntityCombatEvent {
         plugin.server.pluginManager.registerEvents(object : Listener {
             @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
             fun onEntityDeath(event: EntityDeathEvent) {
-                val lastDamage = event.entity.lastDamageCause as? EntityDamageEvent ?: return
+                val lastDamage = event.entity.lastDamageCause ?: return
                 val source = PaperNmsBridge.toNmsDamageSource(
                     PaperNmsBridge.toNmsServer(plugin.server),
                     lastDamage.damageSource

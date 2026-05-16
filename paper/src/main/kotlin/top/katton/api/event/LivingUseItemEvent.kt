@@ -13,11 +13,11 @@ object LivingUseItemEvent {
     @JvmField
     val onUseItemStart = createCancellableUnit<LivingUseItemStartArg>()
 
-    @JvmField
-    val onUseItemTick = createCancellableUnit<LivingUseItemTickArg>()
-
-    @JvmField
-    val onUseItemStop = createCancellableUnit<LivingUseItemStopArg>()
+//    @JvmField
+//    val onUseItemTick = createCancellableUnit<LivingUseItemTickArg>()
+//
+//    @JvmField
+//    val onUseItemStop = createCancellableUnit<LivingUseItemStopArg>()
 
     @JvmField
     val onUseItemFinish = createUnit<LivingUseItemFinishArg>()

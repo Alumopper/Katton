@@ -24,10 +24,21 @@ import net.minecraft.resources.Identifier
 import net.minecraft.resources.ResourceKey
 import net.minecraft.core.registries.Registries
 import net.minecraft.server.packs.resources.ResourceManager
+import net.minecraft.world.level.chunk.status.ChunkStatus
 import org.bukkit.block.BlockFace
-import org.bukkit.damage.DamageType
+import org.bukkit.craftbukkit.CraftChunk
+import org.bukkit.craftbukkit.CraftServer
+import org.bukkit.craftbukkit.CraftWorld
+import org.bukkit.craftbukkit.block.impl.CraftLever
+import org.bukkit.craftbukkit.entity.CraftEntity
+import org.bukkit.craftbukkit.entity.CraftExperienceOrb
+import org.bukkit.craftbukkit.entity.CraftLivingEntity
+import org.bukkit.craftbukkit.entity.CraftPlayer
+import org.bukkit.craftbukkit.inventory.CraftItemStack
 import org.bukkit.event.player.PlayerInteractEvent
 import org.bukkit.inventory.EquipmentSlot
+import top.katton.util.ReflectUtil
+import top.katton.util.create
 
 /**
  * Bridge converts Paper (Bukkit) types to NMS types.
@@ -36,19 +47,48 @@ import org.bukkit.inventory.EquipmentSlot
 object PaperNmsBridge {
 
     @JvmStatic
-    fun toNmsServer(b: org.bukkit.Server): MinecraftServer = b.javaClass.getMethod("getServer").invoke(b) as MinecraftServer
+    fun toNmsServer(b: org.bukkit.Server): MinecraftServer {
+        return if(b is CraftServer){
+            b.server
+        }else {
+            ReflectUtil.invoke(b, "getServer").getOrThrow() as MinecraftServer
+        }
+    }
+    @JvmStatic
+    fun toNmsPlayer(b: org.bukkit.entity.Player): ServerPlayer {
+        return if (b is CraftPlayer){
+            b.handle
+        } else {
+            ReflectUtil.invoke(b, "getHandle").getOrThrow() as ServerPlayer
+        }
+    }
 
     @JvmStatic
-    fun toNmsPlayer(b: org.bukkit.entity.Player): ServerPlayer = b.javaClass.getMethod("getHandle").invoke(b) as ServerPlayer
+    fun toNmsWorld(b: org.bukkit.World): ServerLevel {
+        return if (b is CraftWorld) {
+            b.handle
+        } else {
+            ReflectUtil.invoke(b, "getHandle").getOrThrow() as ServerLevel
+        }
+    }
 
     @JvmStatic
-    fun toNmsWorld(b: org.bukkit.World): ServerLevel = b.javaClass.getMethod("getHandle").invoke(b) as ServerLevel
+    fun toNmsEntity(b: org.bukkit.entity.Entity): Entity {
+        return if (b is CraftEntity) {
+            b.handle
+        }else {
+            ReflectUtil.invoke(b, "getHandle").getOrThrow() as Entity
+        }
+    }
 
     @JvmStatic
-    fun toNmsEntity(b: org.bukkit.entity.Entity): Entity = b.javaClass.getMethod("getHandle").invoke(b) as Entity
-
-    @JvmStatic
-    fun toNmsLivingEntity(b: org.bukkit.entity.LivingEntity): LivingEntity = b.javaClass.getMethod("getHandle").invoke(b) as LivingEntity
+    fun toNmsLivingEntity(b: org.bukkit.entity.LivingEntity): LivingEntity {
+        return if (b is CraftLivingEntity) {
+            b.handle as LivingEntity
+        } else {
+            ReflectUtil.invoke(b, "getHandle").getOrThrow() as LivingEntity
+        }
+    }
 
     @JvmStatic
     fun toNmsLevel(b: org.bukkit.World): ServerLevel = toNmsWorld(b)
@@ -95,19 +135,16 @@ object PaperNmsBridge {
     fun toNmsComponent(text: String): Component = Component.literal(text)
 
     @JvmStatic
-    fun toNmsExpOrb(b: org.bukkit.entity.ExperienceOrb): ExperienceOrb = b.javaClass.getMethod("getHandle").invoke(b) as ExperienceOrb
+    fun toNmsExpOrb(b: org.bukkit.entity.ExperienceOrb): ExperienceOrb {
+        return (b as? CraftExperienceOrb)?.handle ?: ReflectUtil.invoke(b, "getHandle").getOrThrow() as ExperienceOrb
+    }
 
     @JvmStatic
     fun toNmsItemStack(b: org.bukkit.inventory.ItemStack?): ItemStack? {
         if (b == null) {
             return null
         }
-
-        return runCatching {
-            val craftItemStack = Class.forName("org.bukkit.craftbukkit.inventory.CraftItemStack")
-            craftItemStack.getMethod("asNMSCopy", org.bukkit.inventory.ItemStack::class.java)
-                .invoke(null, b) as ItemStack
-        }.getOrNull()
+        return CraftItemStack.asNMSCopy(b)
     }
 
     @JvmStatic
@@ -115,18 +152,19 @@ object PaperNmsBridge {
         if (stack == null) {
             return null
         }
-
-        return runCatching {
-            val craftItemStack = Class.forName("org.bukkit.craftbukkit.inventory.CraftItemStack")
-            craftItemStack.getMethod("asBukkitCopy", ItemStack::class.java)
-                .invoke(null, stack) as org.bukkit.inventory.ItemStack
-        }.getOrNull()
+        return CraftItemStack.asBukkitCopy(stack)
     }
 
     @JvmStatic
-    fun toNmsChunk(chunk: org.bukkit.Chunk): LevelChunk? = runCatching {
-        chunk.javaClass.getMethod("getHandle").invoke(chunk) as? LevelChunk
-    }.getOrNull()
+    fun toNmsChunk(chunk: org.bukkit.Chunk): LevelChunk? {
+        return if(chunk is CraftChunk){
+            chunk.getHandle(ChunkStatus.FULL) as? LevelChunk
+        }else {
+            runCatching {
+                ReflectUtil.invoke(chunk, "getHandle").getOrThrow() as? LevelChunk
+            }.getOrNull()
+        }
+    }
 
     @JvmStatic
     fun toNmsBlockState(block: org.bukkit.block.Block): BlockState =
@@ -174,26 +212,8 @@ object PaperNmsBridge {
     }
 
     @JvmStatic
-    fun findResourceManager(server: MinecraftServer): ResourceManager? {
-        val resources = findField(server.javaClass, "resources")?.let { field ->
-            field.isAccessible = true
-            field.get(server)
-        } ?: return null
-
-        return resources.javaClass.methods
-            .firstOrNull { it.name == "resourceManager" && it.parameterCount == 0 }
-            ?.invoke(resources) as? ResourceManager
+    fun getResourceManager(server: MinecraftServer): ResourceManager {
+        return server.resources.resourceManager()
     }
 
-    @JvmStatic
-    fun anyPlaceholder(): Any = Unit
-
-    private fun findField(type: Class<*>, name: String): java.lang.reflect.Field? {
-        var current: Class<*>? = type
-        while (current != null) {
-            runCatching { current.getDeclaredField(name) }.getOrNull()?.let { return it }
-            current = current.superclass
-        }
-        return null
-    }
 }

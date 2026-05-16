@@ -15,20 +15,20 @@ import top.katton.paper.PaperNmsBridge
 import top.katton.util.createUnit
 
 object ServerEvent {
-    @JvmField
-    val onServerStarting = createUnit<ServerArg>()
+//    @JvmField
+//    val onServerStarting = createUnit<ServerArg>()
 
     @JvmField
     val onServerStarted = createUnit<ServerArg>()
 
-    @JvmField
-    val onServerStopping = createUnit<ServerArg>()
+//    @JvmField
+//    val onServerStopping = createUnit<ServerArg>()
 
     @JvmField
     val onServerStopped = createUnit<ServerArg>()
 
-    @JvmField
-    val onSyncDatapackContents = createUnit<SyncDatapackContentsArg>()
+//    @JvmField
+//    val onSyncDatapackContents = createUnit<SyncDatapackContentsArg>()
 
     @JvmField
     val onStartDatapackReload = createUnit<StartDatapackReloadArg>()
@@ -65,7 +65,7 @@ object ServerEvent {
 
     @JvmStatic
     fun initialize(plugin: JavaPlugin) {
-        plugin.server.pluginManager.registerEvents(object : Listener {
+        plugin.server.pluginManager.registerEvents(/* listener = */ object : Listener {
             @EventHandler
             fun onServerLoad(event: ServerLoadEvent) {
                 if (event.type == ServerLoadEvent.LoadType.STARTUP) {
@@ -73,15 +73,17 @@ object ServerEvent {
                 }
             }
 
+            @Suppress("unused")
             @EventHandler
             fun onReloaded(event: ServerResourcesReloadedEvent) {
                 val server = PaperNmsBridge.toNmsServer(plugin.server)
-                val resourceManager = PaperNmsBridge.findResourceManager(server) ?: return
+                val resourceManager = PaperNmsBridge.getResourceManager(server)
                 onStartDatapackReload(StartDatapackReloadArg(server, resourceManager))
                 onEndDatapackReload(EndDatapackReloadArg(server, resourceManager, true))
             }
 
             @EventHandler
+            @Suppress("unused")
             fun onServerTickStart(event: ServerTickStartEvent) {
                 val server = PaperNmsBridge.toNmsServer(plugin.server)
                 onStartServerTick(ServerTickArg(server))
@@ -89,6 +91,7 @@ object ServerEvent {
             }
 
             @EventHandler
+            @Suppress("unused")
             fun onServerTickEnd(event: ServerTickEndEvent) {
                 val server = PaperNmsBridge.toNmsServer(plugin.server)
                 server.allLevels.forEach { onEndWorldTick(WorldTickArg(it)) }
@@ -112,7 +115,7 @@ object ServerEvent {
                 onLevelSave(ServerLevelArg(PaperNmsBridge.toNmsLevel(event.world)))
                 onAfterSave(ServerSaveArg(server, false, false))
             }
-        }, plugin)
+        }, /* plugin = */ plugin)
     }
 
     @JvmInline

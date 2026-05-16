@@ -1,6 +1,5 @@
 package top.katton.api.event
 
-import net.minecraft.world.level.chunk.LevelChunk
 import org.bukkit.event.EventHandler
 import org.bukkit.event.EventPriority
 import org.bukkit.event.Listener
@@ -21,8 +20,8 @@ object ChunkAndBlockEvent {
     @JvmField
     val onChunkUnload = createUnit<ChunkUnloadArg>()
 
-    @JvmField
-    val onChunkLevelTypeChange = createUnit<ChunkStatusChangeArg>()
+//    @JvmField
+//    val onChunkLevelTypeChange = createUnit<ChunkStatusChangeArg>()
 
     @JvmField
     val onBlockEntityLoad = createUnit<BlockEntityLoadArg>()
@@ -42,11 +41,11 @@ object ChunkAndBlockEvent {
     @JvmField
     val onBlockPlace = createCancellableUnit<BlockPlaceArg>()
 
-    @JvmField
-    val onExplosionStart = createCancellableUnit<ExplosionStartArg>()
-
-    @JvmField
-    val onExplosionDetonate = createUnit<ExplosionDetonateArg>()
+//    @JvmField
+//    val onExplosionStart = createCancellableUnit<ExplosionStartArg>()
+//
+//    @JvmField
+//    val onExplosionDetonate = createUnit<ExplosionDetonateArg>()
 
     @JvmStatic
     fun initialize(plugin: JavaPlugin) {

@@ -96,7 +96,7 @@ object ServerLivingEntityEvent {
 
             @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
             fun handleAllowDeath(event: EntityDeathEvent) {
-                val lastDamage = event.entity.lastDamageCause as? EntityDamageEvent
+                val lastDamage = event.entity.lastDamageCause
                 val source = PaperNmsBridge.toNmsDamageSource(
                     PaperNmsBridge.toNmsServer(plugin.server),
                     event.damageSource

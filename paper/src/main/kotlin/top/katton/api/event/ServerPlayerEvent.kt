@@ -2,7 +2,6 @@ package top.katton.api.event
 
 import com.destroystokyo.paper.event.player.PlayerPickupExperienceEvent
 import com.destroystokyo.paper.event.player.PlayerPostRespawnEvent
-import net.minecraft.world.item.ItemStack
 import org.bukkit.event.EventHandler
 import org.bukkit.event.EventPriority
 import org.bukkit.event.Listener
@@ -13,7 +12,6 @@ import org.bukkit.event.player.PlayerQuitEvent
 import org.bukkit.plugin.java.JavaPlugin
 import top.katton.paper.PaperNmsBridge
 import top.katton.util.createCancellableUnit
-import top.katton.util.createFirstNotNullOfOrNull
 import top.katton.util.createUnit
 
 object ServerPlayerEvent {
@@ -26,8 +24,8 @@ object ServerPlayerEvent {
     @JvmField
     val onAfterPlayerRespawn = createUnit<ServerPlayerAfterRespawnArg>()
 
-    @JvmField
-    val onPlayerCopy = createUnit<ServerPlayerCopyArg>()
+//    @JvmField
+//    val onPlayerCopy = createUnit<ServerPlayerCopyArg>()
 
     @JvmField
     val onPlayerXpChange = createCancellableUnit<PlayerXpChangeArg>()
@@ -38,11 +36,11 @@ object ServerPlayerEvent {
     @JvmField
     val onPlayerPickupXp = createCancellableUnit<PlayerPickupXpArg>()
 
-    @JvmField
-    val onPickFromBlock = createFirstNotNullOfOrNull<PlayerPickFromBlockArg, ItemStack>()
-
-    @JvmField
-    val onPickFromEntity = createFirstNotNullOfOrNull<PlayerPickFromEntityArg, ItemStack>()
+//    @JvmField
+//    val onPickFromBlock = createFirstNotNullOfOrNull<PlayerPickFromBlockArg, ItemStack>()
+//
+//    @JvmField
+//    val onPickFromEntity = createFirstNotNullOfOrNull<PlayerPickFromEntityArg, ItemStack>()
 
     @JvmStatic
     fun initialize(plugin: JavaPlugin) {
