@@ -46,6 +46,6 @@ replay_*.log
 #
 token-usage-output.txt
 PLAN_registry_refactor.md
-api
+/api
 net/
 temp_classes/
