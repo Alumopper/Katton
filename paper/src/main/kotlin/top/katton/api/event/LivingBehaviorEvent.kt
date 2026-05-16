@@ -1,45 +1,157 @@
 package top.katton.api.event
 
-import net.minecraft.core.BlockPos; import net.minecraft.server.level.ServerPlayer
-import org.bukkit.event.EventHandler; import org.bukkit.event.Listener; import org.bukkit.event.entity.*; import org.bukkit.event.player.*
-import org.bukkit.plugin.java.JavaPlugin; import top.katton.paper.PaperNmsBridge; import top.katton.util.createUnit
+import io.papermc.paper.event.player.PlayerDeepSleepEvent
+import net.minecraft.world.entity.AgeableMob
+import net.minecraft.world.entity.animal.Animal
+import net.minecraft.world.entity.player.Player
+import top.katton.bridger.EventResult
+import org.bukkit.event.EventHandler
+import org.bukkit.event.EventPriority
+import org.bukkit.event.Listener
+import org.bukkit.event.entity.EntityBreedEvent
+import org.bukkit.event.entity.EntityTameEvent
+import org.bukkit.event.entity.EntityToggleGlideEvent
+import org.bukkit.event.player.PlayerBedEnterEvent
+import org.bukkit.event.player.PlayerBedLeaveEvent
+import org.bukkit.plugin.java.JavaPlugin
+import top.katton.paper.PaperNmsBridge
+import top.katton.util.create
+import top.katton.util.createAll
+import top.katton.util.createAny
+import top.katton.util.createCancellableUnit
+import top.katton.util.createFirstNotNullOfOrNull
+import top.katton.util.createReturnIfNot
+import top.katton.util.createUnit
 
 object LivingBehaviorEvent {
-    @JvmField val onElytraAllow = createUnit<Any>()
-    @JvmField val onElytraCustom = createUnit<Any>()
-    @JvmField val onAllowSleeping = createUnit<Any>()
-    @JvmField val onStartSleeping = createUnit<SleepingArg>()
-    @JvmField val onStopSleeping = createUnit<SleepingArg>()
-    @JvmField val onAllowBed = createUnit<Any>()
-    @JvmField val onAllowNearbyMonsters = createUnit<Any>()
-    @JvmField val onAllowResettingTime = createUnit<Any>()
-    @JvmField val onModifySleepingDirection = createUnit<Any>()
-    @JvmField val onAllowSettingSpawn = createUnit<Any>()
-    @JvmField val onSetBedOccupationState = createUnit<Any>()
-    @JvmField val onModifyWakeUpPosition = createUnit<Any>()
-    @JvmField val onPlayerWakeUp = createUnit<PlayerWakeUpArg>()
-    @JvmField val onAnimalTame = createUnit<Any>()
-    @JvmField val onBabySpawn = createUnit<Any>()
+    @JvmField
+    val onAnimalTame = createCancellableUnit<AnimalTameArg>()
 
+    @JvmField
+    val onBabySpawn = createCancellableUnit<BabySpawnArg>()
+
+    @JvmField
+    val onElytraAllow = createAll<ElytraAllowArg>()
+
+    @JvmField
+    val onElytraCustom = createAny<ElytraCustomArg>()
+
+    @JvmField
+    val onAllowSleeping = createFirstNotNullOfOrNull<AllowSleepingArg, Player.BedSleepingProblem?>()
+
+    @JvmField
+    val onStartSleeping = createUnit<SleepingArg>()
+
+    @JvmField
+    val onStopSleeping = createUnit<SleepingArg>()
+
+    @JvmField
+    val onAllowBed = createReturnIfNot<AllowBedArg, EventResult>(EventResult.PASS)
+
+    @JvmField
+    val onAllowNearbyMonsters = createReturnIfNot<AllowNearbyMonstersArg, EventResult>(EventResult.PASS)
+
+    @JvmField
+    val onAllowResettingTime = createAll<AllowResettingTimeArg>()
+
+    @JvmField
+    val onModifySleepingDirection = create { events ->
+        { arg: ModifySleepingDirectionArg ->
+            var direction = arg.direction
+            events.forEach { direction = it.handler(arg.copy(direction = direction)) }
+            direction
+        }
+    }
+
+    @JvmField
+    val onAllowSettingSpawn = createAll<AllowSettingSpawnArg>()
+
+    @JvmField
+    val onSetBedOccupationState = createAny<SetBedOccupationStateArg>()
+
+    @JvmField
+    val onModifyWakeUpPosition = create { events ->
+        { arg: ModifyWakeUpPositionArg ->
+            var wakeUpPos = arg.wakeUpPos
+            events.forEach { wakeUpPos = it.handler(arg.copy(wakeUpPos = wakeUpPos)) }
+            wakeUpPos
+        }
+    }
+
+    @JvmField
+    val onPlayerWakeUp = createUnit<PlayerWakeUpArg>()
+
+    @JvmStatic
     fun initialize(plugin: JavaPlugin) {
         plugin.server.pluginManager.registerEvents(object : Listener {
-            @EventHandler fun onBedEnter(e: PlayerBedEnterEvent) {
-                val p: ServerPlayer = PaperNmsBridge.toNmsPlayer(e.player)
-                val bp: BlockPos = PaperNmsBridge.toNmsBlockPos(e.bed.location)
-                onStartSleeping(SleepingArg(p, bp))
+            @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+            fun onTame(event: EntityTameEvent) {
+                val owner = event.owner as? org.bukkit.entity.Player ?: return
+                val entity = PaperNmsBridge.toNmsEntity(event.entity) as? Animal ?: return
+                val arg = AnimalTameArg(entity, PaperNmsBridge.toNmsPlayer(owner))
+                onAnimalTame(arg)
+                if (arg.isCancelled()) {
+                    event.isCancelled = true
+                }
             }
-            @EventHandler fun onBedLeave(e: PlayerBedLeaveEvent) {
-                val p: ServerPlayer = PaperNmsBridge.toNmsPlayer(e.player)
-                val bp: BlockPos = PaperNmsBridge.toNmsBlockPos(e.bed.location)
-                onStopSleeping(SleepingArg(p, bp))
-                onPlayerWakeUp(PlayerWakeUpArg(p, false, false))
+
+            @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+            fun onBreed(event: EntityBreedEvent) {
+                val child = PaperNmsBridge.toNmsEntity(event.entity) as? AgeableMob
+                val arg = BabySpawnArg(
+                    PaperNmsBridge.toNmsLivingEntity(event.mother),
+                    PaperNmsBridge.toNmsLivingEntity(event.father),
+                    child
+                )
+                onBabySpawn(arg)
+                if (arg.isCancelled()) {
+                    event.isCancelled = true
+                }
             }
-            @EventHandler fun onGlide(e: EntityToggleGlideEvent) { onElytraCustom(PaperNmsBridge.toNmsEntity(e.entity)) }
-            @EventHandler fun onSpawn(e: CreatureSpawnEvent) { if (e.spawnReason == CreatureSpawnEvent.SpawnReason.BREEDING) onBabySpawn(PaperNmsBridge.toNmsLivingEntity(e.entity)) }
+
+            @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+            fun onBedEnter(event: PlayerBedEnterEvent) {
+                val player = PaperNmsBridge.toNmsPlayer(event.player)
+                val pos = PaperNmsBridge.toNmsBlockPos(event.bed.location)
+                if (onAllowSleeping(AllowSleepingArg(player, pos)).getOrNull() != null) {
+                    event.isCancelled = true
+                    return
+                }
+
+                if (!onAllowSettingSpawn(AllowSettingSpawnArg(player, pos)).getOrElse { true }) {
+                    event.isCancelled = true
+                    return
+                }
+
+                onStartSleeping(SleepingArg(player, pos))
+            }
+
+            @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+            fun onBedLeave(event: PlayerBedLeaveEvent) {
+                val player = PaperNmsBridge.toNmsPlayer(event.player)
+                val pos = PaperNmsBridge.toNmsBlockPos(event.bed.location)
+                onStopSleeping(SleepingArg(player, pos))
+                onPlayerWakeUp(PlayerWakeUpArg(player, false, false))
+            }
+
+            @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+            fun onDeepSleep(event: PlayerDeepSleepEvent) {
+                if (!onAllowResettingTime(AllowResettingTimeArg(PaperNmsBridge.toNmsPlayer(event.player))).getOrElse { true }) {
+                    event.isCancelled = true
+                }
+            }
+
+            @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+            fun onGlide(event: EntityToggleGlideEvent) {
+                val living = event.entity as? org.bukkit.entity.LivingEntity ?: return
+                val entity = PaperNmsBridge.toNmsLivingEntity(living)
+                if (event.isGliding && !onElytraAllow(ElytraAllowArg(entity)).getOrElse { true }) {
+                    event.isCancelled = true
+                    return
+                }
+
+                onElytraCustom(ElytraCustomArg(entity, event.isGliding))
+            }
         }, plugin)
     }
 }
-
-
-
-

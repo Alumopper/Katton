@@ -1,16 +1,20 @@
 package top.katton.paper;
 
+import kotlin.Unit;
+import net.minecraft.server.MinecraftServer;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.server.ServerLoadEvent;
 import org.bukkit.plugin.java.JavaPlugin;
 import top.katton.Katton;
 import top.katton.LoadState;
+import top.katton.api.event.*;
 import top.katton.command.ScriptCommand;
 import top.katton.engine.ScriptReloadManager;
 import top.katton.pack.ScriptPackManager;
 import top.katton.registry.KattonRegistry;
-import top.katton.util.Event;
+
+import static io.papermc.paper.plugin.lifecycle.event.types.LifecycleEvents.*;
 
 /**
  * Paper plugin entrypoint for Katton.
@@ -41,7 +45,7 @@ public class KattonPaperPlugin extends JavaPlugin implements Listener {
 
         // 3. Register commands via Paper lifecycle manager
         getLifecycleManager().registerEventHandler(
-            io.papermc.paper.plugin.lifecycle.event.types.LifecycleEvents.COMMANDS,
+            COMMANDS,
             event -> event.registrar().register(
                 "katton",
                 "Katton script management",
@@ -62,9 +66,16 @@ public class KattonPaperPlugin extends JavaPlugin implements Listener {
     @Override
     public void onDisable() {
         getLogger().info("Katton Paper disabling...");
+        final MinecraftServer server = Katton.server != null ? Katton.server : MinecraftServer.getServer();
+        if (Katton.server != null) {
+            ServerEvent.onServerStopping.invoke(new ServerArg(Katton.server));
+        }
+        if (server != null) {
+            ServerEvent.onServerStopped.invoke(new ServerArg(server));
+        }
         Katton.server = null;
         Katton.globalState = LoadState.SERVER_STOPPED;
-        KattonRegistry.INSTANCE.clearWorldRegistrations();
+        KattonRegistry.clearWorldRegistrations();
         Katton.clearWorldAndServerEvents();
         ScriptPackManager.INSTANCE.clearWorldDirectory();
     }
@@ -75,14 +86,15 @@ public class KattonPaperPlugin extends JavaPlugin implements Listener {
      */
     @EventHandler
     public void onServerLoad(ServerLoadEvent event) {
-        Katton.server = getServer();
+        Katton.server = MinecraftServer.getServer();
         Katton.globalState = LoadState.SERVER_STARTED;
-        ScriptReloadManager.reloadScriptsAsync(getServer(), serverOk -> {
+        ScriptReloadManager.reloadScriptsAsync(MinecraftServer.getServer(), serverOk -> {
             if (serverOk) {
                 getServer().getScheduler().runTask(this, () ->
-                    ScriptCommand.syncCommandTree(getServer())
+                    ScriptCommand.syncCommandTree(MinecraftServer.getServer())
                 );
             }
+            return Unit.INSTANCE;
         });
     }
 
@@ -91,19 +103,19 @@ public class KattonPaperPlugin extends JavaPlugin implements Listener {
      * Mirrors Fabric's {@code eventInitialize()} pattern.
      */
     private void initEventBridges() {
-        top.katton.api.event.ServerEvent.INSTANCE.initialize(this);
-        top.katton.api.event.PlayerEvent.INSTANCE.initialize(this);
-        top.katton.api.event.ServerPlayerEvent.INSTANCE.initialize(this);
-        top.katton.api.event.LivingBehaviorEvent.INSTANCE.initialize(this);
-        top.katton.api.event.ServerLivingEntityEvent.INSTANCE.initialize(this);
-        top.katton.api.event.ServerEntityEvent.INSTANCE.initialize(this);
-        top.katton.api.event.ServerEntityCombatEvent.INSTANCE.initialize(this);
-        top.katton.api.event.ServerMobEffectEvent.INSTANCE.initialize(this);
-        top.katton.api.event.ServerMessageEvent.INSTANCE.initialize(this);
-        top.katton.api.event.ItemEvent.INSTANCE.initialize(this);
-        top.katton.api.event.ItemComponentEvent.INSTANCE.initialize(this);
-        top.katton.api.event.LivingUseItemEvent.INSTANCE.initialize(this);
-        top.katton.api.event.ChunkAndBlockEvent.INSTANCE.initialize(this);
-        top.katton.api.event.LootTableEvent.INSTANCE.initialize(this);
+        ServerEvent.initialize(this);
+        PlayerEvent.initialize(this);
+        ServerPlayerEvent.initialize(this);
+        LivingBehaviorEvent.initialize(this);
+        ServerLivingEntityEvent.initialize(this);
+        ServerEntityEvent.initialize(this);
+        ServerEntityCombatEvent.initialize(this);
+        ServerMobEffectEvent.initialize(this);
+        ServerMessageEvent.initialize(this);
+        ItemEvent.initialize(this);
+        ItemComponentEvent.initialize(this);
+        LivingUseItemEvent.initialize(this);
+        ChunkAndBlockEvent.initialize(this);
+        LootTableEvent.initialize(this);
     }
 }

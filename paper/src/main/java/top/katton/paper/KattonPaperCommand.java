@@ -4,6 +4,7 @@ import io.papermc.paper.command.brigadier.BasicCommand;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
 import net.kyori.adventure.text.Component;
 import org.bukkit.command.CommandSender;
+import org.jspecify.annotations.NonNull;
 import top.katton.Katton;
 import top.katton.command.ScriptCommand;
 import top.katton.registry.KattonRegistry;
@@ -12,6 +13,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * Paper implementation of the {@code /katton} command.
@@ -88,7 +90,7 @@ public class KattonPaperCommand implements BasicCommand {
     }
 
     @Override
-    public Collection<String> suggest(CommandSourceStack source, String[] args) {
+    public @NonNull Collection<String> suggest(@NonNull CommandSourceStack source, String[] args) {
         if (args.length <= 1) {
             List<String> base = new ArrayList<>(List.of("help", "status", "registry", "reload", "debug"));
             // Filter by typed prefix
@@ -100,17 +102,17 @@ public class KattonPaperCommand implements BasicCommand {
 
         String sub = args[0].toLowerCase();
         if ("registry".equals(sub) && args.length == 2) {
-            return List.of("stale").stream()
+            return Stream.of("stale")
                 .filter(s -> s.startsWith(args[1].toLowerCase()))
                 .collect(Collectors.toList());
         }
         if ("debug".equals(sub) && args.length == 2) {
-            return List.of("registryLogging").stream()
+            return Stream.of("registryLogging")
                 .filter(s -> s.startsWith(args[1].toLowerCase()))
                 .collect(Collectors.toList());
         }
         if ("debug".equals(sub) && "registryLogging".equalsIgnoreCase(args[1]) && args.length == 3) {
-            return List.of("on", "off").stream()
+            return Stream.of("on", "off")
                 .filter(s -> s.startsWith(args[2].toLowerCase()))
                 .collect(Collectors.toList());
         }
@@ -123,7 +125,7 @@ public class KattonPaperCommand implements BasicCommand {
     }
 
     @Override
-    public boolean canUse(CommandSender sender) {
+    public boolean canUse(@NonNull CommandSender sender) {
         return true;
     }
 
@@ -140,7 +142,7 @@ public class KattonPaperCommand implements BasicCommand {
     private void handleRegistryStale(CommandSender sender) {
         var staleRows = KattonRegistry.INSTANCE.registryHealthSnapshot().stream()
             .filter(row -> row.getStaleRetained() > 0)
-            .collect(Collectors.toList());
+            .toList();
         if (staleRows.isEmpty()) {
             sender.sendMessage(Component.text("[Katton] No stale retained registry entries."));
         } else {

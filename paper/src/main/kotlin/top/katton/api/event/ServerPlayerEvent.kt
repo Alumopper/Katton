@@ -1,39 +1,97 @@
 package top.katton.api.event
 
-import net.minecraft.server.level.ServerPlayer
-import org.bukkit.event.EventHandler; import org.bukkit.event.Listener; import org.bukkit.event.player.*
-import org.bukkit.plugin.java.JavaPlugin; import top.katton.paper.PaperNmsBridge; import top.katton.util.createUnit; import top.katton.util.createCancellableUnit
+import com.destroystokyo.paper.event.player.PlayerPickupExperienceEvent
+import com.destroystokyo.paper.event.player.PlayerPostRespawnEvent
+import net.minecraft.world.item.ItemStack
+import org.bukkit.event.EventHandler
+import org.bukkit.event.EventPriority
+import org.bukkit.event.Listener
+import org.bukkit.event.player.PlayerExpChangeEvent
+import org.bukkit.event.player.PlayerJoinEvent
+import org.bukkit.event.player.PlayerLevelChangeEvent
+import org.bukkit.event.player.PlayerQuitEvent
+import org.bukkit.plugin.java.JavaPlugin
+import top.katton.paper.PaperNmsBridge
+import top.katton.util.createCancellableUnit
+import top.katton.util.createFirstNotNullOfOrNull
+import top.katton.util.createUnit
 
 object ServerPlayerEvent {
-    @JvmField val onPlayerJoin = createUnit<PlayerArg>()
-    @JvmField val onPlayerLeave = createUnit<PlayerArg>()
-    @JvmField val onAfterPlayerRespawn = createUnit<Any>()
-    @JvmField val onPlayerCopy = createUnit<Any>()
-    @JvmField val onPlayerXpChange = createCancellableUnit<PlayerXpChangeArg>()
-    @JvmField val onPlayerXpLevelChange = createCancellableUnit<PlayerXpLevelChangeArg>()
-    @JvmField val onPlayerPickupXp = createUnit<Any>()
-    @JvmField val onPickFromBlock = createUnit<Any>()
-    @JvmField val onPickFromEntity = createUnit<Any>()
+    @JvmField
+    val onPlayerJoin = createUnit<PlayerArg>()
 
+    @JvmField
+    val onPlayerLeave = createUnit<PlayerArg>()
+
+    @JvmField
+    val onAfterPlayerRespawn = createUnit<ServerPlayerAfterRespawnArg>()
+
+    @JvmField
+    val onPlayerCopy = createUnit<ServerPlayerCopyArg>()
+
+    @JvmField
+    val onPlayerXpChange = createCancellableUnit<PlayerXpChangeArg>()
+
+    @JvmField
+    val onPlayerXpLevelChange = createCancellableUnit<PlayerXpLevelChangeArg>()
+
+    @JvmField
+    val onPlayerPickupXp = createCancellableUnit<PlayerPickupXpArg>()
+
+    @JvmField
+    val onPickFromBlock = createFirstNotNullOfOrNull<PlayerPickFromBlockArg, ItemStack>()
+
+    @JvmField
+    val onPickFromEntity = createFirstNotNullOfOrNull<PlayerPickFromEntityArg, ItemStack>()
+
+    @JvmStatic
     fun initialize(plugin: JavaPlugin) {
         plugin.server.pluginManager.registerEvents(object : Listener {
-            @EventHandler fun onJoin(e: PlayerJoinEvent) {
-                val p: ServerPlayer = PaperNmsBridge.toNmsPlayer(e.player); onPlayerJoin(PlayerArg(p))
+            @EventHandler
+            fun onJoin(event: PlayerJoinEvent) {
+                onPlayerJoin(PlayerArg(PaperNmsBridge.toNmsPlayer(event.player)))
             }
-            @EventHandler fun onQuit(e: PlayerQuitEvent) {
-                val p: ServerPlayer = PaperNmsBridge.toNmsPlayer(e.player); onPlayerLeave(PlayerArg(p))
+
+            @EventHandler
+            fun onQuit(event: PlayerQuitEvent) {
+                onPlayerLeave(PlayerArg(PaperNmsBridge.toNmsPlayer(event.player)))
             }
-            @EventHandler fun onRespawn(e: PlayerRespawnEvent) { onAfterPlayerRespawn(PaperNmsBridge.toNmsPlayer(e.player)) }
-            @EventHandler fun onExpChange(e: PlayerExpChangeEvent) {
-                val p: ServerPlayer = PaperNmsBridge.toNmsPlayer(e.player); onPlayerXpChange(PlayerXpChangeArg(p, e.amount))
+
+            @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+            fun onRespawn(event: PlayerPostRespawnEvent) {
+                val player = PaperNmsBridge.toNmsPlayer(event.player)
+                onAfterPlayerRespawn(ServerPlayerAfterRespawnArg(player, player, false))
             }
-            @EventHandler fun onLevelChange(e: PlayerLevelChangeEvent) {
-                val p: ServerPlayer = PaperNmsBridge.toNmsPlayer(e.player); onPlayerXpLevelChange(PlayerXpLevelChangeArg(p, e.newLevel - e.oldLevel))
+
+            @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+            fun onExpChange(event: PlayerExpChangeEvent) {
+                val arg = PlayerXpChangeArg(PaperNmsBridge.toNmsPlayer(event.player), event.amount)
+                onPlayerXpChange(arg)
+                if (arg.isCancelled()) {
+                    event.amount = 0
+                }
+            }
+
+            @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+            fun onLevelChange(event: PlayerLevelChangeEvent) {
+                val arg = PlayerXpLevelChangeArg(
+                    PaperNmsBridge.toNmsPlayer(event.player),
+                    event.newLevel - event.oldLevel
+                )
+                onPlayerXpLevelChange(arg)
+            }
+
+            @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+            fun onPickupXp(event: PlayerPickupExperienceEvent) {
+                val arg = PlayerPickupXpArg(
+                    PaperNmsBridge.toNmsPlayer(event.player),
+                    PaperNmsBridge.toNmsExpOrb(event.experienceOrb)
+                )
+                onPlayerPickupXp(arg)
+                if (arg.isCancelled()) {
+                    event.isCancelled = true
+                }
             }
         }, plugin)
     }
 }
-
-
-
-

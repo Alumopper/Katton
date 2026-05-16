@@ -1,43 +1,145 @@
 package top.katton.api.event
 
-import org.bukkit.event.EventHandler; import org.bukkit.event.Listener; import org.bukkit.event.block.*; import org.bukkit.event.entity.*
-import org.bukkit.event.world.ChunkLoadEvent; import org.bukkit.plugin.java.JavaPlugin; import top.katton.paper.PaperNmsBridge; import top.katton.util.createUnit
+import net.minecraft.world.level.chunk.LevelChunk
+import org.bukkit.event.EventHandler
+import org.bukkit.event.EventPriority
+import org.bukkit.event.Listener
+import org.bukkit.event.block.BlockBreakEvent
+import org.bukkit.event.block.BlockPlaceEvent
+import org.bukkit.event.world.ChunkLoadEvent
+import org.bukkit.event.world.ChunkUnloadEvent
+import org.bukkit.plugin.java.JavaPlugin
+import top.katton.paper.PaperNmsBridge
 import top.katton.util.createAll
 import top.katton.util.createCancellableUnit
-import top.katton.util.createFirstNotNullOfOrNull
-import top.katton.util.createReturnIfNot
-import top.katton.util.createTriState
+import top.katton.util.createUnit
 
 object ChunkAndBlockEvent {
-    @JvmField val onChunkLoad = createUnit<Any>()
-    @JvmField val onChunkUnload = createUnit<Any>()
-    @JvmField val onChunkLevelTypeChange = createUnit<Any>()
-    @JvmField val onBlockEntityLoad = createUnit<Any>()
-    @JvmField val onBlockEntityUnload = createUnit<Any>()
-    @JvmField val onBeforeBlockBreak = createUnit<Any>()
-    @JvmField val onAfterBlockBreak = createUnit<Any>()
-    @JvmField val onCanceledBlockBreak = createUnit<Any>()
-    @JvmField val onBlockPlace = createUnit<Any>()
-    @JvmField val onExplosionStart = createUnit<Any>()
-    @JvmField val onExplosionDetonate = createUnit<Any>()
+    @JvmField
+    val onChunkLoad = createUnit<ChunkLoadArg>()
 
+    @JvmField
+    val onChunkUnload = createUnit<ChunkUnloadArg>()
+
+    @JvmField
+    val onChunkLevelTypeChange = createUnit<ChunkStatusChangeArg>()
+
+    @JvmField
+    val onBlockEntityLoad = createUnit<BlockEntityLoadArg>()
+
+    @JvmField
+    val onBlockEntityUnload = createUnit<BlockEntityLoadArg>()
+
+    @JvmField
+    val onBeforeBlockBreak = createAll<BlockBreakArg>()
+
+    @JvmField
+    val onAfterBlockBreak = createUnit<BlockBreakArg>()
+
+    @JvmField
+    val onCanceledBlockBreak = createUnit<BlockBreakArg>()
+
+    @JvmField
+    val onBlockPlace = createCancellableUnit<BlockPlaceArg>()
+
+    @JvmField
+    val onExplosionStart = createCancellableUnit<ExplosionStartArg>()
+
+    @JvmField
+    val onExplosionDetonate = createUnit<ExplosionDetonateArg>()
+
+    @JvmStatic
     fun initialize(plugin: JavaPlugin) {
         plugin.server.pluginManager.registerEvents(object : Listener {
-            @EventHandler fun onBreak(e: BlockBreakEvent) {
-                onAfterBlockBreak(PaperNmsBridge.toNmsPlayer(e.player))
+            @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+            fun onChunkLoad(event: ChunkLoadEvent) {
+                val level = PaperNmsBridge.toNmsLevel(event.world)
+                val chunk = PaperNmsBridge.toNmsChunk(event.chunk) ?: return
+                onChunkLoad(ChunkLoadArg(level, chunk, event.isNewChunk))
+                chunk.blockEntities.values.forEach { blockEntity ->
+                    onBlockEntityLoad(BlockEntityLoadArg(blockEntity, level))
+                }
             }
-            @EventHandler fun onPlace(e: BlockPlaceEvent) {
-                onBlockPlace(PaperNmsBridge.toNmsPlayer(e.player))
+
+            @EventHandler(priority = EventPriority.MONITOR)
+            fun onChunkUnload(event: ChunkUnloadEvent) {
+                val level = PaperNmsBridge.toNmsLevel(event.world)
+                val chunk = PaperNmsBridge.toNmsChunk(event.chunk) ?: return
+                chunk.blockEntities.values.forEach { blockEntity ->
+                    onBlockEntityUnload(BlockEntityLoadArg(blockEntity, level))
+                }
+                onChunkUnload(ChunkUnloadArg(level, chunk))
             }
-            @EventHandler fun onChunkLoad(e: ChunkLoadEvent) {
-                onChunkLoad(PaperNmsBridge.toNmsLevel(e.world))
+
+            @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+            fun onBreak(event: BlockBreakEvent) {
+                val world = PaperNmsBridge.toNmsLevel(event.block.world)
+                val player = PaperNmsBridge.toNmsPlayer(event.player)
+                val pos = PaperNmsBridge.toNmsBlockPos(event.block.location)
+                val arg = BlockBreakArg(
+                    world,
+                    player,
+                    pos,
+                    world.getBlockState(pos),
+                    world.getBlockEntity(pos)
+                )
+                if (!onBeforeBlockBreak(arg).getOrElse { true }) {
+                    event.isCancelled = true
+                }
             }
-            @EventHandler fun onExplosionPrime(e: ExplosionPrimeEvent) { onExplosionStart(e.entity) }
-            @EventHandler fun onExplosion(e: EntityExplodeEvent) { onExplosionDetonate(e.entity) }
+
+            @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+            fun onBreakAfter(event: BlockBreakEvent) {
+                val world = PaperNmsBridge.toNmsLevel(event.block.world)
+                val player = PaperNmsBridge.toNmsPlayer(event.player)
+                val pos = PaperNmsBridge.toNmsBlockPos(event.block.location)
+                onAfterBlockBreak(
+                    BlockBreakArg(
+                        world,
+                        player,
+                        pos,
+                        world.getBlockState(pos),
+                        world.getBlockEntity(pos)
+                    )
+                )
+            }
+
+            @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = false)
+            fun onBreakCancelled(event: BlockBreakEvent) {
+                if (!event.isCancelled) {
+                    return
+                }
+
+                val world = PaperNmsBridge.toNmsLevel(event.block.world)
+                val player = PaperNmsBridge.toNmsPlayer(event.player)
+                val pos = PaperNmsBridge.toNmsBlockPos(event.block.location)
+                onCanceledBlockBreak(
+                    BlockBreakArg(
+                        world,
+                        player,
+                        pos,
+                        world.getBlockState(pos),
+                        world.getBlockEntity(pos)
+                    )
+                )
+            }
+
+            @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+            fun onPlace(event: BlockPlaceEvent) {
+                val world = PaperNmsBridge.toNmsLevel(event.block.world)
+                val pos = PaperNmsBridge.toNmsBlockPos(event.block.location)
+                val arg = BlockPlaceArg(
+                    world,
+                    PaperNmsBridge.toNmsPlayer(event.player),
+                    pos,
+                    world.getBlockState(pos),
+                    world.getBlockEntity(pos)
+                )
+                onBlockPlace(arg)
+                if (arg.isCancelled()) {
+                    event.isCancelled = true
+                }
+            }
         }, plugin)
     }
 }
-
-
-
-
