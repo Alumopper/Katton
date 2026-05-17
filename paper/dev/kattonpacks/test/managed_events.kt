@@ -32,7 +32,7 @@ fun main() {
 
     ServerPlayerEvent.onPlayerLeave += { arg ->
         Katton.server?.sendSystemMessage(
-            Component.literal("§7${arg.player.name.string} left the server.")
+            Component.literal("${arg.player.name.string} left the server.")
         )
     }
 
@@ -79,7 +79,7 @@ fun main() {
     // ─── 7. Katton 消息事件 ───
     ServerMessageEvent.onAllowChatMessage += { arg ->
         val playerName = arg.sender.name.string
-        if (playerName == "Notch") {
+        if (playerName == "Alumopper") {
             arg.sender.sendSystemMessage(
                 Component.literal("§6Welcome back, Notch!")
             )
@@ -107,7 +107,7 @@ fun main() {
 
     ServerLivingEntityEvent.onAfterDeath += { arg ->
         arg.entity.level().server?.sendSystemMessage(
-            Component.literal("§7${arg.entity.name.string} has died.")
+            Component.literal("${arg.entity.name.string} has died.")
         )
     }
 

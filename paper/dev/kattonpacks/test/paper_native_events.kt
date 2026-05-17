@@ -15,7 +15,7 @@ fun main() {
     // ─── Managed Event: 爆炸监听 ───
     registerEvent<BlockExplodeEvent>(priority = 4) { event ->
         event.blockList().forEach { block ->
-            block.world.createExplosion(block.location, 0f, false)
+            println(block.toString())
         }
     }
 }

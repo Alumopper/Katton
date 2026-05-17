@@ -131,12 +131,12 @@ object ServerPlayerEvent {
 
             @EventHandler(priority = EventPriority.MONITOR)
             fun onPlayerJump(event: PlayerJumpEvent) {
-                onPlayerJump(event)
+                this@ServerPlayerEvent.onPlayerJump(event)
             }
 
             @EventHandler(priority = EventPriority.MONITOR)
             fun onLaunchProjectile(event: PlayerLaunchProjectileEvent) {
-                onLaunchProjectile(event)
+                this@ServerPlayerEvent.onLaunchProjectile(event)
             }
         }, plugin)
     }
