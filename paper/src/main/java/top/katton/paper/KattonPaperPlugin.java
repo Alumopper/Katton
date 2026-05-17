@@ -33,6 +33,45 @@ public class KattonPaperPlugin extends JavaPlugin implements Listener {
     @Override
     public void onEnable() {
         getLogger().info("Katton Paper enabling...");
+
+        // Register the plugin jar as a script compilation classpath entry.
+        // On Paper, the plugin classloader may not expose jar URLs via URLClassLoader,
+        // and protection domain code sources may not be set. This ensures the shadow jar
+        // (containing Kotlin stdlib, Katton API, and scripting runtime) is always available.
+        java.io.File jarFile = getFile();
+        if (jarFile == null || !jarFile.isFile()) {
+            try {
+                var codeSource = getClass().getProtectionDomain().getCodeSource();
+                if (codeSource != null && codeSource.getLocation() != null) {
+                    jarFile = new java.io.File(codeSource.getLocation().toURI());
+                }
+            } catch (Exception ignored) {
+            }
+        }
+        if (jarFile == null || !jarFile.isFile()) {
+            try {
+                var classUrl = getClass().getClassLoader()
+                    .getResource("top/katton/paper/KattonPaperPlugin.class");
+                if (classUrl != null && "jar".equals(classUrl.getProtocol())) {
+                    var path = classUrl.getPath();
+                    var bang = path.indexOf('!');
+                    if (bang >= 0) {
+                        path = path.substring(0, bang);
+                    }
+                    if (path.startsWith("file:")) {
+                        jarFile = new java.io.File(path.substring(5));
+                    }
+                }
+            } catch (Exception ignored) {
+            }
+        }
+        if (jarFile != null && jarFile.isFile()) {
+            ScriptEngine.addHostClasspathJar(jarFile);
+            getLogger().info("Registered plugin jar for script compilation: " + jarFile);
+        } else {
+            getLogger().warning("Could not locate plugin jar for script compilation classpath");
+        }
+
         Katton.setGameDirectory(getDataFolder().getParentFile().toPath());
         Katton.paperInitialize();
 

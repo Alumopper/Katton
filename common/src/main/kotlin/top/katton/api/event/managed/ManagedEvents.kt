@@ -38,6 +38,7 @@ interface ManagedListenerProvider {
  * Platform sets this during initialization (e.g., PaperManagedEvents.initialize()).
  * Must be set before any script calls [registerEvent].
  */
+@Volatile
 @JvmField
 var provider: ManagedListenerProvider? = null
 

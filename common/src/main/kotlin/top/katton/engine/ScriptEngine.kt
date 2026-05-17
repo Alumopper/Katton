@@ -75,7 +75,16 @@ object ScriptEngine {
 
     private val compiler = JvmScriptCompiler()
 
+    private val externalClasspathJars = mutableListOf<File>()
+
     private val hostClasspath: List<File> by lazy(::resolveHostClasspath)
+
+    @JvmStatic
+    fun addHostClasspathJar(file: File) {
+        if (file.exists() && file.isFile) {
+            externalClasspathJars.add(file.absoluteFile)
+        }
+    }
 
     @Volatile
     private var cacheDirectory: Path? = null
@@ -83,10 +92,12 @@ object ScriptEngine {
     private val sourceCompileCache = ConcurrentHashMap<String, CompiledScriptArtifact>()
     private val jarLoadCache = ConcurrentHashMap<String, Optional<CompiledScriptArtifact>>()
 
-    private val baseConfig = ScriptCompilationConfiguration {
-        jvm {
-            dependenciesFromCurrentContext(wholeClasspath = true)
-            updateClasspath(hostClasspath)
+    private val baseConfig by lazy {
+        ScriptCompilationConfiguration {
+            jvm {
+                dependenciesFromCurrentContext(wholeClasspath = true)
+                updateClasspath(hostClasspath)
+            }
         }
     }
 
@@ -405,6 +416,24 @@ object ScriptEngine {
         label: String
     ): ResultWithDiagnostics<EvaluationResult> {
         val script = artifact.compiledScript
+
+        val pluginLoader = ScriptEngine::class.java.classLoader
+        val savedCcl = Thread.currentThread().contextClassLoader
+        Thread.currentThread().contextClassLoader = pluginLoader
+        try {
+            return executeCombinedWithClassLoader(script, artifact, environment, scope, label)
+        } finally {
+            Thread.currentThread().contextClassLoader = savedCcl
+        }
+    }
+
+    private suspend fun executeCombinedWithClassLoader(
+        script: CompiledScript,
+        artifact: CompiledScriptArtifact,
+        environment: ScriptEnvironment,
+        scope: ScriptPackScope,
+        label: String
+    ): ResultWithDiagnostics<EvaluationResult> {
         val rootClass = when (val res = script.getClass(evaluationConfig)) {
             is ResultWithDiagnostics.Success -> res.value
             is ResultWithDiagnostics.Failure -> return res
@@ -519,7 +548,16 @@ object ScriptEngine {
         }
 
         fun addClassSource(clazz: Class<*>) {
-            addUrl(clazz.protectionDomain?.codeSource?.location)
+            val codeUrl = clazz.protectionDomain?.codeSource?.location
+            if (codeUrl != null) {
+                addUrl(codeUrl)
+                return
+            }
+            val resourcePath = "/${clazz.name.replace('.', '/')}.class"
+            val resourceUrl = runCatching { clazz.getResource(resourcePath) }.getOrNull()
+            if (resourceUrl != null) {
+                addUrl(resourceUrl)
+            }
         }
 
         fun addClassLoader(classLoader: ClassLoader?) {
@@ -569,6 +607,8 @@ object ScriptEngine {
                 .getOrNull()
                 ?.let(::addClassSource)
         }
+
+        externalClasspathJars.forEach(::addFile)
 
         return files.toList().also {
             LOGGER.info("Resolved {} host classpath entries for script compilation", it.size)
