@@ -20,6 +20,7 @@ import top.katton.api.event.ServerLivingEntityEvent;
 import top.katton.api.event.ServerMessageEvent;
 import top.katton.api.event.ServerMobEffectEvent;
 import top.katton.api.event.ServerPlayerEvent;
+import top.katton.api.event.managed.NeoForgeManagedEvents;
 import top.katton.command.ScriptCommand;
 import top.katton.network.ServerNetworking;
 import top.katton.network.ServerNetworkingNeoForge;
@@ -55,6 +56,7 @@ public class KattonNeoForge {
         ServerNetworking.setPlaySender(PacketDistributor::sendToPlayer);
         Katton.setGameDirectory(FMLPaths.GAMEDIR.get());
         Katton.mainInitialize();
+        NeoForgeManagedEvents.initialize();
 
         registerGameEventBridges();
 

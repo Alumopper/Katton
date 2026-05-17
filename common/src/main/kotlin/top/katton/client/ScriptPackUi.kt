@@ -70,7 +70,7 @@ private class ScriptPackManagerScreen(
     }
 
     override fun onClose() {
-        minecraft?.setScreen(parent)
+        minecraft.setScreen(parent)
     }
 
     override fun isPauseScreen(): Boolean = false
@@ -206,7 +206,7 @@ private class ScriptPackManagerScreen(
         ScriptPackManager.refreshGlobalPacks()
         ScriptPackManager.refreshWorldPacks()
 
-        val inWorld = minecraft?.level != null
+        val inWorld = minecraft.level != null
         val local = ScriptPackManager.listLocalPacksForGui(lockGlobalInWorld = inWorld)
         val remote = ServerPackCacheManager.listPacksForGui()
         packs = local + remote
@@ -245,7 +245,7 @@ private class ScriptPackManagerScreen(
     }
 
     private fun triggerReload() {
-        val mc = minecraft ?: return
+        val mc = minecraft
         if (reloadQueued || ScriptReloadManager.isClientReloadRunning()) {
             return
         }
@@ -264,7 +264,7 @@ private class ScriptPackManagerScreen(
                         Component.literal("[Katton] Reload failed. Check logs for details.")
                     }
                     mc.player?.sendSystemMessage(message)
-                    mc.gui?.setOverlayMessage(message, false)
+                    mc.gui.setOverlayMessage(message, false)
                     reloadQueued = false
                     refreshData()
                     updateButtons()

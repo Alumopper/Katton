@@ -7,6 +7,7 @@ import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerConfigurationNetworking;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import top.katton.api.event.*;
+import top.katton.api.event.managed.FabricManagedEvents;
 import top.katton.command.ScriptCommand;
 import top.katton.engine.ScriptReloadManager;
 import top.katton.network.Networking;
@@ -26,6 +27,7 @@ public class KattonFabric implements ModInitializer {
         setGameDirectory(FabricLoader.getInstance().getGameDir());
         mainInitialize();
         eventInitialize();
+        FabricManagedEvents.initialize();
 
         // Install Fabric-specific attribute registration hooks
         EntityAttributeHooks.setGlobalRegistrar(FabricEntityAttributeHooks::registerAttributes);

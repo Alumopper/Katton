@@ -1,6 +1,7 @@
 package top.katton;
 
 import net.minecraft.server.MinecraftServer;
+import top.katton.api.event.managed.ManagedEventsKt;
 import top.katton.pack.ScriptPackManager;
 import top.katton.pack.ScriptPackScope;
 import top.katton.engine.ScriptEngine;
@@ -88,5 +89,7 @@ public class Katton {
     public static void clearWorldAndServerEvents() {
         Event.clearHandlersByScope(ScriptPackScope.WORLD);
         Event.clearHandlersByScope(ScriptPackScope.SERVER_CACHE);
+        ManagedEventsKt.clearManagedByScope(ScriptPackScope.WORLD);
+        ManagedEventsKt.clearManagedByScope(ScriptPackScope.SERVER_CACHE);
     }
 }

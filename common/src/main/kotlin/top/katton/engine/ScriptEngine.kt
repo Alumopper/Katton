@@ -1,6 +1,7 @@
 package top.katton.engine
 
 import kotlinx.coroutines.runBlocking
+import org.jetbrains.kotlin.config.JvmTarget
 import org.jetbrains.kotlin.scripting.compiler.plugin.impl.KJvmCompiledModuleInMemoryImpl
 import org.objectweb.asm.*
 import top.katton.api.LOGGER
@@ -13,9 +14,13 @@ import top.katton.util.ScriptExecutionContext
 import java.io.File
 import java.lang.invoke.MethodHandles
 import java.lang.invoke.MethodType
+import java.lang.management.ManagementFactory
+import java.net.URL
+import java.net.URLClassLoader
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.Paths
 import java.nio.file.StandardOpenOption
 import java.security.MessageDigest
 import java.util.*
@@ -33,6 +38,7 @@ import kotlin.script.experimental.host.toScriptSource
 import kotlin.script.experimental.jvm.dependenciesFromCurrentContext
 import kotlin.script.experimental.jvm.impl.KJvmCompiledScript
 import kotlin.script.experimental.jvm.jvm
+import kotlin.script.experimental.jvm.jvmTarget
 import kotlin.script.experimental.jvm.updateClasspath
 import kotlin.script.experimental.jvmhost.JvmScriptCompiler
 import kotlin.script.experimental.jvmhost.loadScriptFromJar
@@ -69,6 +75,8 @@ object ScriptEngine {
 
     private val compiler = JvmScriptCompiler()
 
+    private val hostClasspath: List<File> by lazy(::resolveHostClasspath)
+
     @Volatile
     private var cacheDirectory: Path? = null
 
@@ -78,6 +86,7 @@ object ScriptEngine {
     private val baseConfig = ScriptCompilationConfiguration {
         jvm {
             dependenciesFromCurrentContext(wholeClasspath = true)
+            updateClasspath(hostClasspath)
         }
     }
 
@@ -480,11 +489,89 @@ object ScriptEngine {
         return ScriptCompilationConfiguration(baseConfig) {
             importScripts(orderedScriptPaths.map { File(it).toScriptSource() })
             jvm {
+                jvmTarget("25")
                 dependenciesFromCurrentContext(wholeClasspath = true)
+                updateClasspath(hostClasspath)
                 if (classpathJars.isNotEmpty()) {
                     updateClasspath(classpathJars.map(Path::toFile))
                 }
             }
+        }
+    }
+
+    private fun resolveHostClasspath(): List<File> {
+        val files = LinkedHashSet<File>()
+
+        fun addFile(file: File?) {
+            if (file == null || !file.exists()) return
+            files += runCatching { file.canonicalFile }.getOrElse { file.absoluteFile }
+        }
+
+        fun addUrl(url: URL?) {
+            if (url == null) return
+            when (url.protocol) {
+                "file" -> runCatching { addFile(Paths.get(url.toURI()).toFile()) }
+                "jar" -> {
+                    val spec = url.file.substringBefore("!/")
+                    runCatching { addUrl(URL(spec)) }
+                }
+            }
+        }
+
+        fun addClassSource(clazz: Class<*>) {
+            addUrl(clazz.protectionDomain?.codeSource?.location)
+        }
+
+        fun addClassLoader(classLoader: ClassLoader?) {
+            val seen = Collections.newSetFromMap(IdentityHashMap<ClassLoader, Boolean>())
+            var current = classLoader
+            while (current != null && seen.add(current)) {
+                if (current is URLClassLoader) {
+                    current.urLs.forEach(::addUrl)
+                }
+                current = current.parent
+            }
+        }
+
+        ManagementFactory.getRuntimeMXBean().classPath
+            .split(File.pathSeparatorChar)
+            .asSequence()
+            .filter { it.isNotBlank() }
+            .map(::File)
+            .forEach(::addFile)
+
+        val contextLoader = Thread.currentThread().contextClassLoader
+        val scriptEngineLoader = ScriptEngine::class.java.classLoader
+        addClassLoader(contextLoader)
+        addClassLoader(scriptEngineLoader)
+
+        listOf(
+            ScriptEngine::class.java,
+            KattonRegistry::class.java,
+            Unit::class.java,
+            Suppress::class.java,
+            JvmScriptCompiler::class.java,
+            CompiledScript::class.java
+        ).forEach(::addClassSource)
+
+        val preferredLoader = contextLoader ?: scriptEngineLoader
+        listOf(
+            "top.katton.Katton",
+            "top.katton.paper.KattonPaperPlugin",
+            "kotlin.collections.CollectionsKt",
+            "org.jetbrains.kotlin.cli.jvm.K2JVMCompiler",
+            "org.bukkit.Bukkit",
+            "org.bukkit.event.Event",
+            "net.minecraft.server.MinecraftServer"
+        ).forEach { className ->
+            runCatching { Class.forName(className, false, preferredLoader) }
+                .recoverCatching { Class.forName(className, false, scriptEngineLoader) }
+                .getOrNull()
+                ?.let(::addClassSource)
+        }
+
+        return files.toList().also {
+            LOGGER.info("Resolved {} host classpath entries for script compilation", it.size)
         }
     }
 

@@ -9,7 +9,9 @@ import org.bukkit.plugin.java.JavaPlugin;
 import top.katton.Katton;
 import top.katton.LoadState;
 import top.katton.api.event.*;
+import top.katton.api.event.managed.PaperManagedEvents;
 import top.katton.command.ScriptCommand;
+import top.katton.engine.ScriptEngine;
 import top.katton.engine.ScriptReloadManager;
 import top.katton.pack.ScriptPackManager;
 import top.katton.registry.KattonRegistry;
@@ -47,6 +49,9 @@ public class KattonPaperPlugin extends JavaPlugin implements Listener {
 
         // Register event listeners for server lifecycle
         getServer().getPluginManager().registerEvents(this, this);
+
+        // Initialize managed event listener system (before event bridges)
+        PaperManagedEvents.initialize(this);
 
         // Initialize Paper event bridges
         initEventBridges();

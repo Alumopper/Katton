@@ -37,8 +37,6 @@ dependencies {
 
     // Katton common module
     api project(':common')
-
-    // Kotlin scripting — shaded into the plugin jar
     implementation 'org.jetbrains.kotlin:kotlin-compiler-embeddable'
     implementation 'org.jetbrains.kotlin:kotlin-daemon-embeddable'
     implementation 'org.jetbrains.kotlin:kotlin-reflect'
@@ -54,6 +52,7 @@ dependencies {
     implementation "net.bytebuddy:byte-buddy:1.17.8"
     implementation "net.bytebuddy:byte-buddy-agent:1.17.8"
     implementation "org.jetbrains:annotations:26.0.2"
+
 
     // ASM for bytecode injection
     implementation "org.ow2.asm:asm:9.9.1"
@@ -76,22 +75,10 @@ tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
     }
 }
 
-// Fat jar: include common module output + shaded Kotlin deps
 shadowJar {
     archiveClassifier = ''
-    from(commonMainSourceSet.output)
-
-    // Relocate Kotlin to avoid conflicts with other plugins
-    relocate 'kotlin', 'top.katton.shaded.kotlin'
-    relocate 'kotlinx', 'top.katton.shaded.kotlinx'
-    relocate 'org.intellij', 'top.katton.shaded.intellij'
-    relocate 'org.jetbrains', 'top.katton.shaded.jetbrains'
-    relocate 'net.bytebuddy', 'top.katton.shaded.bytebuddy'
-    relocate 'org.objectweb.asm', 'top.katton.shaded.asm'
-
     exclude 'META-INF/versions/**'
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
-
     manifest {
         attributes 'paper-plugin-version': project.version
     }

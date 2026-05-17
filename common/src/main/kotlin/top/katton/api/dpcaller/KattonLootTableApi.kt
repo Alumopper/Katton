@@ -61,7 +61,7 @@ fun dropBlockLoot(pos: BlockPos, tool: ItemStack): List<ItemStack> {
  */
 fun dropKillLoot(entity: Entity, killer: Entity?): List<ItemStack> {
     if(entity.lootTable.isEmpty){
-        LOGGER.warn("Entity ${entity.displayName?.string} has no loot table")
+        LOGGER.warn("Entity ${entity.displayName.string} has no loot table")
         return emptyList()
     }
     val lootTableKey = entity.lootTable.get()
