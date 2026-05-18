@@ -25,6 +25,12 @@ import static io.papermc.paper.plugin.lifecycle.event.types.LifecycleEvents.*;
  */
 public class KattonPaperPlugin extends JavaPlugin implements Listener {
 
+    private static KattonPaperPlugin instance;
+
+    public static KattonPaperPlugin getInstance() {
+        return instance;
+    }
+
     @Override
     public void onLoad() {
         getLogger().info("Katton Paper loading...");
@@ -32,6 +38,7 @@ public class KattonPaperPlugin extends JavaPlugin implements Listener {
 
     @Override
     public void onEnable() {
+        instance = this;
         getLogger().info("Katton Paper enabling...");
 
         // Register the plugin jar as a script compilation classpath entry.
@@ -121,7 +128,7 @@ public class KattonPaperPlugin extends JavaPlugin implements Listener {
         Katton.globalState = LoadState.SERVER_STARTED;
         ScriptReloadManager.reloadScriptsAsync(MinecraftServer.getServer(), serverOk -> {
             if (serverOk) {
-                getServer().getScheduler().runTask(this, () ->
+                getServer().getGlobalRegionScheduler().run(this, task ->
                     ScriptCommand.syncCommandTree(MinecraftServer.getServer())
                 );
             }

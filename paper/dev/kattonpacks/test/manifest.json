@@ -1,7 +1,0 @@
-{
-  "name": "Katton Managed Events Test",
-  "version": "1.0.0",
-  "description": "Test pack for Katton managed event listeners, Paper native events, and ServerMessageEvent bridging",
-  "authors": ["Katton Dev"],
-  "scope": "WORLD"
-}

@@ -61,6 +61,7 @@ dependencies {
 
 java {
     toolchain.languageVersion = JavaLanguageVersion.of(25)
+    withJavadocJar()
     withSourcesJar()
 }
 
@@ -97,13 +98,45 @@ processResources {
     }
 }
 
-// Maven publication — use shadow jar
+// Maven publication — lean jar (class files only, no embedded Kotlin deps)
+def mavenJar = tasks.register('mavenJar', Jar) {
+    group = 'build'
+    description = 'Assembles the plain library jar used for Maven publication.'
+    archiveBaseName = project.name
+    archiveVersion = project.version.toString()
+    destinationDirectory = layout.buildDirectory.dir('maven-libs').get().asFile
+    from(sourceSets.main.output)
+}
+
+def mavenSourcesJar = tasks.register('mavenSourcesJar', Jar) {
+    group = 'build'
+    description = 'Assembles the plain sources jar used for Maven publication.'
+    archiveBaseName = project.name
+    archiveVersion = project.version.toString()
+    archiveClassifier = 'sources'
+    destinationDirectory = layout.buildDirectory.dir('maven-libs').get().asFile
+    from(sourceSets.main.allSource)
+}
+
 publishing {
-    publications {
-        mavenJava(MavenPublication) {
-            artifactId = "${rootProject.findProperty('archives_base_name')}-paper"
-            artifact(tasks.named('shadowJar'))
-            artifact(tasks.named('sourcesJar'))
+    publications.withType(MavenPublication).configureEach {
+        setArtifacts([
+            mavenJar.get(),
+            mavenSourcesJar.get(),
+            tasks.named('javadocJar').get()
+        ])
+        pom.withXml {
+            def rootNode = asNode()
+            def deps = rootNode.appendNode('dependencies')
+            def dep = deps.appendNode('dependency')
+            dep.appendNode('groupId', project.group)
+            dep.appendNode('artifactId', "${rootProject.findProperty('archives_base_name')}-common")
+            dep.appendNode('version', project.version)
+            dep.appendNode('scope', 'compile')
         }
     }
+}
+
+tasks.withType(GenerateModuleMetadata).configureEach {
+    enabled = false
 }
