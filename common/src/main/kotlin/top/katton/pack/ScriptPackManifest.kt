@@ -3,6 +3,7 @@ package top.katton.pack
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
+import com.google.gson.JsonPrimitive
 import java.nio.file.Path
 
 data class ScriptPackManifest(
@@ -11,7 +12,8 @@ data class ScriptPackManifest(
     val version: String,
     val description: String,
     val authors: List<String>,
-    val enabledByDefault: Boolean
+    val enabledByDefault: Boolean,
+    val config: Map<String, Any> = emptyMap()
 ) {
     companion object {
         fun parse(packPath: Path, manifestJson: String): ScriptPackManifest {
@@ -26,6 +28,7 @@ data class ScriptPackManifest(
             val description = root.stringOrNull("description") ?: ""
             val authors = root.arrayOrNull("authors")?.toStringList().orEmpty()
             val enabled = root.booleanOrNull("enabled") ?: true
+            val config = root.jsonObjectOrNull("config")?.toConfigMap().orEmpty()
 
             return ScriptPackManifest(
                 id = id,
@@ -33,7 +36,8 @@ data class ScriptPackManifest(
                 version = version,
                 description = description,
                 authors = authors,
-                enabledByDefault = enabled
+                enabledByDefault = enabled,
+                config = config
             )
         }
     }
@@ -62,4 +66,26 @@ private fun JsonArray.toStringList(): List<String> {
             }
         }
     }
+}
+
+private fun JsonObject.jsonObjectOrNull(key: String): JsonObject? {
+    val element = this.get(key) ?: return null
+    return if (element.isJsonObject) element.asJsonObject else null
+}
+
+private fun JsonObject.toConfigMap(): Map<String, Any> {
+    val map = LinkedHashMap<String, Any>()
+    for ((key, value) in entrySet()) {
+        when {
+            value.isJsonPrimitive -> {
+                val primitive = value.asJsonPrimitive
+                when {
+                    primitive.isString -> map[key] = primitive.asString
+                    primitive.isNumber -> map[key] = primitive.asNumber
+                    primitive.isBoolean -> map[key] = primitive.asBoolean
+                }
+            }
+        }
+    }
+    return map
 }

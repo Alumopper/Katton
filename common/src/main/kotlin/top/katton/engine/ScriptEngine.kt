@@ -5,6 +5,7 @@ import org.jetbrains.kotlin.config.JvmTarget
 import org.jetbrains.kotlin.scripting.compiler.plugin.impl.KJvmCompiledModuleInMemoryImpl
 import org.objectweb.asm.*
 import top.katton.api.LOGGER
+import top.katton.config.KattonConfigManager
 import top.katton.pack.ScriptPack
 import top.katton.pack.ScriptPackKind
 import top.katton.pack.ScriptPackScope
@@ -185,6 +186,8 @@ object ScriptEngine {
             jarPackCount
         )
 
+        registerConfigs(packs)
+
         val sourcePlan = buildSourceCompilationPlan(packs, extraClasspathJars)
         if (sourcePlan != null) {
             LOGGER.info(
@@ -222,6 +225,40 @@ object ScriptEngine {
                     logExecutionResult(pack.manifest.name, executionResult)
                 }
             }
+    }
+
+    private fun registerConfigs(packs: List<ScriptPack>) {
+        for (pack in packs) {
+            KattonConfigManager.registerPack(pack)
+
+            // Register FQCN → packId mappings for script files
+            for (script in pack.scripts) {
+                val content = runCatching { String(script.bytes, StandardCharsets.UTF_8) }.getOrNull() ?: continue
+                val fqcn = KattonConfigManager.deriveFqcn(content, script.relativePath.substringAfterLast('/'))
+                KattonConfigManager.registerFqcnMapping(fqcn, pack.manifest.id)
+            }
+
+            // For jar packs: pre-scan compiled jar for FQCN mappings
+            if (pack.kind == ScriptPackKind.JAR && pack.compiledJar != null) {
+                registerJarFqcnMappings(pack.compiledJar!!, pack.manifest.id)
+            }
+        }
+    }
+
+    private fun registerJarFqcnMappings(jarPath: Path, packId: String) {
+        if (!Files.isRegularFile(jarPath)) return
+        runCatching {
+            JarFile(jarPath.toFile()).use { jar ->
+                jar.entries().asSequence()
+                    .filter { !it.isDirectory && it.name.endsWith(".class") && !it.name.contains('$') }
+                    .forEach { entry ->
+                        val fqcn = entry.name.removeSuffix(".class").replace('/', '.')
+                        KattonConfigManager.registerFqcnMapping(fqcn, packId)
+                    }
+            }
+        }.onFailure {
+            LOGGER.warn("Failed to scan jar '{}' for config FQCN mappings", jarPath, it)
+        }
     }
 
     private fun buildSourceCompilationPlan(
