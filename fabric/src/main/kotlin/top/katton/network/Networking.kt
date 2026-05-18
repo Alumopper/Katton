@@ -33,5 +33,10 @@ object Networking {
         if(PayloadTypeRegistryImpl.CLIENTBOUND_CONFIGURATION.get(ScriptPackBundlePacket.TYPE.id) == null){
             PayloadTypeRegistryImpl.CLIENTBOUND_CONFIGURATION.register(ScriptPackBundlePacket.TYPE, ScriptPackBundlePacket.STREAM_CODEC)
         }
+
+        // Play-phase: server → client data sync
+        if(CLIENTBOUND_PLAY.get(ClientDataSyncPacket.TYPE.id) == null){
+            CLIENTBOUND_PLAY.register(ClientDataSyncPacket.TYPE, ClientDataSyncPacket.STREAM_CODEC)
+        }
     }
 }

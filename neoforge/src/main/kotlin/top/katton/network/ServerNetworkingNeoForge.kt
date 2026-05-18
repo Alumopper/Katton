@@ -60,5 +60,12 @@ object ServerNetworkingNeoForge {
                 }
             }
         }
+
+        // Server → Client: play-phase data sync
+        registrar.playToClient(ClientDataSyncPacket.TYPE, ClientDataSyncPacket.STREAM_CODEC) { packet, context ->
+            context.enqueueWork {
+                ClientDataManager.putAll(packet.entries)
+            }
+        }
     }
 }

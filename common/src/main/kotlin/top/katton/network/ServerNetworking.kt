@@ -28,6 +28,15 @@ object ServerNetworking {
     }
 
     /**
+     * Sends a play-phase custom payload to a specific player.
+     * The playSender must be initialized by the platform entrypoint.
+     */
+    @JvmStatic
+    fun sendPlayPacket(player: ServerPlayer, payload: CustomPacketPayload) {
+        playSender?.invoke(player, payload)
+    }
+
+    /**
      * Sends script pack hash snapshot during configuration.
      * This packet is always sent so the client can clear stale cached packs when empty.
      */
