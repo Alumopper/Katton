@@ -57,6 +57,31 @@ class RecipeEvent {
         val builder = CookingRecipeBuilder(Identifier.parse(id), type, RecipeResult(result, count)).apply(block)
         ServerDatapackManager.registerRecipe(builder.id, builder.toJson())
     }
+
+    fun smithingTransform(id: String, result: String, count: Int = 1, block: SmithingTransformBuilder.() -> Unit) {
+        val builder = SmithingTransformBuilder(Identifier.parse(id), RecipeResult(result, count)).apply(block)
+        ServerDatapackManager.registerRecipe(builder.id, builder.toJson())
+    }
+
+    fun smithingTrim(id: String, block: SmithingTrimBuilder.() -> Unit) {
+        val builder = SmithingTrimBuilder(Identifier.parse(id)).apply(block)
+        ServerDatapackManager.registerRecipe(builder.id, builder.toJson())
+    }
+
+    fun transmute(id: String, result: String, count: Int = 1, block: TransmuteRecipeBuilder.() -> Unit) {
+        val builder = TransmuteRecipeBuilder(Identifier.parse(id), RecipeResult(result, count)).apply(block)
+        ServerDatapackManager.registerRecipe(builder.id, builder.toJson())
+    }
+
+    fun dye(id: String, result: String, count: Int = 1, block: DyeRecipeBuilder.() -> Unit) {
+        val builder = DyeRecipeBuilder(Identifier.parse(id), RecipeResult(result, count)).apply(block)
+        ServerDatapackManager.registerRecipe(builder.id, builder.toJson())
+    }
+
+    fun imbue(id: String, result: String, count: Int = 1, block: ImbueRecipeBuilder.() -> Unit) {
+        val builder = ImbueRecipeBuilder(Identifier.parse(id), RecipeResult(result, count)).apply(block)
+        ServerDatapackManager.registerRecipe(builder.id, builder.toJson())
+    }
 }
 
 open class RecipeBuilderBase(
@@ -65,11 +90,13 @@ open class RecipeBuilderBase(
     protected val result: RecipeResult
 ) {
     var group: String? = null
+    var category: String = "misc"
 
     protected fun baseJson(): JsonObject {
         val json = JsonObject()
         json.addProperty("type", type)
         group?.takeIf { it.isNotBlank() }?.let { json.addProperty("group", it) }
+        json.addProperty("category", category)
         return json
     }
 
@@ -79,6 +106,7 @@ open class RecipeBuilderBase(
         if (result.count != 1) {
             json.addProperty("count", result.count)
         }
+        result.components?.let { json.add("components", it) }
         return json
     }
 }
@@ -186,19 +214,164 @@ class StonecuttingRecipeBuilder(id: Identifier, result: RecipeResult) : RecipeBu
     }
 }
 
-data class RecipeResult(val item: Identifier, val count: Int) {
-    constructor(item: String, count: Int) : this(Identifier.parse(item), count)
+class SmithingTransformBuilder(id: Identifier, result: RecipeResult) : RecipeBuilderBase(id, "minecraft:smithing_transform", result) {
+    private var template: IngredientSpec? = null
+    private var base: IngredientSpec? = null
+    private var addition: IngredientSpec? = null
+
+    fun template(value: String) { template = IngredientSpec.parse(value) }
+    fun template(value: IngredientSpec) { template = value }
+
+    fun base(value: String) { base = IngredientSpec.parse(value) }
+    fun base(value: IngredientSpec) { base = value }
+
+    fun addition(value: String) { addition = IngredientSpec.parse(value) }
+    fun addition(value: IngredientSpec) { addition = value }
+
+    fun toJson(): JsonObject {
+        val builtTemplate = requireNotNull(template) { "Smithing transform recipe $id requires a template" }
+        val builtBase = requireNotNull(base) { "Smithing transform recipe $id requires a base" }
+        val builtAddition = requireNotNull(addition) { "Smithing transform recipe $id requires an addition" }
+        val json = baseJson()
+        json.add("template", builtTemplate.toJson())
+        json.add("base", builtBase.toJson())
+        json.add("addition", builtAddition.toJson())
+        json.add("result", recipeResultJson())
+        return json
+    }
+}
+
+class SmithingTrimBuilder(val id: Identifier) {
+    var group: String? = null
+    var category: String = "misc"
+    private var template: IngredientSpec? = null
+    private var base: IngredientSpec? = null
+    private var addition: IngredientSpec? = null
+
+    fun template(value: String) { template = IngredientSpec.parse(value) }
+    fun template(value: IngredientSpec) { template = value }
+
+    fun base(value: String) { base = IngredientSpec.parse(value) }
+    fun base(value: IngredientSpec) { base = value }
+
+    fun addition(value: String) { addition = IngredientSpec.parse(value) }
+    fun addition(value: IngredientSpec) { addition = value }
+
+    private fun baseJson(): JsonObject {
+        val json = JsonObject()
+        json.addProperty("type", "minecraft:smithing_trim")
+        group?.takeIf { it.isNotBlank() }?.let { json.addProperty("group", it) }
+        json.addProperty("category", category)
+        return json
+    }
+
+    fun toJson(): JsonObject {
+        val builtTemplate = requireNotNull(template) { "Smithing trim recipe $id requires a template" }
+        val builtBase = requireNotNull(base) { "Smithing trim recipe $id requires a base" }
+        val builtAddition = requireNotNull(addition) { "Smithing trim recipe $id requires an addition" }
+        val json = baseJson()
+        json.add("template", builtTemplate.toJson())
+        json.add("base", builtBase.toJson())
+        json.add("addition", builtAddition.toJson())
+        return json
+    }
+}
+
+class TransmuteRecipeBuilder(id: Identifier, result: RecipeResult) : RecipeBuilderBase(id, "minecraft:crafting_transmute", result) {
+    private var input: IngredientSpec? = null
+    private var material: IngredientSpec? = null
+    private var materialCountMin: Int = 1
+    private var materialCountMax: Int = 4
+    private var addMaterialToResultCount: Boolean = false
+
+    fun input(value: String) { input = IngredientSpec.parse(value) }
+    fun input(value: IngredientSpec) { input = value }
+
+    fun material(value: String) { material = IngredientSpec.parse(value) }
+    fun material(value: IngredientSpec) { material = value }
+
+    fun materialCount(min: Int, max: Int) {
+        materialCountMin = min
+        materialCountMax = max
+    }
+
+    fun addMaterialToResultCount(value: Boolean) { addMaterialToResultCount = value }
+
+    fun toJson(): JsonObject {
+        val builtInput = requireNotNull(input) { "Transmute recipe $id requires an input" }
+        val builtMaterial = requireNotNull(material) { "Transmute recipe $id requires a material" }
+        val json = baseJson()
+        json.add("input", builtInput.toJson())
+        json.add("material", builtMaterial.toJson())
+        val materialCountJson = JsonObject()
+        materialCountJson.addProperty("min", materialCountMin)
+        materialCountJson.addProperty("max", materialCountMax)
+        json.add("material_count", materialCountJson)
+        json.addProperty("add_material_to_result_count", addMaterialToResultCount)
+        json.add("result", recipeResultJson())
+        return json
+    }
+}
+
+class DyeRecipeBuilder(id: Identifier, result: RecipeResult) : RecipeBuilderBase(id, "minecraft:crafting_dye", result) {
+    private var target: IngredientSpec? = null
+    private var dye: IngredientSpec? = null
+
+    fun target(value: String) { target = IngredientSpec.parse(value) }
+    fun target(value: IngredientSpec) { target = value }
+
+    fun dye(value: String) { dye = IngredientSpec.parse(value) }
+    fun dye(value: IngredientSpec) { dye = value }
+
+    fun toJson(): JsonObject {
+        val builtTarget = requireNotNull(target) { "Dye recipe $id requires a target" }
+        val builtDye = requireNotNull(dye) { "Dye recipe $id requires a dye" }
+        val json = baseJson()
+        json.add("target", builtTarget.toJson())
+        json.add("dye", builtDye.toJson())
+        json.add("result", recipeResultJson())
+        return json
+    }
+}
+
+class ImbueRecipeBuilder(id: Identifier, result: RecipeResult) : RecipeBuilderBase(id, "minecraft:crafting_imbue", result) {
+    private var input: IngredientSpec? = null
+    private var ingredient: IngredientSpec? = null
+
+    fun input(value: String) { input = IngredientSpec.parse(value) }
+    fun input(value: IngredientSpec) { input = value }
+
+    fun ingredient(value: String) { ingredient = IngredientSpec.parse(value) }
+    fun ingredient(value: IngredientSpec) { ingredient = value }
+
+    fun toJson(): JsonObject {
+        val builtInput = requireNotNull(input) { "Imbue recipe $id requires an input" }
+        val builtIngredient = requireNotNull(ingredient) { "Imbue recipe $id requires an ingredient" }
+        val json = baseJson()
+        json.add("input", builtInput.toJson())
+        json.add("ingredient", builtIngredient.toJson())
+        json.add("result", recipeResultJson())
+        return json
+    }
+}
+
+data class RecipeResult(val item: Identifier, val count: Int, val components: JsonObject? = null) {
+    constructor(item: String, count: Int, components: JsonObject? = null) : this(Identifier.parse(item), count, components)
 }
 
 data class IngredientSpec(val id: Identifier, val isTag: Boolean) {
-    fun toJson(): JsonObject {
-        val json = JsonObject()
-        if (isTag) {
-            json.addProperty("tag", id.toString())
-        } else {
-            json.addProperty("item", id.toString())
-        }
-        return json
+    /**
+     * Returns the JSON representation of this ingredient.
+     *
+     * Minecraft 1.21.5+ uses `HolderSet<Item>` for ingredients, which serializes as:
+     * - Plain item: `"minecraft:diamond"` (string primitive)
+     * - Tag reference: `"#minecraft:planks"` (string primitive with `#` prefix)
+     *
+     * The OLD format `{"item": "..."}` and `{"tag": "..."}` is no longer accepted.
+     */
+    fun toJson(): com.google.gson.JsonElement {
+        val value = if (isTag) "#${id}" else id.toString()
+        return com.google.gson.JsonPrimitive(value)
     }
 
     companion object {

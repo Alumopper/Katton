@@ -17,6 +17,7 @@ import net.minecraft.tags.TagLoader
 import net.minecraft.world.item.crafting.Recipe
 import net.minecraft.world.item.crafting.RecipeHolder
 import net.minecraft.world.item.crafting.RecipeMap
+import net.minecraft.world.level.storage.loot.LootTable
 import top.katton.api.LOGGER
 import top.katton.util.ReflectUtil
 import net.minecraft.resources.Identifier
@@ -29,6 +30,9 @@ object ServerDatapackManager {
     internal val advancements = linkedMapOf<Identifier, JsonObject>()
     internal val removedAdvancements = linkedSetOf<Identifier>()
 
+    internal val lootTables = linkedMapOf<Identifier, JsonObject>()
+    internal val removedLootTables = linkedSetOf<Identifier>()
+
     internal val tagMutations = linkedMapOf<ResourceKey<out Registry<*>>, LinkedHashMap<Identifier, TagMutation>>()
 
     fun beginReload() {
@@ -36,6 +40,8 @@ object ServerDatapackManager {
         removedRecipes.clear()
         advancements.clear()
         removedAdvancements.clear()
+        lootTables.clear()
+        removedLootTables.clear()
         tagMutations.clear()
     }
 
@@ -59,6 +65,16 @@ object ServerDatapackManager {
         removedAdvancements.add(id)
     }
 
+    fun registerLootTable(id: Identifier, lootTable: JsonObject) {
+        lootTables[id] = lootTable
+        removedLootTables.remove(id)
+    }
+
+    fun removeLootTable(id: Identifier) {
+        lootTables.remove(id)
+        removedLootTables.add(id)
+    }
+
     fun mutateTag(registryKey: ResourceKey<out Registry<*>>, tagId: Identifier, block: TagMutation.() -> Unit) {
         val mutation = tagMutations
             .computeIfAbsent(registryKey) { linkedMapOf() }
@@ -70,6 +86,7 @@ object ServerDatapackManager {
         var changed = false
         changed = applyRecipes(server) || changed
         changed = applyAdvancements(server) || changed
+        changed = applyLootTables(server) || changed
         changed = applyTags(server) || changed
 
         if (changed) {
@@ -144,6 +161,62 @@ object ServerDatapackManager {
         ReflectUtil.set(advancementManager, "advancements", java.util.Map.copyOf(holders))
         ReflectUtil.set(advancementManager, "tree", tree)
         LOGGER.info("Applied {} scripted advancements and removed {} advancements", advancements.size, removedAdvancements.size)
+        return true
+    }
+
+    private fun applyLootTables(server: MinecraftServer): Boolean {
+        if (lootTables.isEmpty() && removedLootTables.isEmpty()) {
+            return false
+        }
+
+        // In MC 1.21.5+, loot tables are NOT in server.registryAccess() (which is the static composite from server init).
+        // They live in server.reloadableRegistries() — which exposes HolderLookup.Provider.
+        // Crucially: RegistryAccess extends HolderLookup.Provider, so the provider returned at runtime
+        // is actually a RegistryAccess.Frozen — we can cast it and call .registries() to get the underlying MappedRegistry.
+        val provider = server.reloadableRegistries().lookup()
+        val registryAccess = provider as? net.minecraft.core.RegistryAccess
+            ?: run {
+                LOGGER.warn("reloadableRegistries().lookup() is not a RegistryAccess (got {}) — loot table injection skipped", provider.javaClass.name)
+                return false
+            }
+
+        @Suppress("UNCHECKED_CAST")
+        val lootRegistry = registryAccess.registries()
+            .filter { it.key() == net.minecraft.core.registries.Registries.LOOT_TABLE }
+            .findFirst()
+            .orElse(null)
+            ?.value() as? net.minecraft.core.MappedRegistry<LootTable>
+            ?: run {
+                LOGGER.warn("Loot table registry not found or not a MappedRegistry — loot table injection skipped")
+                return false
+            }
+
+        val serializationContext = RegistryOps.create(JsonOps.INSTANCE, server.registryAccess())
+
+        // Step 1: Unregister removed and overridden entries
+        val toUnregister = mutableListOf<Identifier>()
+        toUnregister.addAll(removedLootTables)
+        toUnregister.addAll(lootTables.keys)
+
+        if (toUnregister.isNotEmpty()) {
+            top.katton.registry.unregisterAll(lootRegistry, toUnregister) { id ->
+                ResourceKey.create(net.minecraft.core.registries.Registries.LOOT_TABLE, id)
+            }
+        }
+
+        // Step 2: Register new/modified loot tables
+        if (lootTables.isNotEmpty()) {
+            top.katton.registry.withUnfrozenRegistry(lootRegistry) {
+                lootTables.forEach { (id, json) ->
+                    // LootTable.DIRECT_CODEC parses to LootTable directly (LootTable.CODEC returns Holder<LootTable>)
+                    val table: LootTable = LootTable.DIRECT_CODEC.parse(serializationContext, json).getOrThrow(::JsonParseException)
+                    val key: ResourceKey<LootTable> = ResourceKey.create(net.minecraft.core.registries.Registries.LOOT_TABLE, id)
+                    Registry.register<LootTable, LootTable>(lootRegistry, key, table)
+                }
+            }
+        }
+
+        LOGGER.info("Applied {} scripted loot tables and removed {} loot tables", lootTables.size, removedLootTables.size)
         return true
     }
 

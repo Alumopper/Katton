@@ -16,6 +16,7 @@ import top.katton.engine.ScriptReloadManager;
 import top.katton.pack.ScriptPackManager;
 import top.katton.registry.KattonRegistry;
 
+import java.io.File;
 import java.util.List;
 
 import static io.papermc.paper.plugin.lifecycle.event.types.LifecycleEvents.*;
@@ -27,6 +28,10 @@ public class KattonPaperPlugin extends JavaPlugin implements Listener {
 
     private static KattonPaperPlugin instance;
 
+    /**
+     * Gets the singleton instance of the plugin.
+     * @return the plugin instance
+     */
     public static KattonPaperPlugin getInstance() {
         return instance;
     }
@@ -45,12 +50,12 @@ public class KattonPaperPlugin extends JavaPlugin implements Listener {
         // On Paper, the plugin classloader may not expose jar URLs via URLClassLoader,
         // and protection domain code sources may not be set. This ensures the shadow jar
         // (containing Kotlin stdlib, Katton API, and scripting runtime) is always available.
-        java.io.File jarFile = getFile();
+        File jarFile = getFile();
         if (jarFile == null || !jarFile.isFile()) {
             try {
                 var codeSource = getClass().getProtectionDomain().getCodeSource();
                 if (codeSource != null && codeSource.getLocation() != null) {
-                    jarFile = new java.io.File(codeSource.getLocation().toURI());
+                    jarFile = new File(codeSource.getLocation().toURI());
                 }
             } catch (Exception ignored) {
             }
@@ -66,7 +71,7 @@ public class KattonPaperPlugin extends JavaPlugin implements Listener {
                         path = path.substring(0, bang);
                     }
                     if (path.startsWith("file:")) {
-                        jarFile = new java.io.File(path.substring(5));
+                        jarFile = new File(path.substring(5));
                     }
                 }
             } catch (Exception ignored) {
@@ -121,6 +126,8 @@ public class KattonPaperPlugin extends JavaPlugin implements Listener {
     /**
      * Fires when the server has fully loaded.
      * Equivalent to Fabric's SERVER_STARTED lifecycle event.
+     *
+     * @param event the server load event
      */
     @EventHandler
     public void onServerLoad(ServerLoadEvent event) {

@@ -7,6 +7,7 @@ import net.fabricmc.fabric.api.event.player.UseBlockCallback
 import net.fabricmc.fabric.api.event.player.UseEntityCallback
 import net.fabricmc.fabric.api.event.player.UseItemCallback
 import net.minecraft.world.InteractionResult
+import top.katton.util.createFirstNotNullOfOrNull
 import top.katton.util.createReturnIfNot
 import top.katton.util.createUnit
 
@@ -54,14 +55,14 @@ object PlayerEvent {
      *
      * @return InteractionResult.PASS to allow default behavior, or other result to override.
      */
-    val onUseItemOn = createReturnIfNot<UseItemOnArg, InteractionResult>(InteractionResult.PASS)
+    val onUseItemOn = createFirstNotNullOfOrNull<UseItemOnArg, InteractionResult>()
 
     /**
      * Event triggered when a player interacts with a block without holding an item.
      *
      * @return InteractionResult.PASS to allow default behavior, or other result to override.
      */
-    val onUseWithoutItem = createReturnIfNot<UseWithoutItemOnArg, InteractionResult>(InteractionResult.PASS)
+    val onUseWithoutItem = createFirstNotNullOfOrNull<UseWithoutItemOnArg, InteractionResult>()
 
     /**
      * Event triggered when a player attacks (left-clicks) a block.

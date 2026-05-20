@@ -15,6 +15,9 @@ import java.util.List;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+/**
+ * Implements the /katton command for Paper, providing subcommands for checking status and reloading scripts.
+ */
 public class KattonPaperCommand implements BasicCommand {
 
     @Override
