@@ -142,9 +142,7 @@ class KattonEntityAttributeValueMap(
      * Set the base value of an attribute and optionally add modifiers.
      */
     fun set(holder: Holder<Attribute>, value: Double, vararg modifiers: AttributeModifier) {
-        entity.getAttribute(holder)?.baseValue?.let {
-            it != value
-        } ?: false
+        entity.getAttribute(holder)?.baseValue = value
         modifiers.forEach {
             entity.getAttribute(holder)?.addTransientModifier(it)
         }
@@ -202,9 +200,10 @@ fun getBaseAttribute(entity: LivingEntity, attribute: Holder<Attribute>): Double
  * @return true if changed, false otherwise
  */
 fun setBaseAttribute(entity: LivingEntity, attribute: Holder<Attribute>, value: Double): Boolean {
-    return entity.getAttribute(attribute)?.baseValue?.let {
-        it != value
-    } ?: false
+    val instance = entity.getAttribute(attribute) ?: return false
+    val changed = instance.baseValue != value
+    instance.baseValue = value
+    return changed
 }
 
 

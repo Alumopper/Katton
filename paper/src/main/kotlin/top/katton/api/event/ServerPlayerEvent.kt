@@ -21,43 +21,94 @@ import top.katton.util.createCancellableUnit
 import top.katton.util.createFirstNotNullOfOrNull
 import top.katton.util.createUnit
 
+/**
+ * Server player events for Paper (Bukkit) platform.
+ *
+ * This object provides events related to server player lifecycle including
+ * join/leave/respawn, XP events, item picking events, and Paper-specific
+ * events such as jump and projectile launch.
+ */
+@Suppress("unused")
 object ServerPlayerEvent {
+
+    /**
+     * Event triggered when a player joins the server.
+     */
     @JvmField
     val onPlayerJoin = createUnit<PlayerArg>()
 
+    /**
+     * Event triggered when a player leaves the server.
+     */
     @JvmField
     val onPlayerLeave = createUnit<PlayerArg>()
 
+    /**
+     * Event triggered after a player respawns.
+     */
     @JvmField
     val onAfterPlayerRespawn = createUnit<ServerPlayerAfterRespawnArg>()
 
+    /**
+     * Event triggered when player data is copied (e.g., on respawn or dimension change).
+     */
     @JvmField
     val onPlayerCopy = createUnit<ServerPlayerCopyArg>()
 
+    /**
+     * Event triggered when a player's XP changes.
+     * Can be cancelled to prevent the change.
+     */
     @JvmField
     val onPlayerXpChange = createCancellableUnit<PlayerXpChangeArg>()
 
+    /**
+     * Event triggered when a player's XP level changes.
+     * Can be cancelled to prevent the change.
+     */
     @JvmField
     val onPlayerXpLevelChange = createCancellableUnit<PlayerXpLevelChangeArg>()
 
+    /**
+     * Event triggered when a player picks up experience orbs.
+     * Can be cancelled to prevent the pickup.
+     */
     @JvmField
     val onPlayerPickupXp = createCancellableUnit<PlayerPickupXpArg>()
 
+    /**
+     * Event triggered when a player middle-clicks a block (pick block).
+     */
     @JvmField
     val onPickFromBlock = createUnit<PlayerPickFromBlockArg>()
 
+    /**
+     * Event triggered when a player middle-clicks an entity (pick entity).
+     */
     @JvmField
     val onPickFromEntity = createUnit<PlayerPickFromEntityArg>()
 
+    /**
+     * Event triggered when a player jumps (Paper-specific event).
+     */
     @JvmField
     val onPlayerJump = createUnit<Any>() // PlayerJumpEvent (Paper-specific)
 
+    /**
+     * Event triggered when a player launches a projectile (Paper-specific event).
+     */
     @JvmField
     val onLaunchProjectile = createUnit<Any>() // PlayerLaunchProjectileEvent (Paper-specific, cancellable via event)
 
+    /**
+     * Initializes and registers all Bukkit event listeners for this event object.
+     *
+     * @param plugin The Paper plugin instance used to register listeners.
+     */
     @JvmStatic
     fun initialize(plugin: JavaPlugin) {
         plugin.server.pluginManager.registerEvents(object : Listener {
+
             @EventHandler
             fun onJoin(event: PlayerJoinEvent) {
                 onPlayerJoin(PlayerArg(PaperNmsBridge.toNmsPlayer(event.player)))
@@ -138,6 +189,7 @@ object ServerPlayerEvent {
             fun onLaunchProjectile(event: PlayerLaunchProjectileEvent) {
                 this@ServerPlayerEvent.onLaunchProjectile(event)
             }
+
         }, plugin)
     }
 }

@@ -5,13 +5,13 @@ package top.katton.api.mod
 import net.minecraft.core.registries.BuiltInRegistries
 import net.minecraft.resources.Identifier
 import net.minecraft.world.level.block.Block
+import net.minecraft.world.level.block.SoundType
 import net.minecraft.world.level.block.state.BlockBehaviour
 import net.minecraft.world.level.block.state.BlockState
 import net.minecraft.world.level.material.MapColor
 import org.jetbrains.annotations.ApiStatus
 import top.katton.registry.id
 import top.katton.util.ReflectUtil
-import java.util.function.ToIntFunction
 
 /**
  * Configuration for modifying existing block properties.
@@ -38,6 +38,7 @@ class BlockModificationConfig(
     var hasCollision: Boolean? = null
     var isSuffocating: Boolean? = null
     var isViewBlocking: Boolean? = null
+    var soundType: SoundType? = null
 
     fun hardness(value: Float) {
         hardness = value
@@ -99,6 +100,10 @@ class BlockModificationConfig(
     fun isViewBlocking(value: Boolean) {
         isViewBlocking = value
     }
+
+    fun soundType(value: SoundType) {
+        soundType = value
+    }
 }
 
 /**
@@ -153,6 +158,7 @@ private fun applyBlockModifications(block: Block, config: BlockModificationConfi
 
     config.resistance?.let { resistance ->
         properties.explosionResistance(resistance)
+        setBlockField(block, "explosionResistance", resistance)
     }
 
     config.requiresCorrectTool?.let { requiresTool ->
@@ -161,18 +167,21 @@ private fun applyBlockModifications(block: Block, config: BlockModificationConfi
 
     config.friction?.let { friction ->
         properties.friction(friction)
+        setBlockField(block, "friction", friction)
     }
 
     config.speedFactor?.let { speedFactor ->
         properties.speedFactor(speedFactor)
+        setBlockField(block, "speedFactor", speedFactor)
     }
 
     config.jumpFactor?.let { jumpFactor ->
         properties.jumpFactor(jumpFactor)
+        setBlockField(block, "jumpFactor", jumpFactor)
     }
 
     config.lightEmission?.let { lightEmission ->
-        properties.lightLevel(ToIntFunction { lightEmission })
+        properties.lightLevel { lightEmission }
     }
 
     config.mapColor?.let { mapColor ->
@@ -189,6 +198,7 @@ private fun applyBlockModifications(block: Block, config: BlockModificationConfi
 
     config.hasCollision?.let { hasCollision ->
         setPropertyField(properties, "hasCollision", hasCollision)
+        setBlockField(block, "hasCollision", hasCollision)
     }
 
     config.isSuffocating?.let { isSuffocating ->
@@ -197,6 +207,41 @@ private fun applyBlockModifications(block: Block, config: BlockModificationConfi
 
     config.isViewBlocking?.let { isViewBlocking ->
         properties.isViewBlocking(statePredicate(isViewBlocking))
+    }
+
+    config.soundType?.let { soundType ->
+        properties.sound(soundType)
+        setBlockField(block, "soundType", soundType)
+    }
+
+    applyBlockStateModifications(block, config)
+}
+
+private fun applyBlockStateModifications(block: Block, config: BlockModificationConfig) {
+    block.stateDefinition.possibleStates.forEach { state ->
+        config.hardness?.let { setStateField(state, "destroySpeed", it) }
+        config.requiresCorrectTool?.let { setStateField(state, "requiresCorrectToolForDrops", it) }
+        config.lightEmission?.let { setStateField(state, "lightEmission", it) }
+        config.mapColor?.let { setStateField(state, "mapColor", it) }
+        config.canOcclude?.let { setStateField(state, "canOcclude", it) }
+        config.isAir?.let { setStateField(state, "isAir", it) }
+        config.isSuffocating?.let { setStateField(state, "isSuffocating", statePredicate(it)) }
+        config.isViewBlocking?.let { setStateField(state, "isViewBlocking", statePredicate(it)) }
+        state.initCache()
+    }
+}
+
+private fun setStateField(state: BlockState, fieldName: String, value: Any) {
+    val result = ReflectUtil.setFinal(state, fieldName, value)
+    if (result.isFailure) {
+        throw IllegalStateException("Failed to set BlockStateBase.$fieldName")
+    }
+}
+
+private fun setBlockField(block: Block, fieldName: String, value: Any) {
+    val result = ReflectUtil.setFinal(block, fieldName, value)
+    if (result.isFailure) {
+        throw IllegalStateException("Failed to set BlockBehaviour.$fieldName")
     }
 }
 

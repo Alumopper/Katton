@@ -10,6 +10,13 @@ import top.katton.paper.PaperNmsBridge
 import top.katton.util.createCancellableUnit
 import top.katton.util.createUnit
 
+/**
+ * Living entity item use events for Paper (Bukkit) platform.
+ *
+ * This object provides events related to living entities starting,
+ * stopping, and finishing item usage.
+ */
+@Suppress("unused")
 object LivingUseItemEvent {
     @JvmField
     val onUseItemStart = createCancellableUnit<LivingUseItemStartArg>()

@@ -9,6 +9,13 @@ import org.bukkit.plugin.java.JavaPlugin
 import top.katton.paper.PaperNmsBridge
 import top.katton.util.createUnit
 
+/**
+ * Item component events for Paper (Bukkit) platform.
+ *
+ * This object provides events related to item enchantment preparation
+ * and execution.
+ */
+@Suppress("unused")
 object ItemComponentEvent {
 
 //    @JvmField val onModifyComponent = createUnit<Any>()

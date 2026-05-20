@@ -293,6 +293,37 @@ object ReflectUtil {
         }
     }
 
+    /**
+     * Sets an instance field, including private final fields, using
+     * [sun.misc.Unsafe]. Use only when a VarHandle cannot write the field
+     * (for example, vanilla's immutable BlockStateBase snapshots).
+     */
+    @Suppress("DEPRECATION", "PLATFORM_CLASS_MAPPED_TO_KOTLIN", "removal")
+    fun setFinal(`object`: Any, fieldName: String, value: Any?): Result<Unit> {
+        return try {
+            val field = findFieldReflective(`object`.javaClass, fieldName)
+                ?: return failure("Field not found: $fieldName in ${`object`.javaClass.name}")
+            field.isAccessible = true
+            val unsafeField = sun.misc.Unsafe::class.java.getDeclaredField("theUnsafe").apply { isAccessible = true }
+            val unsafe = unsafeField.get(null) as sun.misc.Unsafe
+            val offset = unsafe.objectFieldOffset(field)
+            when (field.type) {
+                java.lang.Boolean.TYPE -> unsafe.putBoolean(`object`, offset, value as Boolean)
+                java.lang.Byte.TYPE -> unsafe.putByte(`object`, offset, (value as Number).toByte())
+                java.lang.Short.TYPE -> unsafe.putShort(`object`, offset, (value as Number).toShort())
+                java.lang.Character.TYPE -> unsafe.putChar(`object`, offset, value as Char)
+                java.lang.Integer.TYPE -> unsafe.putInt(`object`, offset, (value as Number).toInt())
+                java.lang.Long.TYPE -> unsafe.putLong(`object`, offset, (value as Number).toLong())
+                java.lang.Float.TYPE -> unsafe.putFloat(`object`, offset, (value as Number).toFloat())
+                java.lang.Double.TYPE -> unsafe.putDouble(`object`, offset, (value as Number).toDouble())
+                else -> unsafe.putObject(`object`, offset, value)
+            }
+            Result.success(Unit)
+        } catch (e: Exception) {
+            failure("Failed to set final field $fieldName in ${`object`.javaClass.name}", e)
+        }
+    }
+
     fun <T> setT(`object`: Any, fieldName: String, fieldType: Class<T?>, value: T?): Result<*> {
         val vh = findVarHandle(`object`.javaClass, fieldName, fieldType)
         if (vh == null) {

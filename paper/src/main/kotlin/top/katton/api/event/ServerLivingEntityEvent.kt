@@ -13,6 +13,13 @@ import top.katton.util.createAll
 import top.katton.util.createCancellableUnit
 import top.katton.util.createUnit
 
+/**
+ * Server living entity events for Paper (Bukkit) platform.
+ *
+ * This object provides events related to living entity damage, death,
+ * fall damage, and mob conversion.
+ */
+@Suppress("unused")
 object ServerLivingEntityEvent {
     @JvmField
     val onLivingHurt = createCancellableUnit<LivingHurtArg>()

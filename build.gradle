@@ -120,6 +120,11 @@ kattonApiDocs {
         displayName = 'NeoForge'
         sourceRoots.from(project(':neoforge').file('src/main/kotlin/top/katton/api'))
     }
+
+    module('paper') {
+        displayName = 'Paper'
+        sourceRoots.from(project(':paper').file('src/main/kotlin/top/katton/api'))
+    }
 }
 
 

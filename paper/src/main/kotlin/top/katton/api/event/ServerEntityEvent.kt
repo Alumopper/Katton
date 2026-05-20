@@ -17,6 +17,13 @@ import top.katton.paper.PaperNmsBridge
 import top.katton.util.createCancellableUnit
 import top.katton.util.createUnit
 
+/**
+ * Server entity events for Paper (Bukkit) platform.
+ *
+ * This object provides events related to entity lifecycle including
+ * load/unload, equipment change, teleport, enderman anger, and world change.
+ */
+@Suppress("unused")
 object ServerEntityEvent {
     @JvmField
     val onAfterEntityLoad = createUnit<EntityLoadArg>()

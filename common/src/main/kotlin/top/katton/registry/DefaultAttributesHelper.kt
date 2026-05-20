@@ -78,4 +78,16 @@ internal object DefaultAttributesHelper {
     fun hasSupplier(entityType: EntityType<*>): Boolean {
         return DefaultAttributes.hasSupplier(entityType)
     }
+
+    /**
+     * Returns the current default [AttributeSupplier] for an entity type, or
+     * `null` when no default attributes are registered for the type.
+     *
+     * Reads via reflection so callers do not need to depend on
+     * the visibility of [DefaultAttributes] internals.
+     */
+    fun getSupplier(entityType: EntityType<out LivingEntity>): AttributeSupplier? {
+        if (!DefaultAttributes.hasSupplier(entityType)) return null
+        return DefaultAttributes.getSupplier(entityType)
+    }
 }

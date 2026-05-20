@@ -3,6 +3,7 @@
 package top.katton.api.mod
 
 import com.google.gson.JsonObject
+import com.google.gson.JsonPrimitive
 import com.mojang.serialization.JsonOps
 import net.minecraft.core.registries.Registries
 import net.minecraft.resources.Identifier
@@ -143,9 +144,8 @@ private fun applyRecipeModifications(json: JsonObject, config: RecipeModificatio
     if (json.has("key") && json.get("key").isJsonObject) {
         val keyObj = json.getAsJsonObject("key")
         config.keys.forEach { (k, itemId) ->
-            // MC 1.21.5+: ingredients are HolderSet<Item> — serialized as plain string ("minecraft:stick") or "#tag" prefix
-            val value = if (itemId.startsWith("#")) itemId else itemId
-            keyObj.add(k, com.google.gson.JsonPrimitive(value))
+           val value = if (itemId.startsWith("#")) itemId else itemId
+            keyObj.add(k, JsonPrimitive(value))
         }
     }
 }

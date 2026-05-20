@@ -15,6 +15,13 @@ import top.katton.util.createAll
 import top.katton.util.createCancellableUnit
 import top.katton.util.createUnit
 
+/**
+ * Chunk and block events for Paper (Bukkit) platform.
+ *
+ * This object provides events related to chunk load/unload, block
+ * break/place, and explosion events.
+ */
+@Suppress("unused")
 object ChunkAndBlockEvent {
     @JvmField
     val onChunkLoad = createUnit<ChunkLoadArg>()

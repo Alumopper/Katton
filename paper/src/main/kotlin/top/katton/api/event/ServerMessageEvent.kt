@@ -15,6 +15,13 @@ import top.katton.util.createAll
 import top.katton.util.createCancellableUnit
 import top.katton.util.createUnit
 
+/**
+ * Server message events for Paper (Bukkit) platform.
+ *
+ * This object provides events related to chat messages, broadcast
+ * messages, and command dispatch.
+ */
+@Suppress("unused")
 object ServerMessageEvent {
     @JvmField
     val onAllowChatMessage = createAll<AllowChatMessageArg>()

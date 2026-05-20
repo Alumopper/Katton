@@ -15,6 +15,13 @@ import org.bukkit.plugin.java.JavaPlugin
 import top.katton.paper.PaperNmsBridge
 import top.katton.util.createUnit
 
+/**
+ * Server lifecycle events for Paper (Bukkit) platform.
+ *
+ * This object provides events related to server startup/shutdown, tick,
+ * world load/unload/save, and datapack reload operations.
+ */
+@Suppress("unused")
 object ServerEvent {
     @JvmField
     val onServerStarting = createUnit<ServerArg>()

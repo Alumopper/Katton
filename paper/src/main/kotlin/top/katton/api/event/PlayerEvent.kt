@@ -17,6 +17,13 @@ import top.katton.paper.PaperNmsBridge
 import top.katton.util.createReturnIfNot
 import top.katton.util.createUnit
 
+/**
+ * Player interaction events for Paper (Bukkit) platform.
+ *
+ * This object provides events related to player interaction including
+ * item use, block interaction, entity interaction, and attacking.
+ */
+@Suppress("unused")
 object PlayerEvent {
     @JvmField
     val onUseItemOn = createReturnIfNot<UseItemOnArg, InteractionResult>(InteractionResult.PASS)

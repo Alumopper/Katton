@@ -3,15 +3,31 @@
 package top.katton.api.mod
 
 import net.minecraft.core.component.DataComponentMap
+import net.minecraft.core.component.DataComponentType
 import net.minecraft.core.component.DataComponents
+import net.minecraft.core.HolderSet
+import net.minecraft.core.registries.Registries
 import net.minecraft.core.registries.BuiltInRegistries
-import net.minecraft.network.chat.Component
 import net.minecraft.resources.Identifier
+import net.minecraft.tags.DamageTypeTags
+import net.minecraft.world.entity.EquipmentSlotGroup
+import net.minecraft.world.entity.ai.attributes.AttributeModifier
+import net.minecraft.world.entity.ai.attributes.Attributes
 import net.minecraft.world.food.FoodProperties
 import net.minecraft.world.item.Item
+import net.minecraft.world.item.ItemStackTemplate
 import net.minecraft.world.item.ItemStack
 import net.minecraft.world.item.Rarity
+import net.minecraft.world.item.component.Consumables
+import net.minecraft.world.item.component.DamageResistant
+import net.minecraft.world.item.component.ItemAttributeModifiers
+import net.minecraft.world.item.component.UseRemainder
+import net.minecraft.world.item.component.Weapon
+import net.minecraft.network.chat.Component
 import org.jetbrains.annotations.ApiStatus
+import org.slf4j.LoggerFactory
+import top.katton.api.server
+import top.katton.bridger.ModifyContextImpl
 import top.katton.registry.id
 
 /**
@@ -31,6 +47,10 @@ class ItemModificationConfig(
     var rarity: Rarity? = null
     var name: Component? = null
     var foodProperties: FoodProperties? = null
+    var fireResistant: Boolean? = null
+    var craftingRemainder: ItemStack? = null
+    var attackDamage: Double? = null
+    var attackSpeed: Double? = null
 
     fun maxStackSize(value: Int) {
         maxStackSize = value
@@ -50,6 +70,22 @@ class ItemModificationConfig(
 
     fun food(value: FoodProperties) {
         foodProperties = value
+    }
+
+    fun fireResistant(value: Boolean = true) {
+        fireResistant = value
+    }
+
+    fun craftingRemainder(value: ItemStack) {
+        craftingRemainder = value
+    }
+
+    fun attackDamage(value: Double) {
+        attackDamage = value
+    }
+
+    fun attackSpeed(value: Double) {
+        attackSpeed = value
     }
 }
 
@@ -96,34 +132,96 @@ fun modifyItem(itemId: Identifier, configure: ItemModificationConfig.() -> Unit)
 }
 
 private fun applyItemModifications(item: Item, config: ItemModificationConfig) {
-    val holder = item.builtInRegistryHolder
-    val currentComponents = holder.components ?: DataComponentMap.EMPTY
-    val builder = DataComponentMap.builder()
-    
-    builder.addAll(currentComponents)
-    
-    config.maxStackSize?.let { size ->
-        builder.set(DataComponents.MAX_STACK_SIZE, size)
+    validateDurabilityStacking(item, config)
+    ModifyContextImpl.modify(item) { builder ->
+        config.maxStackSize?.let { size ->
+            builder.set(DataComponents.MAX_STACK_SIZE, size)
+        }
+
+        config.maxDamage?.let { damage ->
+            builder.set(DataComponents.MAX_DAMAGE, damage)
+        }
+
+        config.rarity?.let { rarity ->
+            builder.set(DataComponents.RARITY, rarity)
+        }
+
+        config.name?.let { name ->
+            builder.set(DataComponents.ITEM_NAME, name)
+        }
+
+        config.foodProperties?.let { food ->
+            builder.set(DataComponents.FOOD, food)
+            builder.set(DataComponents.CONSUMABLE, Consumables.DEFAULT_FOOD)
+        }
+
+        config.fireResistant?.let { enabled ->
+            if (enabled) {
+                createFireResistance()?.let { builder.set(DataComponents.DAMAGE_RESISTANT, it) }
+            } else {
+                LOGGER.warn(
+                    "Disabling fireResistant on already-resistant items is not supported via DataComponentMap.Builder; ignoring for {}",
+                    item
+                )
+            }
+        }
+
+        config.craftingRemainder?.let { remainder ->
+            builder.set(DataComponents.USE_REMAINDER, UseRemainder(ItemStackTemplate.fromNonEmptyStack(remainder)))
+        }
+
+        val attackDamage = config.attackDamage
+        val attackSpeed = config.attackSpeed
+        if (attackDamage != null || attackSpeed != null) {
+            builder.set(DataComponents.ATTRIBUTE_MODIFIERS, createAttributeModifiers(attackDamage, attackSpeed))
+            if (!item.components().has(DataComponents.WEAPON)) {
+                builder.set(DataComponents.WEAPON, Weapon(1))
+            }
+        }
     }
-    
-    config.maxDamage?.let { damage ->
-        builder.set(DataComponents.MAX_DAMAGE, damage)
-    }
-    
-    config.rarity?.let { rarity ->
-        builder.set(DataComponents.RARITY, rarity)
-    }
-    
-    config.name?.let { name ->
-        builder.set(DataComponents.ITEM_NAME, name)
-    }
-    
-    config.foodProperties?.let { food ->
-        builder.set(DataComponents.FOOD, food)
-    }
-    
-    holder.components = builder.build()
 }
+
+private fun validateDurabilityStacking(item: Item, config: ItemModificationConfig) {
+    val targetMaxStack = config.maxStackSize ?: item.components().getOrDefault(DataComponents.MAX_STACK_SIZE, 1)
+    val targetMaxDamage = config.maxDamage ?: item.components().getOrDefault(DataComponents.MAX_DAMAGE, 0)
+    if (targetMaxStack > 1 && targetMaxDamage > 0) {
+        throw IllegalArgumentException(
+            "Item ${BuiltInRegistries.ITEM.getKey(item)} cannot have both maxStackSize=$targetMaxStack and maxDamage=$targetMaxDamage"
+        )
+    }
+}
+
+private fun createFireResistance(): DamageResistant? {
+    val server = server ?: run {
+        LOGGER.warn("fireResistant item modification requires a running server for DAMAGE_TYPE registry access")
+        return null
+    }
+    val damageTypeRegistry = server.registryAccess().lookupOrThrow(Registries.DAMAGE_TYPE)
+    return DamageResistant(HolderSet.emptyNamed(damageTypeRegistry, DamageTypeTags.IS_FIRE))
+}
+
+private fun createAttributeModifiers(attackDamage: Double?, attackSpeed: Double?): ItemAttributeModifiers {
+    val builder = ItemAttributeModifiers.builder()
+    attackDamage?.let { damage ->
+        builder.add(
+            Attributes.ATTACK_DAMAGE,
+            AttributeModifier(BASE_ATTACK_DAMAGE_ID, damage, AttributeModifier.Operation.ADD_VALUE),
+            EquipmentSlotGroup.MAINHAND
+        )
+    }
+    attackSpeed?.let { speed ->
+        builder.add(
+            Attributes.ATTACK_SPEED,
+            AttributeModifier(BASE_ATTACK_SPEED_ID, speed, AttributeModifier.Operation.ADD_VALUE),
+            EquipmentSlotGroup.MAINHAND
+        )
+    }
+    return builder.build()
+}
+
+private val BASE_ATTACK_DAMAGE_ID: Identifier = id("katton", "base_attack_damage")
+private val BASE_ATTACK_SPEED_ID: Identifier = id("katton", "base_attack_speed")
+private val LOGGER = LoggerFactory.getLogger("top.katton.api.mod.KattonItemModificationApi")
 
 /**
  * Gets an item by its identifier.

@@ -7,6 +7,16 @@ import org.bukkit.event.world.LootGenerateEvent
 import org.bukkit.plugin.java.JavaPlugin
 import top.katton.util.createUnit
 
+/**
+ * Loot table events for Paper (Bukkit) platform.
+ *
+ * This object provides events related to loot generation and drop
+ * modification.
+ *
+ * TODO: raw Bukkit event — LootTable replacement and modification hooks
+ * are not yet bridged for the Paper platform.
+ */
+@Suppress("unused")
 object LootTableEvent {
 
 //    @JvmField val onLootTableReplace = createUnit<Any>()

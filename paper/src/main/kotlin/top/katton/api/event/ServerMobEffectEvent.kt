@@ -9,6 +9,13 @@ import top.katton.paper.PaperNmsBridge
 import top.katton.util.createAll
 import top.katton.util.createUnit
 
+/**
+ * Server mob effect events for Paper (Bukkit) platform.
+ *
+ * This object provides events related to potion effect addition,
+ * removal, and modification on mobs.
+ */
+@Suppress("unused")
 object ServerMobEffectEvent {
     @JvmField
     val onAllowAdd = createAll<MobEffectAllowAddArg>()

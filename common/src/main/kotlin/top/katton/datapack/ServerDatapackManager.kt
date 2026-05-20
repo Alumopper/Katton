@@ -8,7 +8,10 @@ import net.minecraft.advancements.AdvancementHolder
 import net.minecraft.advancements.AdvancementTree
 import net.minecraft.advancements.TreeNodePosition
 import net.minecraft.core.Holder
+import net.minecraft.core.MappedRegistry
 import net.minecraft.core.Registry
+import net.minecraft.core.RegistryAccess
+import net.minecraft.core.registries.Registries
 import net.minecraft.resources.RegistryOps
 import net.minecraft.resources.ResourceKey
 import net.minecraft.server.MinecraftServer
@@ -43,6 +46,7 @@ object ServerDatapackManager {
         lootTables.clear()
         removedLootTables.clear()
         tagMutations.clear()
+        VillagerTradeManager.beginReload()
     }
 
     fun registerRecipe(id: Identifier, recipe: JsonObject) {
@@ -88,6 +92,7 @@ object ServerDatapackManager {
         changed = applyAdvancements(server) || changed
         changed = applyLootTables(server) || changed
         changed = applyTags(server) || changed
+        changed = VillagerTradeManager.apply(server) || changed
 
         if (changed) {
             server.playerList.reloadResources()
@@ -113,7 +118,7 @@ object ServerDatapackManager {
         }
 
         recipes.forEach { (id, json) ->
-            val key = ResourceKey.create(net.minecraft.core.registries.Registries.RECIPE, id)
+            val key = ResourceKey.create(Registries.RECIPE, id)
             val recipe = Recipe.CODEC.parse(serializationContext, json).getOrThrow(::JsonParseException)
             merged[key] = RecipeHolder(key, recipe)
         }
@@ -174,7 +179,7 @@ object ServerDatapackManager {
         // Crucially: RegistryAccess extends HolderLookup.Provider, so the provider returned at runtime
         // is actually a RegistryAccess.Frozen — we can cast it and call .registries() to get the underlying MappedRegistry.
         val provider = server.reloadableRegistries().lookup()
-        val registryAccess = provider as? net.minecraft.core.RegistryAccess
+        val registryAccess = provider as? RegistryAccess
             ?: run {
                 LOGGER.warn("reloadableRegistries().lookup() is not a RegistryAccess (got {}) — loot table injection skipped", provider.javaClass.name)
                 return false
@@ -182,10 +187,10 @@ object ServerDatapackManager {
 
         @Suppress("UNCHECKED_CAST")
         val lootRegistry = registryAccess.registries()
-            .filter { it.key() == net.minecraft.core.registries.Registries.LOOT_TABLE }
+            .filter { it.key() == Registries.LOOT_TABLE }
             .findFirst()
             .orElse(null)
-            ?.value() as? net.minecraft.core.MappedRegistry<LootTable>
+            ?.value() as? MappedRegistry<LootTable>
             ?: run {
                 LOGGER.warn("Loot table registry not found or not a MappedRegistry — loot table injection skipped")
                 return false
@@ -200,7 +205,7 @@ object ServerDatapackManager {
 
         if (toUnregister.isNotEmpty()) {
             top.katton.registry.unregisterAll(lootRegistry, toUnregister) { id ->
-                ResourceKey.create(net.minecraft.core.registries.Registries.LOOT_TABLE, id)
+                ResourceKey.create(Registries.LOOT_TABLE, id)
             }
         }
 
@@ -210,7 +215,7 @@ object ServerDatapackManager {
                 lootTables.forEach { (id, json) ->
                     // LootTable.DIRECT_CODEC parses to LootTable directly (LootTable.CODEC returns Holder<LootTable>)
                     val table: LootTable = LootTable.DIRECT_CODEC.parse(serializationContext, json).getOrThrow(::JsonParseException)
-                    val key: ResourceKey<LootTable> = ResourceKey.create(net.minecraft.core.registries.Registries.LOOT_TABLE, id)
+                    val key: ResourceKey<LootTable> = ResourceKey.create(Registries.LOOT_TABLE, id)
                     Registry.register<LootTable, LootTable>(lootRegistry, key, table)
                 }
             }

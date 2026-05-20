@@ -18,6 +18,13 @@ import top.katton.bridger.EventResult
 import top.katton.paper.PaperNmsBridge
 import top.katton.util.*
 
+/**
+ * Living behavior events for Paper (Bukkit) platform.
+ *
+ * This object provides events related to mob behaviors including taming,
+ * breeding, sleeping, elytra flight, and bed interaction.
+ */
+@Suppress("unused")
 object LivingBehaviorEvent {
     @JvmField
     val onAnimalTame = createCancellableUnit<AnimalTameArg>()

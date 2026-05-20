@@ -11,6 +11,13 @@ import top.katton.paper.PaperNmsBridge
 import top.katton.util.createAll
 import top.katton.util.createUnit
 
+/**
+ * Server entity combat events for Paper (Bukkit) platform.
+ *
+ * This object provides events related to entity combat including
+ * kill, shield blocking, and critical hit events.
+ */
+@Suppress("unused")
 object ServerEntityCombatEvent {
     @JvmField
     val onAfterKilledOtherEntity = createUnit<AfterKilledOtherEntityArg>()

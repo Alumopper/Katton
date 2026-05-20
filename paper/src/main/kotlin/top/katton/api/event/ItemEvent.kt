@@ -12,6 +12,12 @@ import org.bukkit.plugin.java.JavaPlugin
 import top.katton.paper.PaperNmsBridge
 import top.katton.util.createReturnIfNot
 
+/**
+ * Item interaction events for Paper (Bukkit) platform.
+ *
+ * This object provides events related to item usage on blocks and in air.
+ */
+@Suppress("unused")
 object ItemEvent {
     @JvmField
     val onUseOn = createReturnIfNot<ItemUseOnArg, InteractionResult>(InteractionResult.PASS, null)

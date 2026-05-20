@@ -776,6 +776,7 @@ defineProps<{
 .api-doc-page__module-badge[data-module='common'] { border-color: rgba(88, 166, 255, 0.35); color: #79c0ff; background: rgba(88, 166, 255, 0.12); }
 .api-doc-page__module-badge[data-module='fabric'] { border-color: rgba(242, 201, 76, 0.34); color: #f2cc60; background: rgba(242, 201, 76, 0.1); }
 .api-doc-page__module-badge[data-module='neoforge'] { border-color: rgba(63, 185, 80, 0.34); color: #7ee787; background: rgba(63, 185, 80, 0.1); }
+.api-doc-page__module-badge[data-module='paper'] { border-color: rgba(230, 126, 34, 0.34); color: #f0a04b; background: rgba(230, 126, 34, 0.1); }
 
 .api-doc-page__title {
   margin: 0;
@@ -1023,6 +1024,7 @@ defineProps<{
 .api-member-card__pill--module[data-module='common'] { border-color: rgba(88, 166, 255, 0.35); color: #79c0ff; background: rgba(88, 166, 255, 0.12); }
 .api-member-card__pill--module[data-module='fabric'] { border-color: rgba(242, 201, 76, 0.35); color: #f2cc60; background: rgba(242, 201, 76, 0.1); }
 .api-member-card__pill--module[data-module='neoforge'] { border-color: rgba(63, 185, 80, 0.35); color: #7ee787; background: rgba(63, 185, 80, 0.1); }
+.api-member-card__pill--module[data-module='paper'] { border-color: rgba(230, 126, 34, 0.35); color: #f0a04b; background: rgba(230, 126, 34, 0.1); }
 
 .api-member-card__pill--kind[data-kind='function'] { border-color: rgba(88, 166, 255, 0.35); color: #79c0ff; background: rgba(88, 166, 255, 0.1); }
 .api-member-card__pill--kind[data-kind='property'] { border-color: rgba(242, 201, 76, 0.35); color: #f2cc60; background: rgba(242, 201, 76, 0.1); }
