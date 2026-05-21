@@ -3,6 +3,7 @@ package top.katton.pack
 import net.minecraft.client.Minecraft
 import top.katton.Katton
 import top.katton.api.LOGGER
+import top.katton.client.ScriptPackUi
 import top.katton.engine.ScriptReloadManager
 import top.katton.network.ScriptPackBundlePacket
 import top.katton.network.ScriptPackHashListPacket
@@ -22,6 +23,21 @@ object ServerPackCacheManager {
     private const val SERVER_PACKS_DIR_NAME = "serverpacks"
     private const val MANIFEST_FILE_NAME = "manifest.json"
 
+    enum class RemoteSyncState {
+        IDLE,
+        DOWNLOADING,
+        CACHED,
+        PENDING_TRUST,
+        TRUSTED,
+        EXECUTING,
+        REJECTED
+    }
+
+    data class RemoteServerIdentity(
+        val bucket: String,
+        val address: String
+    )
+
     @Volatile
     private var activeServerBucket: String? = null
 
@@ -30,6 +46,12 @@ object ServerPackCacheManager {
 
     @Volatile
     private var activePacks: List<ScriptPack> = emptyList()
+
+    @Volatile
+    private var pendingPacks: List<ScriptPack> = emptyList()
+
+    @Volatile
+    private var syncState: RemoteSyncState = RemoteSyncState.IDLE
 
     /** Bridges the packet handler (Netty thread) to the enqueued main-thread task. */
     @Volatile
@@ -71,8 +93,12 @@ object ServerPackCacheManager {
         activeServerBucket = null
         expectedHashes = emptyMap()
         activePacks = emptyList()
+        pendingPacks = emptyList()
+        syncState = RemoteSyncState.IDLE
         mainThreadLatch = null
     }
+
+    fun currentSyncState(): RemoteSyncState = syncState
 
     fun listPacksForGui(): List<ScriptPackView> {
         return activePacks
@@ -124,12 +150,43 @@ object ServerPackCacheManager {
 
     @Synchronized
     fun handleBundle(packet: ScriptPackBundlePacket) {
-        val bucket = activeServerBucket ?: resolveCurrentServerBucket() ?: return
+        handleBundle(packet, completeWhenDeferred = null)
+    }
+
+    /**
+     * Handles a configuration-time bundle. Returns true when the caller may
+     * release its networking latch immediately. Returns false when an unknown
+     * server trust prompt is open and [completeWhenDeferred] will release it.
+     */
+    @Synchronized
+    fun handleBundleWithTrustPrompt(packet: ScriptPackBundlePacket, completeWhenDeferred: () -> Unit): Boolean {
+        return handleBundle(packet, completeWhenDeferred)
+    }
+
+    private fun handleBundle(packet: ScriptPackBundlePacket, completeWhenDeferred: (() -> Unit)?): Boolean {
+        val bucket = activeServerBucket ?: resolveCurrentServerBucket() ?: return true
         val cachedRoot = resolveCachedRoot(bucket)
+        syncState = RemoteSyncState.DOWNLOADING
 
         packet.packs.forEach { packData ->
+            if (packData.syncId !in expectedHashes) {
+                LOGGER.warn("Ignoring unexpected server pack {}", packData.syncId)
+                return@forEach
+            }
+            val signatureResult = RemoteScriptSignatureVerifier.verify(packData)
+            if (!signatureResult.valid) {
+                rejectRemoteScripts(
+                    reason = "${packData.syncId}: ${signatureResult.reason}",
+                    disconnect = completeWhenDeferred != null
+                )
+                return true
+            }
+            if (!signatureResult.signed) {
+                LOGGER.warn("Remote Katton pack {} is unsigned; user trust prompt is still required before execution", packData.syncId)
+            }
             persistPackBundle(cachedRoot, packData)
         }
+        syncState = RemoteSyncState.CACHED
 
         val resolved = mutableListOf<ScriptPack>()
         val unresolved = mutableListOf<String>()
@@ -143,19 +200,96 @@ object ServerPackCacheManager {
             }
         }
 
-        activePacks = resolved
-
         if (unresolved.isNotEmpty()) {
             LOGGER.warn("Some server packs are still unresolved after bundle sync: {}", unresolved)
+            activePacks = emptyList()
+            pendingPacks = emptyList()
+            syncState = RemoteSyncState.IDLE
+            return true
+        }
+
+        val identity = resolveCurrentServerIdentity(bucket) ?: return true
+        pendingPacks = resolved
+
+        if (!RemoteScriptTrustStore.isTrusted(identity.bucket) || hasUntrustedSigningKeys(resolved)) {
+            activePacks = emptyList()
+            syncState = RemoteSyncState.PENDING_TRUST
+            if (completeWhenDeferred == null) {
+                LOGGER.warn("Skipping remote script execution from untrusted server or signing key {}", identity.address)
+                return true
+            }
+            ScriptPackUi.openRemoteScriptTrustScreen(identity.address, resolved) { trusted ->
+                finishTrustDecision(identity, trusted)
+                completeWhenDeferred()
+            }
+            return false
+        }
+
+        activePacks = resolved
+        pendingPacks = emptyList()
+        syncState = RemoteSyncState.TRUSTED
+        executeTrustedPacks()
+        return true
+    }
+
+    @Synchronized
+    private fun finishTrustDecision(identity: RemoteServerIdentity, trusted: Boolean) {
+        if (!trusted) {
+            LOGGER.warn("User rejected remote Katton scripts from {}", identity.address)
+            activePacks = emptyList()
+            pendingPacks = emptyList()
+            syncState = RemoteSyncState.REJECTED
             return
         }
 
+        RemoteScriptTrustStore.trust(identity.bucket, identity.address)
+        trustPackSigningKeys(identity, pendingPacks)
+        activePacks = pendingPacks
+        pendingPacks = emptyList()
+        syncState = RemoteSyncState.TRUSTED
+        executeTrustedPacks()
+    }
+
+    private fun executeTrustedPacks() {
         // All packs resolved — reload synchronously on the Render thread
         // (this method is called from enqueueWork). After this returns,
         // scripts are compiled, entrypoints executed, and items registered.
         // completeMainThreadSync then releases the Netty thread, and the
         // registry check finds items already in place.
+        syncState = RemoteSyncState.EXECUTING
         ScriptReloadManager.reloadClientScripts()
+        syncState = RemoteSyncState.IDLE
+    }
+
+    private fun rejectRemoteScripts(reason: String, disconnect: Boolean) {
+        LOGGER.warn("Rejecting remote Katton scripts: {}", reason)
+        activePacks = emptyList()
+        pendingPacks = emptyList()
+        syncState = RemoteSyncState.REJECTED
+        if (disconnect) {
+            ScriptPackUi.disconnectRemoteScripts("Katton remote script signature check failed: $reason")
+        }
+    }
+
+    private fun trustPackSigningKeys(identity: RemoteServerIdentity, packs: List<ScriptPack>) {
+        packs.forEach { pack ->
+            val signature = pack.manifest.signature ?: return@forEach
+            val publicKey = signature.publicKey ?: return@forEach
+            val fingerprint = RemoteScriptSignatureVerifier.verify(pack).keyFingerprint ?: return@forEach
+            RemoteScriptTrustStore.trustPublicKey(
+                keyId = signature.keyId,
+                publicKey = publicKey,
+                serverAddress = identity.address,
+                fingerprint = fingerprint
+            )
+        }
+    }
+
+    private fun hasUntrustedSigningKeys(packs: List<ScriptPack>): Boolean {
+        return packs.any { pack ->
+            val signature = pack.manifest.signature ?: return@any false
+            RemoteScriptTrustStore.trustedPublicKey(signature.keyId) == null && signature.publicKey != null
+        }
     }
 
     /**
@@ -226,13 +360,17 @@ object ServerPackCacheManager {
     }
 
     private fun resolveCurrentServerBucket(): String? {
+        return resolveCurrentServerIdentity()?.bucket
+    }
+
+    private fun resolveCurrentServerIdentity(bucketOverride: String? = null): RemoteServerIdentity? {
         val mc = Minecraft.getInstance()
         val address = mc.currentServer?.ip?.trim()?.lowercase()
             ?: "singleplayer"
         if (address.isBlank()) {
             return null
         }
-        return sha256(address)
+        return RemoteServerIdentity(bucketOverride ?: sha256(address), address)
     }
 
     private fun encodeSyncId(syncId: String): String {

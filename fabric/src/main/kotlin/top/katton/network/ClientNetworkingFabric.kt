@@ -33,10 +33,15 @@ object ClientNetworkingFabric {
             if (context.client().isLocalServer) return@registerGlobalReceiver
             ServerPackCacheManager.prepareMainThreadSync()
             context.client().execute {
+                var completedImmediately = true
                 try {
-                    ServerPackCacheManager.handleBundle(packet)
+                    completedImmediately = ServerPackCacheManager.handleBundleWithTrustPrompt(packet) {
+                        ServerPackCacheManager.completeMainThreadSync()
+                    }
                 } finally {
-                    ServerPackCacheManager.completeMainThreadSync()
+                    if (completedImmediately) {
+                        ServerPackCacheManager.completeMainThreadSync()
+                    }
                 }
             }
             ServerPackCacheManager.awaitMainThreadSync()

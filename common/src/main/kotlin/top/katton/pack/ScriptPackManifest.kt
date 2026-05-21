@@ -13,6 +13,8 @@ data class ScriptPackManifest(
     val description: String,
     val authors: List<String>,
     val enabledByDefault: Boolean,
+    val clientSync: Boolean,
+    val signature: ScriptPackSignature?,
     val config: Map<String, Any> = emptyMap()
 ) {
     companion object {
@@ -28,6 +30,8 @@ data class ScriptPackManifest(
             val description = root.stringOrNull("description") ?: ""
             val authors = root.arrayOrNull("authors")?.toStringList().orEmpty()
             val enabled = root.booleanOrNull("enabled") ?: true
+            val clientSync = root.booleanOrNull("clientSync") ?: true
+            val signature = root.jsonObjectOrNull("signature")?.toSignature()
             val config = root.jsonObjectOrNull("config")?.toConfigMap().orEmpty()
 
             return ScriptPackManifest(
@@ -37,11 +41,20 @@ data class ScriptPackManifest(
                 description = description,
                 authors = authors,
                 enabledByDefault = enabled,
+                clientSync = clientSync,
+                signature = signature,
                 config = config
             )
         }
     }
 }
+
+data class ScriptPackSignature(
+    val algorithm: String,
+    val keyId: String,
+    val publicKey: String?,
+    val signature: String
+)
 
 private fun JsonObject.stringOrNull(key: String): String? {
     val element = this.get(key) ?: return null
@@ -88,4 +101,16 @@ private fun JsonObject.toConfigMap(): Map<String, Any> {
         }
     }
     return map
+}
+
+private fun JsonObject.toSignature(): ScriptPackSignature? {
+    val algorithm = stringOrNull("algorithm")?.takeIf { it.isNotBlank() } ?: "Ed25519"
+    val keyId = stringOrNull("keyId")?.takeIf { it.isNotBlank() } ?: return null
+    val signature = stringOrNull("signature")?.takeIf { it.isNotBlank() } ?: return null
+    return ScriptPackSignature(
+        algorithm = algorithm,
+        keyId = keyId,
+        publicKey = stringOrNull("publicKey")?.takeIf { it.isNotBlank() },
+        signature = signature
+    )
 }

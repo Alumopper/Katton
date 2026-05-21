@@ -8,6 +8,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import top.katton.registry.KattonRegistry;
+import top.katton.api.mod.KattonItemModificationApiKt;
 
 /**
  * Mixin to intercept RegistryDataCollector.collectGameRegistries().
@@ -34,5 +35,6 @@ public class RegistryDataCollectorMixin {
         CallbackInfoReturnable<RegistryAccess.Frozen> cir
     ) {
         KattonRegistry.ITEMS.reapplyCustomItemComponents();
+        KattonItemModificationApiKt.reapplyItemModifications();
     }
 }

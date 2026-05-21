@@ -42,10 +42,15 @@ object ServerNetworkingNeoForge {
             if (context.connection().isMemoryConnection) return@configurationToClient
             ServerPackCacheManager.prepareMainThreadSync()
             context.enqueueWork {
+                var completedImmediately = true
                 try {
-                    ServerPackCacheManager.handleBundle(packet)
+                    completedImmediately = ServerPackCacheManager.handleBundleWithTrustPrompt(packet) {
+                        ServerPackCacheManager.completeMainThreadSync()
+                    }
                 } finally {
-                    ServerPackCacheManager.completeMainThreadSync()
+                    if (completedImmediately) {
+                        ServerPackCacheManager.completeMainThreadSync()
+                    }
                 }
             }
             ServerPackCacheManager.awaitMainThreadSync()

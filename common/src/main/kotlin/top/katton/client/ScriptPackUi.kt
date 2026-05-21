@@ -11,6 +11,7 @@ import top.katton.engine.ScriptReloadManager
 import top.katton.pack.ScriptPackManager
 import top.katton.pack.ScriptPackScope
 import top.katton.pack.ScriptPackView
+import top.katton.pack.RemoteScriptSignatureVerifier
 import top.katton.pack.ServerPackCacheManager
 import kotlin.math.max
 
@@ -22,6 +23,195 @@ object ScriptPackUi {
             return
         }
         mc.setScreen(ScriptPackManagerScreen(mc.screen))
+    }
+
+    @JvmStatic
+    fun openRemoteScriptTrustScreen(serverAddress: String, packs: List<top.katton.pack.ScriptPack>, callback: (Boolean) -> Unit) {
+        val mc = Minecraft.getInstance()
+        val sortedPacks = packs.sortedWith(compareBy<top.katton.pack.ScriptPack> { it.manifest.name.lowercase() }.thenBy { it.manifest.id.lowercase() })
+        val views = sortedPacks
+                .map { pack ->
+                    ScriptPackView(
+                        syncId = pack.syncId,
+                        scope = ScriptPackScope.SERVER_CACHE,
+                        kind = pack.kind,
+                        id = pack.manifest.id,
+                        name = pack.manifest.name,
+                        version = pack.manifest.version,
+                        description = pack.manifest.description,
+                        authors = pack.manifest.authors,
+                        hash = pack.hash,
+                        enabled = true,
+                        locked = true,
+                        sourcePath = pack.location.toAbsolutePath().normalize().toString()
+                    )
+                }
+        val signatureSummaries = sortedPacks.map { pack ->
+            val signature = pack.manifest.signature
+            val result = RemoteScriptSignatureVerifier.verify(pack)
+            when {
+                signature == null || !result.signed -> "${pack.manifest.name}: unsigned"
+                result.keyFingerprint != null -> "${pack.manifest.name}: signed by ${signature.keyId} (${result.keyFingerprint.take(23)}...)"
+                else -> "${pack.manifest.name}: signed by ${signature.keyId}"
+            }
+        }
+        mc.setScreen(RemoteScriptTrustScreen(mc.screen, serverAddress, views, signatureSummaries, callback))
+    }
+
+    @JvmStatic
+    fun disconnectRemoteScripts(reason: String) {
+        Minecraft.getInstance().connection?.connection?.disconnect(Component.literal(reason))
+    }
+}
+
+private class RemoteScriptTrustScreen(
+    private val parent: Screen?,
+    private val serverAddress: String,
+    private val packs: List<ScriptPackView>,
+    private val signatureSummaries: List<String>,
+    private val callback: (Boolean) -> Unit
+) : Screen(Component.literal("Katton Remote Scripts")) {
+
+    private var decided = false
+
+    override fun init() {
+        val buttonY = height - 30
+        addRenderableWidget(
+            Button.builder(Component.literal("Trust and Run")) {
+                decide(true)
+            }.bounds(width / 2 - 154, buttonY, 146, 20).build()
+        )
+        addRenderableWidget(
+            Button.builder(Component.literal("Do Not Run")) {
+                decide(false)
+            }.bounds(width / 2 + 8, buttonY, 146, 20).build()
+        )
+    }
+
+    override fun shouldCloseOnEsc(): Boolean = false
+
+    override fun onClose() {
+        decide(false)
+    }
+
+    override fun extractBackground(graphics: GuiGraphicsExtractor, mouseX: Int, mouseY: Int, partialTick: Float) {
+        graphics.fill(0, 0, width, height, 0xB8000000.toInt())
+        val step = 18
+        var x = -height
+        while (x < width) {
+            graphics.fill(x, 0, x + 1, height, 0x18FFFFFF)
+            x += step
+        }
+    }
+
+    override fun extractRenderState(graphics: GuiGraphicsExtractor, mouseX: Int, mouseY: Int, partialTick: Float) {
+        super.extractRenderState(graphics, mouseX, mouseY, partialTick)
+
+        val panelWidth = (width - 28).coerceAtMost(620)
+        val panelLeft = (width - panelWidth) / 2
+        val panelRight = panelLeft + panelWidth
+        val panelTop = 14
+        val panelBottom = height - 40
+        val contentLeft = panelLeft + 14
+        val contentRight = panelRight - 14
+        val contentWidth = contentRight - contentLeft
+
+        graphics.fill(panelLeft + 4, panelTop + 5, panelRight + 4, panelBottom + 5, 0x66000000)
+        graphics.fill(panelLeft, panelTop, panelRight, panelBottom, 0xE0181818.toInt())
+        graphics.fill(panelLeft + 1, panelTop + 1, panelRight - 1, panelBottom - 1, 0xE8242424.toInt())
+        graphics.fill(panelLeft, panelTop, panelRight, panelTop + 2, 0xFFFFD166.toInt())
+
+        var y = panelTop + 12
+        fun line(text: String, color: Int = 0xFFE0E0E0.toInt(), gap: Int = 11) {
+            if (y > panelBottom - 12) return
+            graphics.text(font, text, contentLeft, y, color, false)
+            y += gap
+        }
+
+        fun paragraph(text: String, color: Int = 0xFFE0E0E0.toInt()) {
+            wrapText(text, contentWidth).forEach { wrapped ->
+                line(wrapped, color)
+            }
+        }
+
+        line("Katton blocked remote script execution", 0xFFFFD166.toInt())
+        y += 2
+        line(trimToWidth("Server: $serverAddress", contentWidth))
+        line("This server sent ${packs.size} Katton script pack(s).")
+        y += 3
+        paragraph("Warning: these scripts execute arbitrary JVM code inside your Minecraft client.", 0xFFFF7777.toInt())
+        paragraph("They can access Minecraft internals and may access files, network, or other JVM APIs.", 0xFFFF9A9A.toInt())
+        paragraph("Only trust scripts from servers and modpacks you fully trust.", 0xFFFFC2C2.toInt())
+        y += 4
+        line("Signature status:", 0xFFFFFFFF.toInt())
+        val signatureRows = ((panelBottom - y - 42) / 11).coerceIn(1, 4)
+        signatureSummaries.take(signatureRows).forEach { summary ->
+            line(trimToWidth("- $summary", contentWidth), 0xFFCFCFCF.toInt())
+        }
+        if (signatureSummaries.size > signatureRows) {
+            line("- ... and ${signatureSummaries.size - signatureRows} more", 0xFFCFCFCF.toInt())
+        }
+        y += 3
+        line("Packs:", 0xFFFFFFFF.toInt())
+
+        val maxRows = ((panelBottom - y - 4) / 11).coerceAtLeast(0)
+        packs.take(maxRows).forEach { pack ->
+            val label = "- ${pack.name} ${pack.version}"
+            line(trimToWidth(label, contentWidth), 0xFFCFCFCF.toInt())
+        }
+        if (packs.size > maxRows) {
+            line("- ... and ${packs.size - maxRows} more", 0xFFCFCFCF.toInt())
+        }
+    }
+
+    private fun decide(trusted: Boolean) {
+        if (decided) {
+            return
+        }
+        decided = true
+        if (!trusted) {
+            minecraft.connection?.connection?.disconnect(
+                Component.literal("Katton remote scripts were not trusted by the client.")
+            )
+            minecraft.setScreen(parent)
+        } else {
+            minecraft.setScreen(null)
+        }
+        callback(trusted)
+    }
+
+    private fun wrapText(text: String, maxWidth: Int): List<String> {
+        if (font.width(text) <= maxWidth) {
+            return listOf(text)
+        }
+        val lines = mutableListOf<String>()
+        var current = ""
+        text.split(' ').forEach { word ->
+            val candidate = if (current.isEmpty()) word else "$current $word"
+            if (font.width(candidate) <= maxWidth) {
+                current = candidate
+            } else {
+                if (current.isNotEmpty()) {
+                    lines += current
+                }
+                current = word
+            }
+        }
+        if (current.isNotEmpty()) {
+            lines += current
+        }
+        return lines
+    }
+
+    private fun trimToWidth(text: String, maxWidth: Int): String {
+        if (font.width(text) <= maxWidth) {
+            return text
+        }
+        var trimmed = text
+        while (trimmed.length > 3 && font.width("$trimmed...") > maxWidth) {
+            trimmed = trimmed.dropLast(1)
+        }
+        return "$trimmed..."
     }
 }
 

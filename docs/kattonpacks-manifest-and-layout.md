@@ -23,7 +23,14 @@ Server-transferred cache on client:
   "version": "1.0.0",
   "description": "Example scripts for Katton pack system",
   "authors": ["YourName"],
-  "enabled": true
+  "enabled": true,
+  "clientSync": true,
+  "signature": {
+    "algorithm": "Ed25519",
+    "keyId": "example-server-key",
+    "publicKey": "base64-x509-public-key",
+    "signature": "base64-signature"
+  }
 }
 ```
 
@@ -35,10 +42,20 @@ Server-transferred cache on client:
 - `description`: description in UI.
 - `authors`: optional string array.
 - `enabled`: default enabled state if no local state file exists.
+- `clientSync`: whether this pack should be sent to multiplayer clients during Katton server sync. Defaults to `true` for compatibility.
+- `signature`: recommended for remote client-synced packs. Uses Ed25519 and signs the pack's canonical content digest.
 
 Side behavior:
-- Script packs do not declare server/client side in manifest.
-- Side-specific execution is decided by function annotations (`@ServerScriptEntrypoint`, `@ClientScriptEntrypoint`).
+- Runtime side-specific execution is still decided by function annotations (`@ServerScriptEntrypoint`, `@ClientScriptEntrypoint`).
+- `clientSync` only controls whether the server includes the pack in the client download/sync snapshot.
+- Use `"clientSync": false` for pure server-side packs that do not contain client entrypoints or client-required registry/rendering code.
+
+Signature behavior:
+- Signed client-synced packs are verified before they are written to the client's `serverpacks` cache.
+- Unsigned client-synced packs remain compatible, but they rely only on the blocking trust prompt and do not have tamper-evident author verification.
+- The signed payload includes a Katton signature format version, the pack `syncId`, pack scope, the manifest JSON with `signature` removed, and all synced file relative paths plus bytes in sorted order.
+- `publicKey` is an X.509-encoded Ed25519 public key in Base64. After the user trusts a server/key, Katton stores the trusted public key in `<gameDir>/.katton/remote-script-trust.json`.
+- If a trusted `keyId` later presents a different embedded public key, verification fails and the remote scripts are rejected.
 
 ## 4. State File
 

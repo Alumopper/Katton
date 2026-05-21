@@ -602,7 +602,10 @@ internal class ApiDocGenerator(
     }
 
     private fun String.escapeTable(): String =
-        replace("|", "\\|")
+        replace("&", "&amp;")
+            .replace("<", "&lt;")
+            .replace(">", "&gt;")
+            .replace("|", "\\|")
             .replace("\n", "<br>")
             .trim()
 
@@ -1004,7 +1007,8 @@ defineProps<{
 
 .api-member-card__meta {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: wrap;    
+  align-items: center;
   gap: 0.5rem;
 }
 

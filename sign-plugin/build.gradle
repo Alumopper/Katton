@@ -1,0 +1,29 @@
+plugins {
+    id 'java-gradle-plugin'
+    id 'org.jetbrains.kotlin.jvm'
+    id 'maven-publish'
+}
+
+group = rootProject.maven_group
+version = rootProject.mod_version
+
+gradlePlugin {
+    plugins {
+        kattonSign {
+            id = 'top.katton.sign'
+            implementationClass = 'top.katton.sign.KattonSignPlugin'
+            displayName = 'Katton script pack signing plugin'
+            description = 'Signs Katton script packs with Ed25519 and writes signature metadata to manifest.json.'
+        }
+    }
+}
+
+dependencies {
+    implementation 'com.google.code.gson:gson:2.13.2'
+}
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(25)
+    }
+}

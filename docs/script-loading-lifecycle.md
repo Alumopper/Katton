@@ -130,15 +130,16 @@ private static void katton$afterNeoForgeNegotiation(ServerConfigurationPacketLis
 ```kotlin
 // ServerNetworking.kt
 fun sendInitialScriptPackSync(handler, sender) {
-    val hashPacket = createScriptPackHashPacket()       // collect all pack hashes
+    val hashPacket = createScriptPackHashPacket()       // collect client-synced pack hashes
     sender(handler, hashPacket)                          // send hash list
     if (hashPacket.entries.isEmpty()) return
     sender(handler, createScriptPackBundlePacket(...))   // send all pack files
 }
 ```
 
-The bundle is sent immediately (no C→S round-trip) because the client's common case is
-that it needs all packs.
+The bundle is sent immediately (no C→S round-trip) for packs whose manifest allows
+client sync. Pure server-side packs can opt out with `"clientSync": false` and are
+not included in the client hash list or bundle.
 
 ### 4.3 Client Receives Script Packs
 
@@ -148,14 +149,27 @@ Both platforms follow the same pattern via `ServerPackCacheManager`:
 Netty thread:
   1. prepareMainThreadSync()         → create CountDownLatch(1)
   2. context.enqueueWork {           → dispatch to Render thread
-       handleHashList(packet)        → store expected hashes
-       handleBundle(packet)           → persist files to disk, verify hashes
-       Katton.reloadClientScripts()  → compile & execute all scripts
+        handleHashList(packet)        → store expected hashes
+        handleBundleWithTrustPrompt(packet)
+          → verify Ed25519 signatures
+          → persist verified files to disk
+          → verify cached hashes
+          → if server is trusted: Katton.reloadClientScripts()
+          → if server is unknown: open a blocking trust screen first
      }
-  3. awaitMainThreadSync()           → block Netty thread until latch released
+  3. awaitMainThreadSync()           → block Netty thread until trusted/rejected
 ```
 
 Pack files are cached under `<gameDir>/serverpacks/<sha256(serverIp)>/<base64(syncId)>/`.
+
+Remote client scripts have four explicit phases:
+
+1. **Download** — receive hash and bundle packets during configuration.
+2. **Cache** — verify signatures before writing files to the per-server cache directory, then verify cached files against the announced hash list.
+3. **Trust** — check `<gameDir>/.katton/remote-script-trust.json`; unknown servers show a blocking warning screen.
+4. **Execute** — only trusted servers can trigger `reloadClientScripts()` and run `@ClientScriptEntrypoint` functions.
+
+The trust prompt warns that remote Katton scripts run arbitrary JVM code inside the Minecraft client. Hashes are cache/integrity checks only; they do not prove that a server is safe.
 
 ### 4.4 Client Executes Scripts Before Registry Sync
 

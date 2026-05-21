@@ -84,6 +84,9 @@ object ScriptPackManager {
 
     fun collectServerSyncPacks(): List<ScriptPack> {
         return collectExecutablePacks()
+            .asSequence()
+            .filter { it.manifest.clientSync }
+            .toList()
     }
 
     fun listLocalPacksForGui(lockGlobalInWorld: Boolean): List<ScriptPackView> {

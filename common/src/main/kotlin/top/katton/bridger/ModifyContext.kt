@@ -22,6 +22,7 @@ package top.katton.bridger
 import net.minecraft.core.component.DataComponentMap
 import net.minecraft.core.registries.BuiltInRegistries
 import net.minecraft.world.item.Item
+import top.katton.util.ReflectUtil
 import java.util.function.BiConsumer
 import java.util.function.Consumer
 import java.util.function.Predicate
@@ -42,7 +43,7 @@ interface ModifyContext {
      * @param builderConsumer A consumer that provides a {@link DataComponentMap.Builder} to modify the item's components.
      */
     fun modify(item: Item, builderConsumer: Consumer<DataComponentMap.Builder>) {
-        modify(Predicate.isEqual<Item>(item), { builder, _item -> builderConsumer.accept(builder) });
+        modify(Predicate.isEqual(item), { builder, _item -> builderConsumer.accept(builder) })
     }
 
     /**
@@ -51,7 +52,7 @@ interface ModifyContext {
      * @param builderConsumer A consumer that provides a {@link DataComponentMap.Builder} to modify the item's components.
      */
     fun modify(items: Collection<Item>, builderConsumer: BiConsumer<DataComponentMap.Builder, Item>) {
-        modify(items::contains, builderConsumer);
+        modify(items::contains, builderConsumer)
     }
 }
 
@@ -61,10 +62,17 @@ object ModifyContextImpl: ModifyContext {
 	override fun modify(itemPredicate: Predicate<Item>, builderConsumer: BiConsumer<DataComponentMap.Builder, Item>) {
 		for (item in BuiltInRegistries.ITEM) {
 			if (itemPredicate.test(item)) {
-				val builder = DataComponentMap.builder().addAll(item.components());
-				builderConsumer.accept(builder, item);
-				item.builtInRegistryHolder().bindComponents(builder.build());
+				val builder = DataComponentMap.builder().addAll(currentComponents(item))
+				builderConsumer.accept(builder, item)
+				val components = builder.build()
+				ReflectUtil.set(item, "components", components)
+				item.builtInRegistryHolder().bindComponents(components)
 			}
 		}
+	}
+
+	private fun currentComponents(item: Item): DataComponentMap {
+		return ReflectUtil.getT<DataComponentMap>(item, "components").getOrNull()
+			?: runCatching { item.components() }.getOrDefault(DataComponentMap.EMPTY)
 	}
 }

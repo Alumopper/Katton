@@ -11,12 +11,13 @@ pluginManagement {
 rootProject.name = 'katton'
 
 // 多模块：common（共享 MC 逻辑）、fabric（Fabric 端）、neoforge（NeoForge 端）、paper（Paper 端）
-include ':common', ':fabric', ':neoforge', ':paper'
+include ':common', ':fabric', ':neoforge', ':paper', ':sign-plugin'
 
 // 指定模块目录
 project(':common').projectDir = file('common')
 project(':fabric').projectDir = file('fabric')
 project(':neoforge').projectDir = file('neoforge')
 project(':paper').projectDir = file('paper')
+project(':sign-plugin').projectDir = file('sign-plugin')
 
 println "Project modules: ${rootProject.name} -> ${rootProject.children*.name}"

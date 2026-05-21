@@ -4,6 +4,7 @@ import net.minecraft.server.MinecraftServer
 import net.minecraft.world.level.storage.LevelResource
 import top.katton.Katton
 import top.katton.api.clearClientRenderers
+import top.katton.api.mod.clearItemModifications
 import top.katton.api.event.managed.clearManagedByScope
 import top.katton.client.ReloadProgressState
 import top.katton.client.ReloadProgressTracker
@@ -68,6 +69,8 @@ object ScriptReloadManager {
         }
         clearClientRenderers()
         tracker.step("Clearing client renderers")
+        clearItemModifications()
+        tracker.step("Clearing item modifications")
         KattonRegistry.ENTITY_RENDERERS.beginReload()
         tracker.step("Resetting entity renderers")
 
@@ -196,6 +199,8 @@ object ScriptReloadManager {
         }
         ServerDatapackManager.beginReload()
         tracker.step("Resetting datapack manager")
+        clearItemModifications()
+        tracker.step("Clearing item modifications")
         Event.clearHandlersByScope(ScriptPackScope.WORLD)
         tracker.step("Clearing event handlers")
         clearManagedByScope(ScriptPackScope.WORLD)
@@ -274,6 +279,8 @@ object ScriptReloadManager {
                 }
                 ServerDatapackManager.beginReload()
                 tracker.step("Resetting datapack manager")
+                clearItemModifications()
+                tracker.step("Clearing item modifications")
                 Event.clearHandlersByScope(ScriptPackScope.WORLD)
                 tracker.step("Clearing event handlers")
                 clearManagedByScope(ScriptPackScope.WORLD)
