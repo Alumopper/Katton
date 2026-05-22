@@ -8,6 +8,7 @@ import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.resources.Identifier;
 import org.lwjgl.glfw.GLFW;
+import top.katton.client.ClientItemRenderMarkerManager;
 import top.katton.client.ScriptPackUi;
 import top.katton.network.ClientNetworkingFabric;
 import top.katton.network.Networking;
@@ -54,10 +55,12 @@ public class KattonClientFabric implements ClientModInitializer {
 		ClientPlayConnectionEvents.DISCONNECT.register((_, _) -> {
 			hasJoinedSinceDisconnect = false;
 			Katton.clearWorldAndServerEvents();
+			ClientItemRenderMarkerManager.clear();
 			ServerPackCacheManager.INSTANCE.reset();
 		});
 
 		ClientTickEvents.END_CLIENT_TICK.register(_ -> {
+			ClientItemRenderMarkerManager.tick();
 			while (OPEN_PACK_SCREEN.consumeClick()) {
 				ScriptPackUi.openInWorldScreen();
 			}

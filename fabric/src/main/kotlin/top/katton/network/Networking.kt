@@ -38,5 +38,9 @@ object Networking {
         if(CLIENTBOUND_PLAY.get(ClientDataSyncPacket.TYPE.id) == null){
             CLIENTBOUND_PLAY.register(ClientDataSyncPacket.TYPE, ClientDataSyncPacket.STREAM_CODEC)
         }
+
+        if(CLIENTBOUND_PLAY.get(ClientItemRenderMarkerPacket.TYPE.id) == null){
+            CLIENTBOUND_PLAY.register(ClientItemRenderMarkerPacket.TYPE, ClientItemRenderMarkerPacket.STREAM_CODEC)
+        }
     }
 }

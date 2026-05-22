@@ -72,5 +72,21 @@ object ServerNetworkingNeoForge {
                 ClientDataManager.putAll(packet.entries)
             }
         }
+
+        registrar.playToClient(ClientItemRenderMarkerPacket.TYPE, ClientItemRenderMarkerPacket.STREAM_CODEC) { packet, context ->
+            context.enqueueWork {
+                handleClientItemRenderMarkerPacket(packet)
+            }
+        }
+    }
+
+    private fun handleClientItemRenderMarkerPacket(packet: ClientItemRenderMarkerPacket) {
+        runCatching {
+            val managerClass = Class.forName("top.katton.client.ClientItemRenderMarkerManager")
+            val instance = managerClass.getField("INSTANCE").get(null)
+            managerClass.getMethod("handlePacket", ClientItemRenderMarkerPacket::class.java).invoke(instance, packet)
+        }.onFailure {
+            LOGGER.warn("Failed to handle client item render marker packet", it)
+        }
     }
 }

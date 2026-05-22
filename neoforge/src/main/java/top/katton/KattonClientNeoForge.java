@@ -13,6 +13,7 @@ import net.neoforged.neoforge.client.event.ClientTickEvent;
 import net.neoforged.neoforge.client.event.RegisterKeyMappingsEvent;
 import net.neoforged.neoforge.common.NeoForge;
 import org.lwjgl.glfw.GLFW;
+import top.katton.client.ClientItemRenderMarkerManager;
 import top.katton.client.ScriptPackUi;
 import top.katton.engine.ScriptReloadManager;
 import top.katton.pack.ServerPackCacheManager;
@@ -64,6 +65,7 @@ public class KattonClientNeoForge {
     private static volatile boolean gameEventsRegistered = false;
 
     private static void onClientTick(ClientTickEvent.Post event) {
+        ClientItemRenderMarkerManager.tick();
         while (OPEN_PACK_SCREEN.consumeClick()) {
             ScriptPackUi.openInWorldScreen();
         }
@@ -77,6 +79,7 @@ public class KattonClientNeoForge {
 
     private static void onDisconnect(ClientPlayerNetworkEvent.LoggingOut event) {
         Katton.clearWorldAndServerEvents();
+        ClientItemRenderMarkerManager.clear();
         ServerPackCacheManager.INSTANCE.reset();
     }
 

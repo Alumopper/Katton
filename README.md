@@ -2,206 +2,137 @@
 
 # Katton
 
-Katton is a Minecraft Fabric/NeoForge mod that brings Kotlin scripting to script packs. It lets you interact directly with Minecraft server internals and Fabric/NeoForge APIs from scripts, making it easy to build custom mechanics, commands, and items with Kotlin's concise syntax. Katton also supports hot reloading, so you can iterate quickly without restarting the server.
+Katton is a Kotlin scripting runtime for Minecraft **Fabric**, **NeoForge**, and **Paper** (MC `26.1.2`) with hot reload support.  
+Write script packs in `.kt`, reload with a command, and extend server/game behavior without rebuilding your whole mod/plugin every iteration.
 
-## Roadmap
+## Features
 
-- [x] Basic Kotlin script support
-- [x] Script hot reloading
-- [x] Remote JVM debugging support
-- [x] Simple APIs for common tasks (registering commands, items)
-- [ ] Documentation and usage examples
+- Kotlin-based script packs (`.kt`) with entrypoint annotations
+- Hot reload (`/katton reload`)
+- Cross-platform event API (Fabric / NeoForge / Paper)
+- Registry APIs for mod platforms (Fabric/NeoForge)
+- Experimental unsafe runtime injection API (ByteBuddy)
+- Paper-specific managed Bukkit event bridge
 
-## Usage
+## Platform Support
+
+| Platform | Type | Client Support | Registry Mutation | Unsafe Injection |
+|---|---|---|---|---|
+| Fabric | Mod | Yes | Yes | Yes |
+| NeoForge | Mod | Yes | Yes | Yes |
+| Paper | Plugin | No (server-only) | No (disabled) | No |
+
+> [!NOTE]
+> On Paper, Katton runs as a server plugin and intentionally disables custom game registry mutation (items/blocks/entity types) because there is no matching client mod to sync custom registries.
+
+## Requirements
+
+- **Java 25**
+- **Gradle 9.3.0** (wrapper included)
+
+## Build & Run
+
+```bash
+./gradlew build
+```
+
+Run targets:
+
+```bash
+./gradlew :fabric:runClient
+./gradlew :neoforge:runClient
+./gradlew :paper:runServer
+```
+
+## Script Pack Layout
+
+Script packs are discovered from:
+
+- Global: `<gameDir>/kattonpacks/<pack>/...`
+- World: `<worldDir>/kattonpacks/<pack>/...`
+
+Each pack must contain:
+
+- `manifest.json`
+- One or more Kotlin source files with `.kt`
+
+Entrypoints are selected by annotations such as `@ServerScriptEntrypoint` and `@ClientScriptEntrypoint`.
+
+## Quick Start Example
+
+```kotlin
+import top.katton.api.ServerScriptEntrypoint
+
+@ServerScriptEntrypoint
+fun main() {
+    println("Hello from Katton script pack")
+}
+```
+
+A ready-to-use sample project is available at:  
+**Katton-Example** → https://github.com/Alumopper/Katton-Example
+
+## Hot Reload
+
+Use:
+
+```text
+/katton reload
+```
+
+Reload performs:
+
+1. Re-scan enabled script packs
+2. Re-compile and execute scripts
+3. Refresh event hooks and script-managed runtime state
+
+## `/katton` Command Overview
+
+### Fabric / NeoForge
+
+- `/katton help`
+- `/katton status`
+- `/katton registry`
+- `/katton registry stale`
+- `/katton reload`
+- `/katton debug registryLogging [on|off]`
+
+### Paper
+
+- `/katton help`
+- `/katton status`
+- `/katton reload`
+
+## IDE & Debugging
+
+- Use `.kt` for better Kotlin IDE support.
+- For remote debugging, run JVM with JDWP agent, e.g.:
+
+```text
+-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005
+```
+
+Then attach from IntelliJ IDEA using **Attach to remote JVM**.
+
+## Unsafe Injection API (Experimental)
+
+`top.katton.api.inject` provides runtime method hook capabilities (before/after + rollback).
 
 > [!WARNING]
-> Katton is still in early development. Bugs and incomplete features are expected. Feedback and contributions are welcome.
+> This API is intentionally dangerous. It performs runtime class redefinition and may conflict with other transformers/mods. Use only if you understand instrumentation risks.
 
-### Getting Started
+Reference implementation and entrypoints:
 
-Add Katton to your Fabric/NeoForge modpack, then create a script pack folder under `kattonpacks`.
+- `common/src/main/kotlin/top/katton/engine/UnsafeInjectionManager.kt`
+- `common/src/main/kotlin/top/katton/api/inject/UnsafeApi.kt`
 
-- Global packs: `<gameDir>/kattonpacks/<pack>/...`
-- World packs: `<worldDir>/kattonpacks/<pack>/...`
+## Project Modules
 
-Each pack must include `manifest.json`, plus one or more `.kt` files. Scripts are side-agnostic: server/client execution is selected by entrypoint annotations (`@ServerScriptEntrypoint` and `@ClientScriptEntrypoint`).
+- `common` - shared scripting engine, APIs, registry, networking
+- `fabric` - Fabric integration and event bridge
+- `neoforge` - NeoForge integration and event bridge
+- `paper` - Paper plugin integration, Bukkit event bridge, Folia scheduler API
 
-A ready-to-use example project (with dependencies and basic configuration) is available at [Katton-Example](https://github.com/Alumopper/Katton-Example).
+## Status
 
-### IDE Support
-
-In IDEs such as IntelliJ IDEA, you may see unresolved references for Minecraft/Fabric/NeoForge classes because those types are provided by the game runtime. To fix this and enable completion, create a minimal Gradle project for script development.
-
-> [!NOTE]
-> Even though these are "Kotlin Script" files, using the `.kt` extension usually provides better IDE support. So Katton only processes `.kt` files as scripts, and you can use regular Kotlin syntax without worrying about script-specific limitations.
->
-> Some IDE inspections may complain about top-level statements in `.kt` files. In that case, move your script logic into a top-level no-argument function annotated with the environment-specific entrypoint annotation.
->
-> ```kotlin
-> import top.katton.api.ServerScriptEntrypoint
->
-> @ServerScriptEntrypoint
-> fun main() {
->     // script logic
-> }
-> ```
-
-### Script Debugging (Remote)
-
-Katton supports debugging Kotlin script pack files through standard JVM remote debugging.
-
-1. Start Minecraft (or the dedicated server) with a debug agent, for example:
-
-   ```text
-   -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005
-   ```
-
-2. In IntelliJ IDEA, create an **Attach to remote JVM** run configuration and connect to the same host and port.
-3. Set breakpoints in the actual script pack file (for example, `<gameDir>/kattonpacks/<pack>/**/*.kt`).
-4. Enjoy debugging your scripts with the IDE's standard debugging tools.
-
-> [!NOTE]
->
-> - A successful debugger attachment does not guarantee that script breakpoints will be hit; source mapping must match the runtime-compiled script source name.
-> - When the same script is executed again, Katton replaces event handlers previously registered by that script owner, preventing duplicate registrations during reload/debug iteration.
-> - If breakpoints still do not trigger, restart the target JVM process and attach again to avoid stale classes from previous runs.
-
-## Registering Items
-
-Katton supports registering native Minecraft Items from scripts with hot-reload capability. Items registered this way have the same capabilities as items registered by regular mods.
-
-### Basic Item Registration
-
-Use `registerNativeItem` to register a custom Item:
-
-```kotlin
-import net.minecraft.world.item.Item
-import top.katton.api.*
-
-registerNativeItem(
-    id = "mymod:custom_item",
-    registerMode = RegisterMode.RELOADABLE,
-    configure = {
-        stacksTo(64)  // max stack size
-    }
-) {
-    Item(it)  // 'it' is the configured Item.Properties
-}
-```
-
-### Custom Item with Behavior
-
-To create an item with custom behavior (like right-click actions), create an anonymous object extending `Item`:
-
-```kotlin
-import net.minecraft.world.item.Item
-import net.minecraft.world.InteractionResult
-import net.minecraft.world.InteractionHand
-import net.minecraft.world.entity.player.Player
-import net.minecraft.world.level.Level
-import top.katton.api.*
-
-registerNativeItem(
-    id = "mymod:magic_wand",
-    registerMode = RegisterMode.RELOADABLE,
-    configure = {
-        stacksTo(1)
-    }
-) { props ->
-    object : Item(props) {
-        override fun use(level: Level, player: Player, hand: InteractionHand): InteractionResult {
-            if (level.isClientSide) return InteractionResult.SUCCESS
-            // Custom server-side logic here
-            return InteractionResult.SUCCESS
-        }
-    }
-}
-```
-
-### Register Modes
-
-- `RegisterMode.AUTO` - Automatically choose the best mode based on current game state
-- `RegisterMode.RELOADABLE` - Item can be hot-reloaded; changes take effect after `/reload`
-- `RegisterMode.PERSISTENT` - Item persists across reloads; use for items that should always exist
-
->[!WARNING]
->
->1. **Item Construction Timing**: The `itemFactory` lambda is called during the registration window when the registry is temporarily unfrozen. Do not construct Item instances outside this lambda.
->
->2. **Hot Reload Behavior**: When using `RELOADABLE` mode, the item's behavior can be updated by modifying the script and running `/reload`. The item instance itself remains registered in the game's registry.
->
->3. **Accessing Registered Items**: Use the `ITEMS` registry to get your registered items:
-
-## Hot Reloading
-
-Run `/katton reload` to reload all scripts without restarting the server. This will:
-
-1. Re-scan all enabled script packs from global/world scopes
-2. Re-compile and execute the scripts
-3. Update event handlers and item behaviors
-
-> [!NOTE]
-> Items registered with `RELOADABLE` mode will have their behavior updated on reload, but the item instance itself remains in the game registry. To add new items, simply add new `registerNativeItem` calls in your scripts.
-
-## Dynamic Injection (Experimental)
-
-> [!WARNING]
-> `top.katton.api.inject` is intentionally dangerous. It can redefine classes at runtime and hook arbitrary methods. Use only if you fully understand JVM instrumentation side effects.
-
-Katton provides an experimental unsafe API for dynamic runtime method hooks:
-
-- Before hook: run callback before target method body
-- After hook: run callback after target method body (with result/throwable)
-- Rollback by handle or owner
-
-### How it works
-
-The internal implementation is in [`UnsafeInjectionManager`](src/main/kotlin/top/katton/engine/UnsafeInjectionManager.kt).
-
-1. On first injection for a method, Katton installs ByteBuddy agent and redefines the target class.
-2. A universal Advice bridge is woven into method enter/exit.
-3. Advice forwards runtime calls to Katton's before/after handler registries.
-4. During `/katton reload`, Katton clears unsafe hook registries before re-running scripts.
-
-### API entry points
-
-Unsafe script API is provided by [`UnsafeApi.kt`](src/main/kotlin/top/katton/api/inject/UnsafeApi.kt):
-
-- [`injectBefore(...)`](src/main/kotlin/top/katton/api/inject/UnsafeApi.kt:72)
-- [`injectAfter(...)`](src/main/kotlin/top/katton/api/inject/UnsafeApi.kt:119)
-- [`rollbackUnsafe(...)`](src/main/kotlin/top/katton/api/inject/UnsafeApi.kt:159)
-- [`rollbackUnsafeByOwner(...)`](src/main/kotlin/top/katton/api/inject/UnsafeApi.kt:166)
-
-Both string-based and `Method`-based overloads are supported.
-
-### Example (Method overload)
-
-```kotlin
-import top.katton.api.inject.*
-import net.minecraft.server.level.ServerPlayer
-
-val m = ServerPlayer::class.java.getDeclaredMethod("getName")
-
-val handle = injectBefore(m) { ctx ->
-    println("before: ${ctx.method.declaringClass.simpleName}.${ctx.method.name}")
-}
-
-injectAfter(m) { ctx, result, throwable ->
-    if (throwable != null) {
-        println("after with error: ${throwable.message}")
-    } else {
-        println("after result: $result")
-    }
-}
-
-// rollback one
-rollbackUnsafe(handle)
-```
-
->[!WARNING]
->
->1. Hook execution exceptions are caught and logged, so they do not directly break the target method invocation chain.
->
->2. This API does not add whitelist/permission sandbox by default.
->
->3. Runtime redefinition may conflict with other transformers/mods depending on load order and target classes.
+Katton is actively developed. Interfaces and behavior may still change between versions.
