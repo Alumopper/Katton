@@ -5,7 +5,7 @@ plugins {
 }
 
 group = rootProject.maven_group
-version = rootProject.mod_version
+version = '1.0.0'
 
 gradlePlugin {
     plugins {
