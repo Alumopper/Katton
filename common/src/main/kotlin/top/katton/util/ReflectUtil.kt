@@ -14,7 +14,7 @@ import kotlin.collections.toTypedArray
  *
  *
  * Usage examples:
- * <pre>
+ * ```java
  * // VarHandle read/write
  * VarHandle vh = ReflectUtil.findVarHandle(MyClass.class, "value", int.class);
  * int v = (int) ReflectUtil.vhGet(vh, myObj);
@@ -23,7 +23,7 @@ import kotlin.collections.toTypedArray
  * // Method handle invoke
  * MethodHandle mh = ReflectUtil.findMethodHandle(MyClass.class, "compute", int.class);
  * Object result = ReflectUtil.invoke(mh, myObj, 5);
-</pre> *
+ * ```
  *
  */
 @Suppress("unused")

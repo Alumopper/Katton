@@ -4,6 +4,7 @@ import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import top.katton.network.ScriptPackBundlePacket
 import java.nio.charset.StandardCharsets
+import java.nio.file.Path
 import java.security.KeyFactory
 import java.security.MessageDigest
 import java.security.Signature
@@ -20,12 +21,13 @@ object RemoteScriptSignatureVerifier {
     )
 
     fun verify(pack: ScriptPack): VerificationResult {
+        //check manifest signature metadata presence and algorithm support
         val signature = pack.manifest.signature
             ?: return VerificationResult(true, "missing signature metadata", signed = false)
         if (signature.algorithm != "Ed25519") {
             return VerificationResult(false, "unsupported signature algorithm ${signature.algorithm}")
         }
-
+        //resolve public key
         val trustedPublicKey = RemoteScriptTrustStore.trustedPublicKey(signature.keyId)
         val publicKeyText = trustedPublicKey ?: signature.publicKey
             ?: return VerificationResult(false, "missing public key for ${signature.keyId}")
@@ -70,7 +72,7 @@ object RemoteScriptSignatureVerifier {
     }
 
     private fun verifyBundlePack(packData: ScriptPackBundlePacket.PackData): VerificationResult {
-        val manifest = ScriptPackManifest.parse(java.nio.file.Path.of("remote-pack"), packData.manifestJson)
+        val manifest = ScriptPackManifest.parse(Path.of("remote-pack"), packData.manifestJson)
         val signature = manifest.signature
             ?: return VerificationResult(true, "missing signature metadata", signed = false)
         if (signature.algorithm != "Ed25519") {

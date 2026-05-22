@@ -58,7 +58,7 @@ object ServerPackCacheManager {
     private var mainThreadLatch: CountDownLatch? = null
 
     /**
-     * Called by the packet handler on the Netty thread before [enqueueWork].
+     * Called by the packet handler on the Netty thread before `enqueueWork`.
      * Creates a latch that will be counted down after the enqueued task finishes.
      */
     fun prepareMainThreadSync() {
@@ -81,7 +81,7 @@ object ServerPackCacheManager {
         mainThreadLatch?.apply {
             try {
                 await()
-            } catch (e: InterruptedException) {
+            } catch (_: InterruptedException) {
                 Thread.currentThread().interrupt()
             }
             mainThreadLatch = null
@@ -98,8 +98,12 @@ object ServerPackCacheManager {
         mainThreadLatch = null
     }
 
+    @Suppress("unused")
     fun currentSyncState(): RemoteSyncState = syncState
 
+    /**
+     * List server packs for katton pack manager GUI in game.
+     */
     fun listPacksForGui(): List<ScriptPackView> {
         return activePacks
             .sortedWith(compareBy<ScriptPack> { it.manifest.name.lowercase() }.thenBy { it.manifest.id.lowercase() })
@@ -168,6 +172,7 @@ object ServerPackCacheManager {
         val cachedRoot = resolveCachedRoot(bucket)
         syncState = RemoteSyncState.DOWNLOADING
 
+        // verify signatures and persist packs to cache
         packet.packs.forEach { packData ->
             if (packData.syncId !in expectedHashes) {
                 LOGGER.warn("Ignoring unexpected server pack {}", packData.syncId)
@@ -211,6 +216,8 @@ object ServerPackCacheManager {
         val identity = resolveCurrentServerIdentity(bucket) ?: return true
         pendingPacks = resolved
 
+        //if remove server is untrusted or if script packs are not signed properly
+        // show a trust screen to prompt user to trust the server before enabling scripts.
         if (!RemoteScriptTrustStore.isTrusted(identity.bucket) || hasUntrustedSigningKeys(resolved)) {
             activePacks = emptyList()
             syncState = RemoteSyncState.PENDING_TRUST
@@ -365,6 +372,7 @@ object ServerPackCacheManager {
 
     private fun resolveCurrentServerIdentity(bucketOverride: String? = null): RemoteServerIdentity? {
         val mc = Minecraft.getInstance()
+        //TODO: in this stage currentServer seems to be still null. address always falls back to "singleplayer"
         val address = mc.currentServer?.ip?.trim()?.lowercase()
             ?: "singleplayer"
         if (address.isBlank()) {

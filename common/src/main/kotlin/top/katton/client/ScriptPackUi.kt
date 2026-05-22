@@ -94,16 +94,6 @@ private class RemoteScriptTrustScreen(
         decide(false)
     }
 
-    override fun extractBackground(graphics: GuiGraphicsExtractor, mouseX: Int, mouseY: Int, partialTick: Float) {
-        graphics.fill(0, 0, width, height, 0xB8000000.toInt())
-        val step = 18
-        var x = -height
-        while (x < width) {
-            graphics.fill(x, 0, x + 1, height, 0x18FFFFFF)
-            x += step
-        }
-    }
-
     override fun extractRenderState(graphics: GuiGraphicsExtractor, mouseX: Int, mouseY: Int, partialTick: Float) {
         super.extractRenderState(graphics, mouseX, mouseY, partialTick)
 
