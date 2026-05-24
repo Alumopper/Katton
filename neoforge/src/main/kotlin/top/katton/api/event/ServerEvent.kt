@@ -13,6 +13,7 @@ import net.neoforged.neoforge.event.server.ServerStoppingEvent
 import net.neoforged.neoforge.event.tick.LevelTickEvent
 import net.neoforged.neoforge.event.tick.ServerTickEvent
 import top.katton.Katton
+import top.katton.network.ServerItemRenderMarkerManager
 import top.katton.util.DelegateEvent
 import top.katton.util.createUnit
 
@@ -75,6 +76,7 @@ object ServerEvent {
     @JvmStatic
     @SubscribeEvent
     private fun handleEndServerTick(e: ServerTickEvent.Post) {
+        ServerItemRenderMarkerManager.tick()
         onEndServerTick(ServerTickArg(e.server))
     }
 

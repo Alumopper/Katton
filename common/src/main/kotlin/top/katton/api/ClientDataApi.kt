@@ -96,8 +96,7 @@ object KattonClientData {
 
     /** Get a string value with an optional default. */
     fun getString(key: String, default: String = ""): String {
-        val value = get(key)
-        return when (value) {
+        return when (val value = get(key)) {
             is String -> value
             else -> value?.toString() ?: default
         }
@@ -105,8 +104,7 @@ object KattonClientData {
 
     /** Get a numeric value with an optional default. */
     fun getNumber(key: String, default: Number = 0): Number {
-        val value = get(key)
-        return when (value) {
+        return when (val value = get(key)) {
             is Number -> value
             is String -> value.toDoubleOrNull() ?: default
             else -> default
@@ -115,8 +113,7 @@ object KattonClientData {
 
     /** Get a boolean value with an optional default. */
     fun getBool(key: String, default: Boolean = false): Boolean {
-        val value = get(key)
-        return when (value) {
+        return when (val value = get(key)) {
             is Boolean -> value
             is String -> value.equals("true", ignoreCase = true)
             else -> default

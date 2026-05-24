@@ -2,6 +2,7 @@ package top.katton;
 
 import net.minecraft.server.MinecraftServer;
 import top.katton.api.event.managed.ManagedEventsKt;
+import top.katton.network.ServerItemRenderMarkerManager;
 import top.katton.pack.ScriptPackManager;
 import top.katton.pack.ScriptPackScope;
 import top.katton.engine.ScriptEngine;
@@ -91,5 +92,6 @@ public class Katton {
         Event.clearHandlersByScope(ScriptPackScope.SERVER_CACHE);
         ManagedEventsKt.clearManagedByScope(ScriptPackScope.WORLD);
         ManagedEventsKt.clearManagedByScope(ScriptPackScope.SERVER_CACHE);
+        ServerItemRenderMarkerManager.INSTANCE.clearTracked();
     }
 }

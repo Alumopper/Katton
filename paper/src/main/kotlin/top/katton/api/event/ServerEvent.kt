@@ -12,6 +12,7 @@ import org.bukkit.event.world.WorldLoadEvent
 import org.bukkit.event.world.WorldSaveEvent
 import org.bukkit.event.world.WorldUnloadEvent
 import org.bukkit.plugin.java.JavaPlugin
+import top.katton.network.ServerItemRenderMarkerManager
 import top.katton.paper.PaperNmsBridge
 import top.katton.util.createUnit
 
@@ -104,6 +105,7 @@ object ServerEvent {
             fun onServerTickEnd(event: ServerTickEndEvent) {
                 val server = PaperNmsBridge.toNmsServer(plugin.server)
                 server.allLevels.forEach { onEndWorldTick(WorldTickArg(it)) }
+                ServerItemRenderMarkerManager.tick()
                 onEndServerTick(ServerTickArg(server))
             }
 

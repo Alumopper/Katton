@@ -2,6 +2,7 @@ package top.katton.api.event
 
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents
+import top.katton.network.ServerItemRenderMarkerManager
 import top.katton.util.createUnit
 
 /**
@@ -23,7 +24,10 @@ object ServerEvent {
         ServerLifecycleEvents.BEFORE_SAVE.register { a, b, c -> onBeforeSave(ServerSaveArg(a,b,c)) }
         ServerLifecycleEvents.AFTER_SAVE.register { a, b, c -> onAfterSave(ServerSaveArg(a,b,c)) }
         ServerTickEvents.START_SERVER_TICK.register { onStartServerTick(ServerTickArg(it)) }
-        ServerTickEvents.END_SERVER_TICK.register { onEndServerTick(ServerTickArg(it)) }
+        ServerTickEvents.END_SERVER_TICK.register {
+            ServerItemRenderMarkerManager.tick()
+            onEndServerTick(ServerTickArg(it))
+        }
         ServerTickEvents.START_LEVEL_TICK.register { onStartWorldTick(WorldTickArg(it)) }
         ServerTickEvents.END_LEVEL_TICK.register { onEndWorldTick(WorldTickArg(it)) }
     }

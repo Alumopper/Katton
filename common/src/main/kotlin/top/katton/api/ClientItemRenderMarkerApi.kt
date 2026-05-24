@@ -11,6 +11,7 @@ import net.minecraft.world.phys.Vec3
 import top.katton.Katton
 import top.katton.network.ClientItemRenderMarkerPacket
 import top.katton.network.ServerNetworking
+import top.katton.network.ServerItemRenderMarkerManager
 import java.util.UUID
 
 /**
@@ -31,8 +32,18 @@ data class ClientItemRenderMarker(
     val roll: Float = 0.0f,
     val fullBright: Boolean = false,
     val maxDistance: Double = 64.0,
-    val lifetimeTicks: Int = -1
-)
+    val lifetimeTicks: Int = -1,
+    val animations: Map<String, ClientItemRenderAnimationSet> = emptyMap(),
+    val playingAnimationID: List<String> = emptyList()
+){
+    fun getPlayingAnimationEntries(): List<Map.Entry<String, ClientItemRenderAnimationSet>> {
+        return playingAnimationID.mapNotNull { id -> animations.entries.firstOrNull { it.key == id } }
+    }
+
+    fun getPlayingAnimationSet(): List<ClientItemRenderAnimationSet> {
+        return getPlayingAnimationEntries().map { it.value }
+    }
+}
 
 /**
  * Build a [ClientItemRenderMarker] with a generated id.
@@ -49,21 +60,32 @@ fun itemRenderMarker(
     fullBright: Boolean = false,
     maxDistance: Double = 64.0,
     lifetimeTicks: Int = -1,
+    animations: Map<String, ClientItemRenderAnimationSetBuilder.() -> Unit> = emptyMap(),
+    playingAnimationID: List<String> = emptyList(),
     id: UUID = UUID.randomUUID()
-): ClientItemRenderMarker = ClientItemRenderMarker(
-    id = id,
-    level = level,
-    pos = pos,
-    stack = stack.copy(),
-    displayContext = displayContext,
-    scale = scale,
-    yaw = yaw,
-    pitch = pitch,
-    roll = roll,
-    fullBright = fullBright,
-    maxDistance = maxDistance,
-    lifetimeTicks = lifetimeTicks
-)
+): ClientItemRenderMarker {
+    val builtAnimations = animations.mapValues { entry ->
+        val builder = ClientItemRenderAnimationSetBuilder()
+        entry.value(builder)
+        builder.build()
+    }
+    return ClientItemRenderMarker(
+        id = id,
+        level = level,
+        pos = pos,
+        stack = stack.copy(),
+        displayContext = displayContext,
+        scale = scale,
+        yaw = yaw,
+        pitch = pitch,
+        roll = roll,
+        fullBright = fullBright,
+        maxDistance = maxDistance,
+        lifetimeTicks = lifetimeTicks,
+        animations = builtAnimations,
+        playingAnimationID = playingAnimationID
+    )
+}
 
 /**
  * Add or update a client-side item marker for every connected player.
@@ -72,9 +94,11 @@ fun itemRenderMarker(
  */
 fun showItemRenderMarker(marker: ClientItemRenderMarker): UUID {
     val server = Katton.server ?: return marker.id
+    val packet = ClientItemRenderMarkerPacket.addOrUpdate(marker.copy(stack = marker.stack.copy()))
     for (player in server.playerList.players) {
-        showItemRenderMarker(player, marker)
+        ServerNetworking.sendPlayPacket(player, packet)
     }
+    ServerItemRenderMarkerManager.trackAll(server, marker)
     return marker.id
 }
 
@@ -83,6 +107,7 @@ fun showItemRenderMarker(marker: ClientItemRenderMarker): UUID {
  */
 fun showItemRenderMarker(player: ServerPlayer, marker: ClientItemRenderMarker): UUID {
     ServerNetworking.sendPlayPacket(player, ClientItemRenderMarkerPacket.addOrUpdate(marker.copy(stack = marker.stack.copy())))
+    ServerItemRenderMarkerManager.track(player, marker)
     return marker.id
 }
 
@@ -104,6 +129,8 @@ fun showItemRenderMarker(
     fullBright: Boolean = false,
     maxDistance: Double = 64.0,
     lifetimeTicks: Int = -1,
+    animations: Map<String, ClientItemRenderAnimationSetBuilder.() -> Unit> = emptyMap(),
+    playingAnimationID: List<String> = emptyList(),
     id: UUID = UUID.randomUUID()
 ): UUID = showItemRenderMarker(
     player,
@@ -119,6 +146,8 @@ fun showItemRenderMarker(
         fullBright = fullBright,
         maxDistance = maxDistance,
         lifetimeTicks = lifetimeTicks,
+        animations = animations,
+        playingAnimationID = playingAnimationID,
         id = id
     )
 )
@@ -128,8 +157,17 @@ fun showItemRenderMarker(
  */
 fun removeItemRenderMarker(id: UUID) {
     val server = Katton.server ?: return
+    val removed = ServerItemRenderMarkerManager.remove(id)
+    if (removed == null) {
+        for (player in server.playerList.players) {
+            removeItemRenderMarker(player, id)
+        }
+        return
+    }
     for (player in server.playerList.players) {
-        removeItemRenderMarker(player, id)
+        if (player.uuid in removed.viewers) {
+            removeItemRenderMarker(player, id)
+        }
     }
 }
 
@@ -148,6 +186,7 @@ fun clearItemRenderMarkers() {
     for (player in server.playerList.players) {
         clearItemRenderMarkers(player)
     }
+    ServerItemRenderMarkerManager.clearTracked()
 }
 
 /**
@@ -155,4 +194,91 @@ fun clearItemRenderMarkers() {
  */
 fun clearItemRenderMarkers(player: ServerPlayer) {
     ServerNetworking.sendPlayPacket(player, ClientItemRenderMarkerPacket.clear())
+}
+
+/**
+ * Start playing one animation set on a tracked marker for every viewer that
+ * originally received it. Playback starts from the beginning on the client.
+ */
+fun playItemRenderAnimationSet(id: UUID, animationSetId: String) {
+    val server = Katton.server ?: return
+    val stored = ServerItemRenderMarkerManager.setAnimationPlaying(id, animationSetId, true)
+    val packet = ClientItemRenderMarkerPacket.playAnimation(id, animationSetId)
+    if (stored == null) {
+        for (player in server.playerList.players) {
+            ServerNetworking.sendPlayPacket(player, packet)
+        }
+        return
+    }
+    for (player in server.playerList.players) {
+        if (player.uuid in stored.viewers) {
+            ServerNetworking.sendPlayPacket(player, packet)
+        }
+    }
+}
+
+fun startItemRenderAnimationSet(id: UUID, animationSetId: String) {
+    playItemRenderAnimationSet(id, animationSetId)
+}
+
+/**
+ * Stop playing one animation set on a tracked marker for every viewer that
+ * originally received it.
+ */
+fun stopItemRenderAnimationSet(id: UUID, animationSetId: String) {
+    val server = Katton.server ?: return
+    val stored = ServerItemRenderMarkerManager.setAnimationPlaying(id, animationSetId, false)
+    val packet = ClientItemRenderMarkerPacket.stopAnimation(id, animationSetId)
+    if (stored == null) {
+        for (player in server.playerList.players) {
+            ServerNetworking.sendPlayPacket(player, packet)
+        }
+        return
+    }
+    for (player in server.playerList.players) {
+        if (player.uuid in stored.viewers) {
+            ServerNetworking.sendPlayPacket(player, packet)
+        }
+    }
+}
+
+/**
+ * Start playing one animation set for a single player. This is intentionally
+ * per-viewer and does not mutate the server-side tracked marker state.
+ */
+fun playItemRenderAnimationSet(player: ServerPlayer, id: UUID, animationSetId: String) {
+    ServerNetworking.sendPlayPacket(player, ClientItemRenderMarkerPacket.playAnimation(id, animationSetId))
+}
+
+fun startItemRenderAnimationSet(player: ServerPlayer, id: UUID, animationSetId: String) {
+    playItemRenderAnimationSet(player, id, animationSetId)
+}
+
+/**
+ * Stop playing one animation set for a single player. This is intentionally
+ * per-viewer and does not mutate the server-side tracked marker state.
+ */
+fun stopItemRenderAnimationSet(player: ServerPlayer, id: UUID, animationSetId: String) {
+    ServerNetworking.sendPlayPacket(player, ClientItemRenderMarkerPacket.stopAnimation(id, animationSetId))
+}
+
+/**
+ * Clear tracked item markers in [radius] blocks around [center] and notify
+ * the clients that were originally sent those markers.
+ */
+fun clearItemRenderMarkersInRange(level: ResourceKey<Level>, center: Vec3, radius: Double): Int {
+    val server = Katton.server ?: return 0
+    val removed = ServerItemRenderMarkerManager.removeInRange(level, center, radius.coerceAtLeast(0.0))
+    if (removed.isEmpty()) {
+        return 0
+    }
+    for (stored in removed) {
+        val packet = ClientItemRenderMarkerPacket.remove(stored.marker.id)
+        for (player in server.playerList.players) {
+            if (player.uuid in stored.viewers) {
+                ServerNetworking.sendPlayPacket(player, packet)
+            }
+        }
+    }
+    return removed.size
 }
