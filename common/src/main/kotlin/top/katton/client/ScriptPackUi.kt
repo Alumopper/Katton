@@ -50,9 +50,14 @@ object ScriptPackUi {
             val signature = pack.manifest.signature
             val result = RemoteScriptSignatureVerifier.verify(pack)
             when {
-                signature == null || !result.signed -> "${pack.manifest.name}: unsigned"
-                result.keyFingerprint != null -> "${pack.manifest.name}: signed by ${signature.keyId} (${result.keyFingerprint.take(23)}...)"
-                else -> "${pack.manifest.name}: signed by ${signature.keyId}"
+                signature == null || !result.signed -> trString("katton.remote.signature.unsigned", pack.manifest.name)
+                result.keyFingerprint != null -> trString(
+                    "katton.remote.signature.signed_fingerprint",
+                    pack.manifest.name,
+                    signature.keyId,
+                    result.keyFingerprint.take(23)
+                )
+                else -> trString("katton.remote.signature.signed", pack.manifest.name, signature.keyId)
             }
         }
         mc.setScreen(RemoteScriptTrustScreen(mc.screen, serverAddress, views, signatureSummaries, callback))
@@ -64,25 +69,31 @@ object ScriptPackUi {
     }
 }
 
+private fun tr(key: String, vararg args: Any): Component = Component.translatable(key, *args)
+
+private fun trString(key: String, vararg args: Any): String = tr(key, *args).string
+
+private fun ScriptPackScope.localizedName(): String = trString("katton.pack.scope.${serializedName}")
+
 private class RemoteScriptTrustScreen(
     private val parent: Screen?,
     private val serverAddress: String,
     private val packs: List<ScriptPackView>,
     private val signatureSummaries: List<String>,
     private val callback: (Boolean) -> Unit
-) : Screen(Component.literal("Katton Remote Scripts")) {
+) : Screen(tr("katton.screen.remote_scripts")) {
 
     private var decided = false
 
     override fun init() {
         val buttonY = height - 30
         addRenderableWidget(
-            Button.builder(Component.literal("Trust and Run")) {
+            Button.builder(tr("katton.button.trust_and_run")) {
                 decide(true)
             }.bounds(width / 2 - 154, buttonY, 146, 20).build()
         )
         addRenderableWidget(
-            Button.builder(Component.literal("Do Not Run")) {
+            Button.builder(tr("katton.button.do_not_run")) {
                 decide(false)
             }.bounds(width / 2 + 8, buttonY, 146, 20).build()
         )
@@ -124,25 +135,25 @@ private class RemoteScriptTrustScreen(
             }
         }
 
-        line("Katton blocked remote script execution", 0xFFFFD166.toInt())
+        line(trString("katton.remote.blocked"), 0xFFFFD166.toInt())
         y += 2
-        line(trimToWidth("Server: $serverAddress", contentWidth))
-        line("This server sent ${packs.size} Katton script pack(s).")
+        line(trimToWidth(trString("katton.remote.server", serverAddress), contentWidth))
+        line(trString("katton.remote.sent_packs", packs.size))
         y += 3
-        paragraph("Warning: these scripts execute arbitrary JVM code inside your Minecraft client.", 0xFFFF7777.toInt())
-        paragraph("They can access Minecraft internals and may access files, network, or other JVM APIs.", 0xFFFF9A9A.toInt())
-        paragraph("Only trust scripts from servers and modpacks you fully trust.", 0xFFFFC2C2.toInt())
+        paragraph(trString("katton.remote.warning.jvm"), 0xFFFF7777.toInt())
+        paragraph(trString("katton.remote.warning.access"), 0xFFFF9A9A.toInt())
+        paragraph(trString("katton.remote.warning.trust"), 0xFFFFC2C2.toInt())
         y += 4
-        line("Signature status:", 0xFFFFFFFF.toInt())
+        line(trString("katton.remote.signature_status"), 0xFFFFFFFF.toInt())
         val signatureRows = ((panelBottom - y - 42) / 11).coerceIn(1, 4)
         signatureSummaries.take(signatureRows).forEach { summary ->
             line(trimToWidth("- $summary", contentWidth), 0xFFCFCFCF.toInt())
         }
         if (signatureSummaries.size > signatureRows) {
-            line("- ... and ${signatureSummaries.size - signatureRows} more", 0xFFCFCFCF.toInt())
+            line(trString("katton.ui.more", signatureSummaries.size - signatureRows), 0xFFCFCFCF.toInt())
         }
         y += 3
-        line("Packs:", 0xFFFFFFFF.toInt())
+        line(trString("katton.remote.packs"), 0xFFFFFFFF.toInt())
 
         val maxRows = ((panelBottom - y - 4) / 11).coerceAtLeast(0)
         packs.take(maxRows).forEach { pack ->
@@ -150,7 +161,7 @@ private class RemoteScriptTrustScreen(
             line(trimToWidth(label, contentWidth), 0xFFCFCFCF.toInt())
         }
         if (packs.size > maxRows) {
-            line("- ... and ${packs.size - maxRows} more", 0xFFCFCFCF.toInt())
+            line(trString("katton.ui.more", packs.size - maxRows), 0xFFCFCFCF.toInt())
         }
     }
 
@@ -161,7 +172,7 @@ private class RemoteScriptTrustScreen(
         decided = true
         if (!trusted) {
             minecraft.connection?.connection?.disconnect(
-                Component.literal("Katton remote scripts were not trusted by the client.")
+                tr("katton.remote.disconnect.not_trusted")
             )
             minecraft.setScreen(parent)
         } else {
@@ -207,7 +218,7 @@ private class RemoteScriptTrustScreen(
 
 private class ScriptPackManagerScreen(
     private val parent: Screen?
-) : Screen(Component.literal("Katton Script Packs")) {
+) : Screen(tr("katton.screen.script_packs")) {
 
     companion object {
         private const val LIST_MARGIN = 16
@@ -229,19 +240,19 @@ private class ScriptPackManagerScreen(
 
         val buttonY = height - 28
         toggleButton = addRenderableWidget(
-            Button.builder(Component.literal("Enable / Disable")) {
+            Button.builder(tr("katton.button.enable_disable")) {
                 toggleSelectedPack()
             }.bounds(16, buttonY, 120, 20).build()
         )
 
         reloadButton = addRenderableWidget(
-            Button.builder(Component.literal("Reload")) {
+            Button.builder(tr("katton.button.reload")) {
                 triggerReload()
             }.bounds(146, buttonY, 90, 20).build()
         )
 
         addRenderableWidget(
-            Button.builder(Component.literal("Close")) {
+            Button.builder(tr("katton.button.close")) {
                 onClose()
             }.bounds(width - 96, buttonY, 80, 20).build()
         )
@@ -293,9 +304,9 @@ private class ScriptPackManagerScreen(
                 graphics.fill(listLeft, rowTop, listLeft + listWidth - 3, rowBottom, 0x664C8C2B)
             }
 
-            val status = if (pack.enabled) "ON" else "OFF"
-            val lockText = if (pack.locked) " [Locked]" else ""
-            val label = "[$status] ${pack.scope.displayName} - ${pack.name}$lockText"
+            val status = if (pack.enabled) trString("katton.pack.status.on") else trString("katton.pack.status.off")
+            val lockText = if (pack.locked) trString("katton.pack.locked_suffix") else ""
+            val label = trString("katton.pack.row", status, pack.scope.localizedName(), pack.name, lockText)
             graphics.text(font, label, listLeft + 4, rowTop + 5, 0xFFE0E0E0.toInt(), false)
         }
 
@@ -312,7 +323,7 @@ private class ScriptPackManagerScreen(
 
     private fun renderDetails(graphics: GuiGraphicsExtractor, x: Int, y: Int) {
         if (selectedIndex !in packs.indices) {
-            graphics.text(font, "Select a script pack to see details", x, y, 0xFFB0B0B0.toInt(), false)
+            graphics.text(font, trString("katton.pack.details.select"), x, y, 0xFFB0B0B0.toInt(), false)
             return
         }
 
@@ -324,20 +335,20 @@ private class ScriptPackManagerScreen(
             lineY += 12
         }
 
-        line("Name: ${pack.name}")
-        line("Id: ${pack.id}")
-        line("Version: ${pack.version}")
-        line("Scope: ${pack.scope.displayName}")
-        line("Enabled: ${if (pack.enabled) "Yes" else "No"}")
-        line("Locked: ${if (pack.locked) "Yes" else "No"}")
+        line(trString("katton.pack.details.name", pack.name))
+        line(trString("katton.pack.details.id", pack.id))
+        line(trString("katton.pack.details.version", pack.version))
+        line(trString("katton.pack.details.scope", pack.scope.localizedName()))
+        line(trString("katton.pack.details.enabled", if (pack.enabled) trString("katton.common.yes") else trString("katton.common.no")))
+        line(trString("katton.pack.details.locked", if (pack.locked) trString("katton.common.yes") else trString("katton.common.no")))
 
         if (pack.authors.isNotEmpty()) {
-            line("Authors: ${pack.authors.joinToString(", ")}")
+            line(trString("katton.pack.details.authors", pack.authors.joinToString(", ")))
         }
 
-        line("Hash: ${pack.hash.take(16)}...")
+        line(trString("katton.pack.details.hash", pack.hash.take(16)))
         if (pack.description.isNotBlank()) {
-            line("Description:")
+            line(trString("katton.pack.details.description"))
             line(pack.description, 0xFFCFCFCF.toInt())
         }
     }
@@ -439,9 +450,9 @@ private class ScriptPackManagerScreen(
                 val clientOk = ScriptReloadManager.reloadClientScriptsAsync()
                 mc.execute {
                     val message = if (serverOk && clientOk) {
-                        Component.literal("[Katton] Script reload started.")
+                        tr("commands.katton.reload.started")
                     } else {
-                        Component.literal("[Katton] Reload failed. Check logs for details.")
+                        tr("commands.katton.reload.failed.logs")
                     }
                     mc.player?.sendSystemMessage(message)
                     mc.gui.setOverlayMessage(message, false)
@@ -455,12 +466,12 @@ private class ScriptPackManagerScreen(
 
         val clientOk = ScriptReloadManager.reloadClientScriptsAsync()
         val message = if (clientOk) {
-            Component.literal("[Katton] Script reload started.")
+            tr("commands.katton.reload.started")
         } else {
-            Component.literal("[Katton] Reload already in progress.")
+            tr("commands.katton.reload.in_progress")
         }
         mc.player?.sendSystemMessage(message)
-        mc.gui?.setOverlayMessage(message, false)
+        mc.gui.setOverlayMessage(message, false)
         reloadQueued = false
         refreshData()
         updateButtons()

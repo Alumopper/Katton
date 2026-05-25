@@ -2,18 +2,15 @@ package top.katton.paper;
 
 import io.papermc.paper.command.brigadier.BasicCommand;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
-import net.kyori.adventure.text.Component;
 import org.bukkit.command.CommandSender;
 import org.jspecify.annotations.NonNull;
 import top.katton.Katton;
 import top.katton.command.ScriptCommand;
-import top.katton.registry.KattonRegistry;
 
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 /**
  * Implements the /katton command for Paper, providing subcommands for checking status and reloading scripts.
@@ -31,46 +28,44 @@ public class KattonPaperCommand implements BasicCommand {
         CommandSender sender = source.getSender();
 
         if (args.length == 0 || "help".equalsIgnoreCase(args[0])) {
-            sender.sendMessage(Component.text(
-                "[Katton] /katton help | status | reload"
-            ));
+            sender.sendMessage(PaperMessages.tr(sender, "commands.katton.paper.help"));
             return;
         }
 
         String sub = args[0].toLowerCase();
         switch (sub) {
             case "status" -> {
-                sender.sendMessage(Component.text(
-                    "[Katton] state=" + Katton.globalState +
-                    ", serverBound=" + (Katton.server != null)
+                sender.sendMessage(PaperMessages.tr(
+                    sender,
+                    "commands.katton.paper.status",
+                    Katton.globalState,
+                    Katton.server != null
                 ));
             }
             case "reload" -> {
                 if (!sender.hasPermission("katton.admin") && !sender.isOp()) {
-                    sender.sendMessage(Component.text("[Katton] You need katton.admin permission to reload."));
+                    sender.sendMessage(PaperMessages.tr(sender, "commands.katton.paper.reload.no_permission"));
                     return;
                 }
                 if (Katton.server == null) {
-                    sender.sendMessage(Component.text("[Katton] Server not ready."));
+                    sender.sendMessage(PaperMessages.tr(sender, "commands.katton.paper.server_not_ready"));
                     return;
                 }
                 boolean ok = ScriptCommand.reloadScript(Katton.server);
                 if (ok) {
-                    sender.sendMessage(Component.text("[Katton] Reload started."));
+                    sender.sendMessage(PaperMessages.tr(sender, "commands.katton.reload.started"));
                 } else {
-                    sender.sendMessage(Component.text("[Katton] Failed to reload script packs."));
+                    sender.sendMessage(PaperMessages.tr(sender, "commands.katton.reload.failed"));
                 }
             }
-            default -> sender.sendMessage(Component.text(
-                "[Katton] Unknown subcommand. Try /katton help."
-            ));
+            default -> sender.sendMessage(PaperMessages.tr(sender, "commands.katton.paper.unknown_subcommand"));
         }
     }
 
     @Override
     public @NonNull Collection<String> suggest(@NonNull CommandSourceStack source, String[] args) {
         if (args.length <= 1) {
-            List<String> base = new ArrayList<>(List.of("help", "status", "registry", "reload", "debug"));
+            List<String> base = new ArrayList<>(List.of("help", "status", "reload"));
             // Filter by typed prefix
             String prefix = args.length == 0 ? "" : args[0].toLowerCase();
             return base.stream()

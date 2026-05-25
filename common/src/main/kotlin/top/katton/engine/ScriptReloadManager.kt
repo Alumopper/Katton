@@ -57,48 +57,48 @@ object ScriptReloadManager {
         }
 
         val tracker = ReloadProgressTracker(17)
-        tracker.begin("Reloading client scripts")
+        tracker.begin("katton.reload.client.begin")
 
         val preserveIntegratedServerState = Katton.server != null && !Katton.server!!.isDedicatedServer
         if (!preserveIntegratedServerState) {
             Event.clearHandlersByScope(ScriptPackScope.WORLD)
-            tracker.step("Clearing world handlers")
+            tracker.step("katton.reload.client.clear_world_handlers")
             InjectionManager.beginReload()
-            tracker.step("Resetting injections")
+            tracker.step("katton.reload.common.reset_injections")
         } else {
-            tracker.step("Preserving server handlers")
+            tracker.step("katton.reload.client.preserve_server_handlers")
         }
         clearClientRenderers()
-        tracker.step("Clearing client renderers")
+        tracker.step("katton.reload.client.clear_renderers")
         clearClientPostEffects()
-        tracker.step("Clearing client post effects")
+        tracker.step("katton.reload.client.clear_post_effects")
         clearItemModifications()
-        tracker.step("Clearing item modifications")
+        tracker.step("katton.reload.common.clear_item_modifications")
         KattonRegistry.ENTITY_RENDERERS.beginReload()
-        tracker.step("Resetting entity renderers")
+        tracker.step("katton.reload.common.reset_entity_renderers")
 
         ScriptPackManager.setGameDirectory(Katton.gameDirectory)
-        tracker.step("Setting game directory")
+        tracker.step("katton.reload.common.set_game_directory")
         if (Katton.server != null) {
             ScriptPackManager.setWorldDirectory(Katton.server!!.getWorldPath(LevelResource.ROOT))
             ensureDirectory(ScriptPackManager.getWorldScriptDirectory())
         } else {
             ScriptPackManager.clearWorldDirectory()
         }
-        tracker.step("Setting world directory")
+        tracker.step("katton.reload.common.set_world_directory")
         ScriptPackManager.refreshWorldPacks()
-        tracker.step("Scanning world packs")
+        tracker.step("katton.reload.common.scan_world_packs")
 
         val worldOnlyPacks = ScriptPackManager.collectExecutableWorldPacks()
-        tracker.step("Collecting world packs")
+        tracker.step("katton.reload.common.collect_world_packs")
         val mergedPacks = mutableListOf<ScriptPack>().apply {
             addAll(worldOnlyPacks)
             addAll(ServerPackCacheManager.collectExecutablePacks())
         }
-        tracker.step("Merging server cache packs")
+        tracker.step("katton.reload.client.merge_server_cache_packs")
         ScriptEngine.compileAndExecuteAll(mergedPacks, ScriptEnvironment.CLIENT)
-        tracker.step("Compiling & executing scripts")
-        tracker.finish("Client scripts reloaded")
+        tracker.step("katton.reload.common.compile_execute_scripts")
+        tracker.finish("katton.reload.client.finished")
         return true
     }
 
@@ -116,7 +116,7 @@ object ScriptReloadManager {
             } catch (t: Throwable) {
                 future.completeExceptionally(t)
                 logger.error("Failed to reload client scripts asynchronously", t)
-                ReloadProgressState.finish("Client script reload failed")
+                ReloadProgressState.finish("katton.reload.client.failed")
             } finally {
                 clientReloadRunning.set(false)
                 // Keep clientReloadFuture set so awaitClientReloadCompletion
@@ -167,57 +167,57 @@ object ScriptReloadManager {
         }
 
         val tracker = ReloadProgressTracker(22)
-        tracker.begin("Reloading server scripts")
+        tracker.begin("katton.reload.server.begin")
 
         ScriptPackManager.setGameDirectory(Katton.gameDirectory)
-        tracker.step("Setting game directory")
+        tracker.step("katton.reload.common.set_game_directory")
         ScriptPackManager.setWorldDirectory(server.getWorldPath(LevelResource.ROOT))
-        tracker.step("Setting world directory")
+        tracker.step("katton.reload.common.set_world_directory")
         ensureDirectory(ScriptPackManager.getWorldScriptDirectory())
         ScriptPackManager.refreshWorldPacks()
-        tracker.step("Scanning world packs")
+        tracker.step("katton.reload.common.scan_world_packs")
 
         ScriptCommandRegistry.beginReload(server)
-        tracker.step("Resetting command registry")
+        tracker.step("katton.reload.server.reset_command_registry")
         if (Katton.registrationEnabled) {
             KattonRegistry.ITEMS.beginReload()
-            tracker.step("Resetting item registry")
+            tracker.step("katton.reload.server.reset_item_registry")
             KattonRegistry.EFFECTS.beginReload()
             KattonRegistry.BLOCKS.beginReload()
-            tracker.step("Resetting effect/block registries")
+            tracker.step("katton.reload.server.reset_effect_block_registries")
             KattonRegistry.ENTITY_TYPES.beginReload()
-            tracker.step("Resetting entity type registry")
+            tracker.step("katton.reload.server.reset_entity_type_registry")
             KattonRegistry.SOUND_EVENTS.beginReload()
             KattonRegistry.PARTICLE_TYPES.beginReload()
-            tracker.step("Resetting sound/particle registries")
+            tracker.step("katton.reload.server.reset_sound_particle_registries")
             KattonRegistry.BLOCK_ENTITY_TYPES.beginReload()
-            tracker.step("Resetting block entity type registry")
+            tracker.step("katton.reload.server.reset_block_entity_type_registry")
             KattonRegistry.CREATIVE_TABS.beginReload()
             KattonRegistry.DATA_COMPONENT_TYPES.beginReload()
-            tracker.step("Resetting creative tabs & components")
+            tracker.step("katton.reload.server.reset_creative_tabs_components")
         }
         if (Katton.hasClient) {
             KattonRegistry.ENTITY_RENDERERS.beginReload()
-            tracker.step("Resetting entity renderers")
+            tracker.step("katton.reload.common.reset_entity_renderers")
         }
         ServerDatapackManager.beginReload()
-        tracker.step("Resetting datapack manager")
+        tracker.step("katton.reload.server.reset_datapack_manager")
         clearItemModifications()
-        tracker.step("Clearing item modifications")
+        tracker.step("katton.reload.common.clear_item_modifications")
         Event.clearHandlersByScope(ScriptPackScope.WORLD)
-        tracker.step("Clearing event handlers")
+        tracker.step("katton.reload.server.clear_event_handlers")
         clearManagedByScope(ScriptPackScope.WORLD)
-        tracker.step("Clearing managed event listeners")
+        tracker.step("katton.reload.server.clear_managed_event_listeners")
         InjectionManager.beginReload()
-        tracker.step("Resetting injections")
+        tracker.step("katton.reload.common.reset_injections")
 
         val worldOnlyPacks = ScriptPackManager.collectExecutableWorldPacks()
-        tracker.step("Collecting world packs")
+        tracker.step("katton.reload.common.collect_world_packs")
         ScriptEngine.compileAndExecuteAll(worldOnlyPacks, ScriptEnvironment.SERVER)
-        tracker.step("Compiling & executing scripts")
+        tracker.step("katton.reload.common.compile_execute_scripts")
         ServerDatapackManager.apply(server)
-        tracker.step("Applying datapacks")
-        tracker.finish("Server scripts reloaded")
+        tracker.step("katton.reload.server.apply_datapacks")
+        tracker.finish("katton.reload.server.finished")
         return true
     }
 
@@ -245,71 +245,71 @@ object ScriptReloadManager {
         // (server command thread) returns immediately without blocking.
         serverReloadExecutor.execute {
             val tracker = ReloadProgressTracker(22)
-            tracker.begin("Reloading server scripts")
+            tracker.begin("katton.reload.server.begin")
 
             try {
                 // Fast setup
                 ScriptPackManager.setGameDirectory(Katton.gameDirectory)
-                tracker.step("Setting game directory")
+                tracker.step("katton.reload.common.set_game_directory")
                 ScriptPackManager.setWorldDirectory(server.getWorldPath(LevelResource.ROOT))
-                tracker.step("Setting world directory")
+                tracker.step("katton.reload.common.set_world_directory")
                 ensureDirectory(ScriptPackManager.getWorldScriptDirectory())
                 ScriptPackManager.refreshWorldPacks()
-                tracker.step("Scanning world packs")
+                tracker.step("katton.reload.common.scan_world_packs")
 
                 ScriptCommandRegistry.beginReload(server)
-                tracker.step("Resetting command registry")
+                tracker.step("katton.reload.server.reset_command_registry")
                 if (Katton.registrationEnabled) {
                     KattonRegistry.ITEMS.beginReload()
-                    tracker.step("Resetting item registry")
+                    tracker.step("katton.reload.server.reset_item_registry")
                     KattonRegistry.EFFECTS.beginReload()
                     KattonRegistry.BLOCKS.beginReload()
-                    tracker.step("Resetting effect/block registries")
+                    tracker.step("katton.reload.server.reset_effect_block_registries")
                     KattonRegistry.ENTITY_TYPES.beginReload()
-                    tracker.step("Resetting entity type registry")
+                    tracker.step("katton.reload.server.reset_entity_type_registry")
                     KattonRegistry.SOUND_EVENTS.beginReload()
                     KattonRegistry.PARTICLE_TYPES.beginReload()
-                    tracker.step("Resetting sound/particle registries")
+                    tracker.step("katton.reload.server.reset_sound_particle_registries")
                     KattonRegistry.BLOCK_ENTITY_TYPES.beginReload()
-                    tracker.step("Resetting block entity type registry")
+                    tracker.step("katton.reload.server.reset_block_entity_type_registry")
                     KattonRegistry.CREATIVE_TABS.beginReload()
                     KattonRegistry.DATA_COMPONENT_TYPES.beginReload()
-                    tracker.step("Resetting creative tabs & components")
+                    tracker.step("katton.reload.server.reset_creative_tabs_components")
                 }
                 if (Katton.hasClient) {
                     KattonRegistry.ENTITY_RENDERERS.beginReload()
-                    tracker.step("Resetting entity renderers")
+                    tracker.step("katton.reload.common.reset_entity_renderers")
                 }
                 ServerDatapackManager.beginReload()
-                tracker.step("Resetting datapack manager")
+                tracker.step("katton.reload.server.reset_datapack_manager")
                 clearItemModifications()
-                tracker.step("Clearing item modifications")
+                tracker.step("katton.reload.common.clear_item_modifications")
                 Event.clearHandlersByScope(ScriptPackScope.WORLD)
-                tracker.step("Clearing event handlers")
+                tracker.step("katton.reload.server.clear_event_handlers")
                 clearManagedByScope(ScriptPackScope.WORLD)
-                tracker.step("Clearing managed event listeners")
+                tracker.step("katton.reload.server.clear_managed_event_listeners")
                 InjectionManager.beginReload()
-                tracker.step("Resetting injections")
+                tracker.step("katton.reload.common.reset_injections")
 
                 val worldOnlyPacks = ScriptPackManager.collectExecutableWorldPacks()
-                tracker.step("Collecting world packs")
+                tracker.step("katton.reload.common.collect_world_packs")
 
                 // Heavy compilation + execution
                 ScriptEngine.compileAndExecuteAll(worldOnlyPacks, ScriptEnvironment.SERVER)
-                tracker.step("Compiling & executing scripts")
+                tracker.step("katton.reload.common.compile_execute_scripts")
 
                 // Post-compilation must run on server thread (registry mutations).
                 val reloadFuture = future
                 server.execute {
                     try {
                         ServerDatapackManager.apply(server)
-                        tracker.step("Applying datapacks")
-                        tracker.finish("Server scripts reloaded")
+                        tracker.step("katton.reload.server.apply_datapacks")
+                        tracker.finish("katton.reload.server.finished")
                         reloadFuture.complete(null)
                         onComplete(true)
                     } catch (t: Throwable) {
                         logger.error("Failed to apply datapacks after async server reload", t)
-                        ReloadProgressState.finish("Server script reload failed")
+                        ReloadProgressState.finish("katton.reload.server.failed")
                         reloadFuture.completeExceptionally(t)
                         onComplete(false)
                     } finally {
@@ -320,7 +320,7 @@ object ScriptReloadManager {
                 logger.error("Failed to compile server scripts asynchronously", t)
                 val reloadFuture = future
                 server.execute {
-                    ReloadProgressState.finish("Server script reload failed")
+                    ReloadProgressState.finish("katton.reload.server.failed")
                     reloadFuture.completeExceptionally(t)
                     onComplete(false)
                     serverReloadRunning.set(false)

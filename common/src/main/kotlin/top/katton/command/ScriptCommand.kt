@@ -48,6 +48,19 @@ object ScriptCommand {
         SharedSuggestionProvider.suggest(listOf("still", "spin", "float", "pulse", "showcase"), builder)
     }
 
+    private fun tr(key: String, vararg args: Any): Component = Component.translatable(key, *args)
+
+    private fun joinComponents(components: List<Component>, separator: String): Component {
+        val joined = Component.empty()
+        components.forEachIndexed { index, component ->
+            if (index > 0) {
+                joined.append(Component.literal(separator))
+            }
+            joined.append(component)
+        }
+        return joined
+    }
+
     fun register(dispatcher: CommandDispatcher<CommandSourceStack>) {
         dispatcher.register(
             literal("katton")
@@ -66,8 +79,11 @@ object ScriptCommand {
                             val source = it.source
                             source.sendSuccess(
                                 {
-                                    Component.literal(
-                                        "[Katton] state=${Katton.globalState}, serverBound=${Katton.server != null}, clientReloadRunning=${ScriptReloadManager.isClientReloadRunning()}"
+                                    tr(
+                                        "commands.katton.status",
+                                        Katton.globalState,
+                                        Katton.server != null,
+                                        ScriptReloadManager.isClientReloadRunning()
                                     )
                                 },
                                 false
@@ -80,10 +96,19 @@ object ScriptCommand {
                         .executes {
                             val source = it.source
                             val rows = KattonRegistry.registryHealthSnapshot()
-                            val summary = rows.joinToString(" | ") { row ->
-                                "${row.key}: entries=${row.kattonEntries}, managed=${row.managedTracked}, stale=${row.staleRetained}"
-                            }
-                            source.sendSuccess({ Component.literal("[Katton] $summary") }, false)
+                            val summary = joinComponents(
+                                rows.map { row ->
+                                    tr(
+                                        "commands.katton.registry.row",
+                                        row.key,
+                                        row.kattonEntries,
+                                        row.managedTracked,
+                                        row.staleRetained
+                                    )
+                                },
+                                " | "
+                            )
+                            source.sendSuccess({ tr("commands.katton.registry.summary", summary) }, false)
                             1
                         }
                         .then(
@@ -92,11 +117,11 @@ object ScriptCommand {
                                     val source = it.source
                                     val staleRows = KattonRegistry.registryHealthSnapshot().filter { it.staleRetained > 0 }
                                     if (staleRows.isEmpty()) {
-                                        source.sendSuccess({ Component.literal("[Katton] No stale retained registry entries.") }, false)
+                                        source.sendSuccess({ tr("commands.katton.registry.stale.none") }, false)
                                         return@executes 1
                                     }
                                     val text = staleRows.joinToString(" | ") { "${it.key}=${it.staleRetained}" }
-                                    source.sendSuccess({ Component.literal("[Katton] Stale retained entries: $text") }, false)
+                                    source.sendSuccess({ tr("commands.katton.registry.stale.entries", text) }, false)
                                     1
                                 }
                         )
@@ -107,10 +132,10 @@ object ScriptCommand {
                         .executes {
                             val source = it.source
                             if (reloadScript(source.server)) {
-                                source.sendSuccess({ Component.literal("[Katton] Reload started.") }, true)
+                                source.sendSuccess({ tr("commands.katton.reload.started") }, true)
                                 1
                             } else {
-                                source.sendFailure(Component.literal("[Katton] Failed to reload script packs."))
+                                source.sendFailure(tr("commands.katton.reload.failed"))
                                 0
                             }
                         }
@@ -173,7 +198,7 @@ object ScriptCommand {
                                             val source = it.source
                                             val radius = DoubleArgumentType.getDouble(it, "radius")
                                             val removed = clearItemRenderMarkersInRange(source.level.dimension(), source.position, radius)
-                                            source.sendSuccess({ Component.literal("[Katton] Removed $removed item render marker(s) within $radius blocks.") }, true)
+                                            source.sendSuccess({ tr("commands.katton.itemrender.removed", removed, radius) }, true)
                                             1
                                         }
                                 )
@@ -187,18 +212,22 @@ object ScriptCommand {
                                     val source = it.source
                                     val packIds = KattonConfigManager.knownPackIds()
                                     if (packIds.isEmpty()) {
-                                        source.sendSuccess({ Component.literal("[Katton] No configs loaded.") }, false)
+                                        source.sendSuccess({ tr("commands.katton.config.none") }, false)
                                         return@executes 1
                                     }
-                                    val lines = packIds.sorted().joinToString("\n") { packId ->
+                                    val lines = packIds.sorted().map { packId ->
                                         val entries = KattonConfigManager.all(packId)
                                         if (entries.isEmpty()) {
-                                            "  [$packId] (empty)"
+                                            tr("commands.katton.config.pack_empty_line", packId)
                                         } else {
-                                            "  [$packId] " + entries.entries.joinToString(", ") { (k, v) -> "$k=$v" }
+                                            tr(
+                                                "commands.katton.config.pack_line",
+                                                packId,
+                                                entries.entries.joinToString(", ") { (k, v) -> "$k=$v" }
+                                            )
                                         }
                                     }
-                                    source.sendSuccess({ Component.literal("[Katton] Configs:\n$lines") }, false)
+                                    source.sendSuccess({ tr("commands.katton.config.list", joinComponents(lines, "\n")) }, false)
                                     1
                                 }
                                 .then(
@@ -209,10 +238,10 @@ object ScriptCommand {
                                             val packId = StringArgumentType.getString(it, "pack")
                                             val entries = KattonConfigManager.all(packId)
                                             if (entries.isEmpty()) {
-                                                source.sendSuccess({ Component.literal("[Katton] [$packId] (empty)") }, false)
+                                                source.sendSuccess({ tr("commands.katton.config.pack_empty", packId) }, false)
                                             } else {
                                                 val text = entries.entries.joinToString(" | ") { (k, v) -> "$k=$v" }
-                                                source.sendSuccess({ Component.literal("[Katton] [$packId] $text") }, false)
+                                                source.sendSuccess({ tr("commands.katton.config.pack_values", packId, text) }, false)
                                             }
                                             1
                                         }
@@ -232,10 +261,10 @@ object ScriptCommand {
                                                     val key = StringArgumentType.getString(it, "key")
                                                     val value = KattonConfigManager.get(packId, key)
                                                     if (value != null) {
-                                                        source.sendSuccess({ Component.literal("[Katton] [$packId] $key = $value") }, false)
+                                                        source.sendSuccess({ tr("commands.katton.config.value", packId, key, value) }, false)
                                                         1
                                                     } else {
-                                                        source.sendFailure(Component.literal("[Katton] Key '$key' not found in pack '$packId'"))
+                                                        source.sendFailure(tr("commands.katton.config.key_not_found", key, packId))
                                                         0
                                                     }
                                                 }
@@ -259,9 +288,9 @@ object ScriptCommand {
                                                             val rawValue = StringArgumentType.getString(it, "value")
                                                             val value = parseConfigValue(rawValue)
                                                             if (KattonConfigManager.set(packId, key, value)) {
-                                                                source.sendSuccess({ Component.literal("[Katton] [$packId] $key = $value") }, true)
+                                                                source.sendSuccess({ tr("commands.katton.config.value", packId, key, value) }, true)
                                                             } else {
-                                                                source.sendFailure(Component.literal("[Katton] Failed to set '$key' in pack '$packId'"))
+                                                                source.sendFailure(tr("commands.katton.config.set_failed", key, packId))
                                                             }
                                                             1
                                                         }
@@ -283,9 +312,9 @@ object ScriptCommand {
                                                     val packId = StringArgumentType.getString(it, "pack")
                                                     val key = StringArgumentType.getString(it, "key")
                                                     if (KattonConfigManager.remove(packId, key)) {
-                                                        source.sendSuccess({ Component.literal("[Katton] [$packId] removed '$key'") }, true)
+                                                        source.sendSuccess({ tr("commands.katton.config.removed", packId, key) }, true)
                                                     } else {
-                                                        source.sendFailure(Component.literal("[Katton] Failed to remove '$key' in pack '$packId'"))
+                                                        source.sendFailure(tr("commands.katton.config.remove_failed", key, packId))
                                                     }
                                                     1
                                                 }
@@ -299,14 +328,14 @@ object ScriptCommand {
                         .then(
                             literal("registryLogging")
                                 .executes {
-                                    it.source.sendSuccess({ Component.literal("[Katton] debugRegistryLogging=${Katton.debugRegistryLogging}") }, false)
+                                    it.source.sendSuccess({ tr("commands.katton.debug.registry_logging", Katton.debugRegistryLogging) }, false)
                                     1
                                 }
                                 .then(
                                     literal("on")
                                         .executes {
                                             Katton.debugRegistryLogging = true
-                                            it.source.sendSuccess({ Component.literal("[Katton] debugRegistryLogging=true") }, true)
+                                            it.source.sendSuccess({ tr("commands.katton.debug.registry_logging", true) }, true)
                                             1
                                         }
                                 )
@@ -314,7 +343,7 @@ object ScriptCommand {
                                     literal("off")
                                         .executes {
                                             Katton.debugRegistryLogging = false
-                                            it.source.sendSuccess({ Component.literal("[Katton] debugRegistryLogging=false") }, true)
+                                            it.source.sendSuccess({ tr("commands.katton.debug.registry_logging", false) }, true)
                                             1
                                         }
                                 )
@@ -324,7 +353,7 @@ object ScriptCommand {
     }
 
     private fun sendHelp(source: CommandSourceStack): Int {
-        source.sendSuccess({ Component.literal("[Katton] /katton help | status | registry | registry stale | reload | itemrender spawn <item> [still|spin|float|pulse|showcase] [scale] [lifetimeTicks] | itemrender clear <radius> | debug registryLogging [on|off] | config ...") }, false)
+        source.sendSuccess({ tr("commands.katton.help") }, false)
         return 1
     }
 
@@ -337,13 +366,13 @@ object ScriptCommand {
     ): Int {
         val item = BuiltInRegistries.ITEM.getOptional(itemId).orElse(null)
         if (item == null) {
-            source.sendFailure(Component.literal("[Katton] Unknown item: $itemId"))
+            source.sendFailure(tr("commands.katton.itemrender.unknown_item", itemId))
             return 0
         }
 
         val animations = itemRenderPreset(presetName)
         if (animations == null) {
-            source.sendFailure(Component.literal("[Katton] Unknown itemrender preset: $presetName"))
+            source.sendFailure(tr("commands.katton.itemrender.unknown_preset", presetName))
             return 0
         }
 
@@ -361,7 +390,7 @@ object ScriptCommand {
             playingAnimationID = animations.keys.toList()
         )
         val markerId = showItemRenderMarker(marker)
-        source.sendSuccess({ Component.literal("[Katton] Spawned item render marker $markerId at ${formatVec3(pos)}.") }, true)
+        source.sendSuccess({ tr("commands.katton.itemrender.spawned", markerId, formatVec3(pos)) }, true)
         return 1
     }
 

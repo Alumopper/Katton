@@ -29,7 +29,7 @@ object ReloadProgressState {
         state.set(
             ReloadProgressSnapshot(
                 active = true,
-                message = message,
+                message = localizedMessage(message),
                 progress = progress.coerceIn(0f, 1f),
                 visibleUntilMillis = now + 5000L
             )
@@ -42,7 +42,7 @@ object ReloadProgressState {
         state.set(
             ReloadProgressSnapshot(
                 active = true,
-                message = message,
+                message = localizedMessage(message),
                 progress = progress.coerceIn(0f, 1f),
                 visibleUntilMillis = now + 5000L
             )
@@ -50,12 +50,12 @@ object ReloadProgressState {
     }
 
     @JvmStatic
-    fun finish(message: String = "Done") {
+    fun finish(message: String = "katton.reload.done") {
         val now = System.currentTimeMillis()
         state.set(
             ReloadProgressSnapshot(
                 active = false,
-                message = message,
+                message = localizedMessage(message),
                 progress = 1f,
                 visibleUntilMillis = now + 1500L
             )
@@ -76,6 +76,8 @@ object ReloadProgressState {
 
     @JvmStatic
     fun snapshot(): ReloadProgressSnapshot = state.get()
+
+    private fun localizedMessage(message: String): String = Component.translatable(message).string
 }
 
 object ReloadProgressOverlay {
@@ -116,7 +118,7 @@ object ReloadProgressOverlay {
         }
 
         val percent = (snapshot.progress.coerceIn(0f, 1f) * 100f).roundToInt()
-        drawText(Component.literal("${snapshot.message} (${percent}%)"), left + 8, top + 7, 0xFFFFFFFF.toInt())
+        drawText(Component.translatable("katton.reload.overlay.message", snapshot.message, percent), left + 8, top + 7, 0xFFFFFFFF.toInt())
     }
 
     @JvmStatic
