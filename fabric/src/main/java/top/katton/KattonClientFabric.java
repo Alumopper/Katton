@@ -9,6 +9,7 @@ import net.minecraft.client.KeyMapping;
 import net.minecraft.resources.Identifier;
 import org.lwjgl.glfw.GLFW;
 import top.katton.client.ClientItemRenderMarkerManager;
+import top.katton.client.ClientPostEffectManager;
 import top.katton.client.ScriptPackUi;
 import top.katton.network.ClientNetworkingFabric;
 import top.katton.network.Networking;
@@ -56,6 +57,7 @@ public class KattonClientFabric implements ClientModInitializer {
 			hasJoinedSinceDisconnect = false;
 			Katton.clearWorldAndServerEvents();
 			ClientItemRenderMarkerManager.clear();
+			ClientPostEffectManager.INSTANCE.clearAll();
 			ServerPackCacheManager.INSTANCE.reset();
 		});
 

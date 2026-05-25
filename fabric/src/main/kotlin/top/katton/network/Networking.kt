@@ -42,5 +42,9 @@ object Networking {
         if(CLIENTBOUND_PLAY.get(ClientItemRenderMarkerPacket.TYPE.id) == null){
             CLIENTBOUND_PLAY.register(ClientItemRenderMarkerPacket.TYPE, ClientItemRenderMarkerPacket.STREAM_CODEC)
         }
+
+        if(CLIENTBOUND_PLAY.get(ClientPostEffectPacket.TYPE.id) == null){
+            CLIENTBOUND_PLAY.register(ClientPostEffectPacket.TYPE, ClientPostEffectPacket.STREAM_CODEC)
+        }
     }
 }

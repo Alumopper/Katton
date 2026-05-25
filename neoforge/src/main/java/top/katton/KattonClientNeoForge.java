@@ -14,6 +14,7 @@ import net.neoforged.neoforge.client.event.RegisterKeyMappingsEvent;
 import net.neoforged.neoforge.common.NeoForge;
 import org.lwjgl.glfw.GLFW;
 import top.katton.client.ClientItemRenderMarkerManager;
+import top.katton.client.ClientPostEffectManager;
 import top.katton.client.ScriptPackUi;
 import top.katton.engine.ScriptReloadManager;
 import top.katton.pack.ServerPackCacheManager;
@@ -80,6 +81,7 @@ public class KattonClientNeoForge {
     private static void onDisconnect(ClientPlayerNetworkEvent.LoggingOut event) {
         Katton.clearWorldAndServerEvents();
         ClientItemRenderMarkerManager.clear();
+        ClientPostEffectManager.INSTANCE.clearAll();
         ServerPackCacheManager.INSTANCE.reset();
     }
 

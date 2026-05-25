@@ -34,7 +34,8 @@
     "LevelLoadingScreenMixin",
     "LevelRendererMixin",
     "LoadingOverlayMixin",
-    "RegistryDataCollectorMixin"
+    "RegistryDataCollectorMixin",
+    "ShaderManagerMixin"
   ],
   "injectors": {
     "defaultRequire": 1

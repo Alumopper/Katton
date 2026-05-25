@@ -3,6 +3,7 @@ package top.katton.network
 import net.fabricmc.fabric.api.client.networking.v1.ClientConfigurationNetworking
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking
 import top.katton.client.ClientItemRenderMarkerManager
+import top.katton.client.ClientPostEffectManager
 import top.katton.pack.ServerPackCacheManager
 
 /**
@@ -57,6 +58,12 @@ object ClientNetworkingFabric {
         ClientPlayNetworking.registerGlobalReceiver(ClientItemRenderMarkerPacket.TYPE) { packet, context ->
             context.client().execute {
                 ClientItemRenderMarkerManager.handlePacket(packet)
+            }
+        }
+
+        ClientPlayNetworking.registerGlobalReceiver(ClientPostEffectPacket.TYPE) { packet, context ->
+            context.client().execute {
+                ClientPostEffectManager.handlePacket(packet)
             }
         }
     }

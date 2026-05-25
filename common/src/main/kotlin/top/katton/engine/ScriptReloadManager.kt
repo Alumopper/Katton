@@ -3,6 +3,7 @@ package top.katton.engine
 import net.minecraft.server.MinecraftServer
 import net.minecraft.world.level.storage.LevelResource
 import top.katton.Katton
+import top.katton.api.clearClientPostEffects
 import top.katton.api.clearClientRenderers
 import top.katton.api.mod.clearItemModifications
 import top.katton.api.event.managed.clearManagedByScope
@@ -55,7 +56,7 @@ object ScriptReloadManager {
             return true
         }
 
-        val tracker = ReloadProgressTracker(16)
+        val tracker = ReloadProgressTracker(17)
         tracker.begin("Reloading client scripts")
 
         val preserveIntegratedServerState = Katton.server != null && !Katton.server!!.isDedicatedServer
@@ -69,6 +70,8 @@ object ScriptReloadManager {
         }
         clearClientRenderers()
         tracker.step("Clearing client renderers")
+        clearClientPostEffects()
+        tracker.step("Clearing client post effects")
         clearItemModifications()
         tracker.step("Clearing item modifications")
         KattonRegistry.ENTITY_RENDERERS.beginReload()

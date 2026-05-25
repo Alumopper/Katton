@@ -78,6 +78,12 @@ object ServerNetworkingNeoForge {
                 handleClientItemRenderMarkerPacket(packet)
             }
         }
+
+        registrar.playToClient(ClientPostEffectPacket.TYPE, ClientPostEffectPacket.STREAM_CODEC) { packet, context ->
+            context.enqueueWork {
+                handleClientPostEffectPacket(packet)
+            }
+        }
     }
 
     private fun handleClientItemRenderMarkerPacket(packet: ClientItemRenderMarkerPacket) {
@@ -87,6 +93,16 @@ object ServerNetworkingNeoForge {
             managerClass.getMethod("handlePacket", ClientItemRenderMarkerPacket::class.java).invoke(instance, packet)
         }.onFailure {
             LOGGER.warn("Failed to handle client item render marker packet", it)
+        }
+    }
+
+    private fun handleClientPostEffectPacket(packet: ClientPostEffectPacket) {
+        runCatching {
+            val managerClass = Class.forName("top.katton.client.ClientPostEffectManager")
+            val instance = managerClass.getField("INSTANCE").get(null)
+            managerClass.getMethod("handlePacket", ClientPostEffectPacket::class.java).invoke(instance, packet)
+        }.onFailure {
+            LOGGER.warn("Failed to handle client post effect packet", it)
         }
     }
 }

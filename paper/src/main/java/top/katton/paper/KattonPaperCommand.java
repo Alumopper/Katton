@@ -20,6 +20,12 @@ import java.util.stream.Stream;
  */
 public class KattonPaperCommand implements BasicCommand {
 
+    /**
+     * Creates the Paper command handler.
+     */
+    public KattonPaperCommand() {
+    }
+
     @Override
     public void execute(CommandSourceStack source, String[] args) {
         CommandSender sender = source.getSender();

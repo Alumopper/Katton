@@ -29,6 +29,12 @@ public class KattonPaperPlugin extends JavaPlugin implements Listener {
     private static KattonPaperPlugin instance;
 
     /**
+     * Creates the Paper plugin entrypoint.
+     */
+    public KattonPaperPlugin() {
+    }
+
+    /**
      * Gets the singleton instance of the plugin.
      * @return the plugin instance
      */

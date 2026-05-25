@@ -40,6 +40,17 @@ subprojects {
         maven { url = uri('https://maven.fabricmc.net/') }
     }
 
+    tasks.withType(JavaCompile).configureEach {
+        options.encoding = 'UTF-8'
+    }
+
+    tasks.withType(Javadoc).configureEach {
+        options.encoding = 'UTF-8'
+        options.charSet = 'UTF-8'
+        options.locale = 'en_US'
+        options.jFlags('-Duser.language=en', '-Duser.country=US', '-Dfile.encoding=UTF-8')
+    }
+
     publishing {
         repositories {
             mavenLocal()
@@ -77,6 +88,14 @@ subprojects {
 
 tasks.withType(JavaCompile).configureEach {
     it.options.release = 25
+    it.options.encoding = 'UTF-8'
+}
+
+tasks.withType(Javadoc).configureEach {
+    options.encoding = 'UTF-8'
+    options.charSet = 'UTF-8'
+    options.locale = 'en_US'
+    options.jFlags('-Duser.language=en', '-Duser.country=US', '-Dfile.encoding=UTF-8')
 }
 
 tasks.withType(KotlinCompile).all {
