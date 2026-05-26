@@ -17,6 +17,8 @@ object ReloadProgressState {
     @Deprecated("Client api is unavailable in paper plugin", level = DeprecationLevel.ERROR)
     @JvmStatic fun begin(message: String) {}
     @Deprecated("Client api is unavailable in paper plugin", level = DeprecationLevel.ERROR)
+    @JvmStatic fun update(message: String, progress: Float) {}
+    @Deprecated("Client api is unavailable in paper plugin", level = DeprecationLevel.ERROR)
     @JvmStatic fun step(message: String) {}
     @Deprecated("Client api is unavailable in paper plugin", level = DeprecationLevel.ERROR)
     @JvmStatic fun finish(message: String) {}
@@ -37,6 +39,8 @@ class ReloadProgressTracker(totalSteps: Int) {
     fun step(message: String) {
         currentStep++
     }
+
+    fun update(message: String) {}
 
     fun finish(message: String) {}
 }

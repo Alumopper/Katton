@@ -40,6 +40,14 @@ class ReloadProgressTracker(private val estimatedSteps: Int) {
     }
 
     /**
+     * Updates the visible label without advancing the step counter.
+     */
+    fun update(label: String) {
+        val progress = (currentStep.toFloat() / estimatedSteps).coerceAtMost(0.99f)
+        ReloadProgressState.update(label, progress)
+    }
+
+    /**
      * Finishes tracking, showing the final message at 100% for a brief period.
      */
     fun finish(message: String) {

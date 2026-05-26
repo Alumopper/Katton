@@ -163,17 +163,27 @@ object ScriptEngine {
 
     @JvmStatic
     fun compileAndExecuteAll(packs: Collection<ScriptPack>, environment: ScriptEnvironment) {
+        compileAndExecuteAll(packs, environment, null)
+    }
+
+    @JvmStatic
+    fun compileAndExecuteAll(
+        packs: Collection<ScriptPack>,
+        environment: ScriptEnvironment,
+        progressReporter: ((String) -> Unit)?
+    ) {
         val enabledPacks = packs.filter { it.enabled }.toList()
         if (enabledPacks.isEmpty()) return
 
         val globalJarPacks = enabledPacks.filter { it.scope == ScriptPackScope.GLOBAL && it.kind == ScriptPackKind.JAR }
-        compileAndExecute(enabledPacks, environment, globalJarPacks)
+        compileAndExecute(enabledPacks, environment, globalJarPacks, progressReporter)
     }
 
     private fun compileAndExecute(
         packs: List<ScriptPack>,
         environment: ScriptEnvironment,
-        extraClasspathJars: List<ScriptPack>
+        extraClasspathJars: List<ScriptPack>,
+        progressReporter: ((String) -> Unit)?
     ) {
         val sourcePackCount = packs.count { it.scripts.isNotEmpty() }
         val jarPackCount = packs.count { it.kind == ScriptPackKind.JAR }
@@ -186,9 +196,10 @@ object ScriptEngine {
             jarPackCount
         )
 
+        reportProgress(progressReporter, "katton.reload.common.prepare_scripts")
         registerConfigs(packs)
 
-        val sourcePlan = buildSourceCompilationPlan(packs, extraClasspathJars)
+        val sourcePlan = buildSourceCompilationPlan(packs, extraClasspathJars, progressReporter)
         if (sourcePlan != null) {
             LOGGER.info(
                 "Compiling {} source packs together with {} jar dependencies for {}",
@@ -196,8 +207,9 @@ object ScriptEngine {
                 sourcePlan.binaryPacks.size,
                 environment.name.lowercase()
             )
-            val artifact = loadCompiledSourceArtifact(sourcePlan)
+            val artifact = loadCompiledSourceArtifact(sourcePlan, progressReporter)
             if (artifact != null) {
+                reportProgress(progressReporter, "katton.reload.common.execute_source_scripts")
                 runBlocking {
                     val executionResult = executeCombined(
                         artifact = artifact,
@@ -214,7 +226,9 @@ object ScriptEngine {
             .asSequence()
             .filter { it.kind == ScriptPackKind.JAR }
             .forEach { pack ->
+                reportProgress(progressReporter, "katton.reload.common.load_jar_scripts")
                 val artifact = loadJarPack(pack) ?: return@forEach
+                reportProgress(progressReporter, "katton.reload.common.execute_jar_scripts")
                 runBlocking {
                     val executionResult = executeCombined(
                         artifact = artifact,
@@ -263,7 +277,8 @@ object ScriptEngine {
 
     private fun buildSourceCompilationPlan(
         packs: Collection<ScriptPack>,
-        extraClasspathJars: List<ScriptPack> = emptyList()
+        extraClasspathJars: List<ScriptPack> = emptyList(),
+        progressReporter: ((String) -> Unit)? = null
     ): SourceCompilationPlan? {
         val sourcePacks = packs
             .filter { it.scripts.isNotEmpty() }
@@ -283,7 +298,7 @@ object ScriptEngine {
         val cacheKey = buildSourceCacheKey(sourcePacks, binaryPacks)
 
         // Compile .java files from enabled directory packs (independent of script collection)
-        val classpathFromJava = compileJavaFromPacks(packs)
+        val classpathFromJava = compileJavaFromPacks(packs, progressReporter)
         if (classpathFromJava != null) classpathJars.add(classpathFromJava)
 
         return SourceCompilationPlan(
@@ -299,7 +314,10 @@ object ScriptEngine {
      * Scans enabled directory packs for `.java` files, compiles them with
      * javac, and returns the path to the resulting jar (or null if none).
      */
-    private fun compileJavaFromPacks(packs: Collection<ScriptPack>): Path? {
+    private fun compileJavaFromPacks(
+        packs: Collection<ScriptPack>,
+        progressReporter: ((String) -> Unit)?
+    ): Path? {
         val javaFiles = mutableListOf<ScriptPackScriptFile>()
         for (pack in packs) {
             if (pack.kind != ScriptPackKind.DIRECTORY) continue
@@ -325,13 +343,17 @@ object ScriptEngine {
             return null
         }
         LOGGER.info("Compiling {} .java files from {} packs", javaFiles.size, packs.size)
+        reportProgress(progressReporter, "katton.reload.common.compile_java_sources")
         val result = JavaCompilationUtil.compileToJar(javaFiles, cacheDirectory)
         result?.let(::cleanStaleJavaCaches)
         LOGGER.info("Java compilation result: {}", result)
         return result
     }
 
-    private fun loadCompiledSourceArtifact(plan: SourceCompilationPlan): CompiledScriptArtifact? {
+    private fun loadCompiledSourceArtifact(
+        plan: SourceCompilationPlan,
+        progressReporter: ((String) -> Unit)?
+    ): CompiledScriptArtifact? {
         sourceCompileCache[plan.cacheKey]?.let {
             LOGGER.info("Reusing in-memory combined source compilation cache {}", plan.cacheKey)
             return it
@@ -350,6 +372,7 @@ object ScriptEngine {
             classpathJars = plan.classpathJars,
             cacheJar = cacheJar
         )
+        reportProgress(progressReporter, "katton.reload.common.compile_source_scripts")
         val compileResult = runBlocking {
             compiler(dummyScript, compilationConfig)
         }
@@ -373,6 +396,15 @@ object ScriptEngine {
             }
         }
         return artifact
+    }
+
+    private fun reportProgress(progressReporter: ((String) -> Unit)?, messageKey: String) {
+        if (progressReporter == null) return
+        runCatching {
+            progressReporter(messageKey)
+        }.onFailure {
+            LOGGER.warn("Failed to update script reload progress to {}", messageKey, it)
+        }
     }
 
     private fun loadJarPack(pack: ScriptPack): CompiledScriptArtifact? {

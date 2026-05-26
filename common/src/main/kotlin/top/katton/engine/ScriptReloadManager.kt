@@ -96,8 +96,8 @@ object ScriptReloadManager {
             addAll(ServerPackCacheManager.collectExecutablePacks())
         }
         tracker.step("katton.reload.client.merge_server_cache_packs")
-        ScriptEngine.compileAndExecuteAll(mergedPacks, ScriptEnvironment.CLIENT)
         tracker.step("katton.reload.common.compile_execute_scripts")
+        ScriptEngine.compileAndExecuteAll(mergedPacks, ScriptEnvironment.CLIENT, tracker::update)
         tracker.finish("katton.reload.client.finished")
         return true
     }
@@ -213,8 +213,8 @@ object ScriptReloadManager {
 
         val worldOnlyPacks = ScriptPackManager.collectExecutableWorldPacks()
         tracker.step("katton.reload.common.collect_world_packs")
-        ScriptEngine.compileAndExecuteAll(worldOnlyPacks, ScriptEnvironment.SERVER)
         tracker.step("katton.reload.common.compile_execute_scripts")
+        ScriptEngine.compileAndExecuteAll(worldOnlyPacks, ScriptEnvironment.SERVER, tracker::update)
         ServerDatapackManager.apply(server)
         tracker.step("katton.reload.server.apply_datapacks")
         tracker.finish("katton.reload.server.finished")
@@ -295,8 +295,8 @@ object ScriptReloadManager {
                 tracker.step("katton.reload.common.collect_world_packs")
 
                 // Heavy compilation + execution
-                ScriptEngine.compileAndExecuteAll(worldOnlyPacks, ScriptEnvironment.SERVER)
                 tracker.step("katton.reload.common.compile_execute_scripts")
+                ScriptEngine.compileAndExecuteAll(worldOnlyPacks, ScriptEnvironment.SERVER, tracker::update)
 
                 // Post-compilation must run on server thread (registry mutations).
                 val reloadFuture = future
