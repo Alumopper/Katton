@@ -3,6 +3,7 @@
 package top.katton.util
 
 import net.minecraft.util.TriState
+import org.slf4j.LoggerFactory
 import top.katton.pack.ScriptPackScope
 import top.katton.util.Extension.returnIfNot
 
@@ -10,37 +11,39 @@ import top.katton.util.Extension.returnIfNot
  * Invoker strategy: receives the full [EventHandler] array so that metadata
  * (scope) is available at dispatch time without extra allocations.
  */
-private typealias EventInvoker<Arg, R> = (Array<EventHandler<(Arg) -> R>>) -> (Arg) -> R
+private typealias EventInvoker<Arg, R> = (Array<EventHandler<Arg, R>>) -> (Arg) -> R
+
+private val LOGGER = LoggerFactory.getLogger("top.katton.util.Event")
 
 fun <B> unit(): EventInvoker<B, Unit> = { events ->
-    { arg: B -> events.forEach { e -> e.handler(arg) } }
+    { arg: B -> events.forEach { e -> e(arg) } }
 }
 
 fun <B, R> firstNotNullOfOrNull(): EventInvoker<B, R?> = { events ->
-    { arg: B -> events.firstNotNullOfOrNull { e -> e.handler(arg) } }
+    { arg: B -> events.firstNotNullOfOrNull { e -> e(arg) } }
 }
 
 fun <B> all(): EventInvoker<B, Boolean> = { events ->
-    { arg: B -> events.all { e -> e.handler(arg) } }
+    { arg: B -> events.all { e -> e(arg) } }
 }
 
 fun <B> any(): EventInvoker<B, Boolean> = { events ->
-    { arg: B -> events.any { e -> e.handler(arg) } }
+    { arg: B -> events.any { e -> e(arg) } }
 }
 
 internal fun <B, R> returnIfNot(passValue: R, returnValue: R?): EventInvoker<B, R?> = { events ->
-    { arg: B -> events.returnIfNot(passValue, returnValue) { e -> e.handler(arg) } }
+    { arg: B -> events.returnIfNot(passValue, returnValue) { e -> e(arg) } }
 }
 
 internal fun <B, R> returnIfNot(passValue: R): EventInvoker<B, R> = { events ->
-    { arg: B -> events.returnIfNot(passValue, passValue) { e -> e.handler(arg) } !!}
+    { arg: B -> events.returnIfNot(passValue, passValue) { e -> e(arg) } !!}
 }
 
 fun <B> triState(): EventInvoker<B, TriState> = { events ->
     { arg: B ->
         var status = TriState.DEFAULT
         for (e in events) {
-            status = e.handler(arg)
+            status = e(arg)
             if (status != TriState.DEFAULT) break
         }
         status
@@ -100,11 +103,20 @@ abstract class CancellableEventArg {
  *
  * @property handler The actual callback function.
  * @property scope The script pack scope (e.g. GLOBAL, WORLD) this handler was registered under.
+ * @property owner The script class that registered this handler.
  */
-data class EventHandler<T>(
-    val handler: T,
-    val scope: ScriptPackScope? = null
-)
+data class EventHandler<Arg, R>(
+    val handler: (Arg) -> R,
+    val scope: ScriptPackScope? = null,
+    val owner: String? = null
+) {
+    operator fun invoke(arg: Arg): R =
+        ScriptExecutionContext.withScope(scope) {
+            ScriptExecutionContext.withOwner(owner) {
+                handler(arg)
+            }
+        }
+}
 
 interface Event<Arg, R> {
     fun clear()
@@ -151,7 +163,7 @@ class DelegateEvent<Arg, R>(val invoker: EventInvoker<Arg, R>): Event<Arg, R> {
     }
 
     @Volatile
-    var entries: Array<EventHandler<(Arg) -> R>> = emptyArray()
+    var entries: Array<EventHandler<Arg, R>> = emptyArray()
 
     override operator fun plusAssign(h: (Arg) -> R) {
         val old = entries
@@ -159,7 +171,8 @@ class DelegateEvent<Arg, R>(val invoker: EventInvoker<Arg, R>): Event<Arg, R> {
         val arr = java.util.Arrays.copyOf(old, n + 1)
         arr[n] = EventHandler(
             handler = h,
-            scope = ScriptExecutionContext.currentScriptScope()
+            scope = ScriptExecutionContext.currentScriptScope(),
+            owner = ScriptExecutionContext.currentScriptOwner()
         )
         entries = arr
     }
@@ -167,7 +180,12 @@ class DelegateEvent<Arg, R>(val invoker: EventInvoker<Arg, R>): Event<Arg, R> {
     override operator fun invoke(arg: Arg): Result<R> {
         val es = entries
         if (es.isEmpty()) return Result.failure("No handler")
-        return Result.success(invoker(es).invoke(arg))
+        return try {
+            Result.success(invoker(es).invoke(arg))
+        } catch (t: Throwable) {
+            LOGGER.warn("Script event handler failed for {}", arg?.javaClass?.name ?: "null", t)
+            Result.failure("Script event handler failed: ${t.message ?: t.javaClass.name}")
+        }
     }
 }
 
@@ -188,7 +206,7 @@ class CancellableDelegateEvent<Arg: CancellableEventArg, R>(val invoker: EventIn
     }
 
     @Volatile
-    private var entries: Array<EventHandler<(Arg) -> R>> = emptyArray()
+    private var entries: Array<EventHandler<Arg, R>> = emptyArray()
 
     override operator fun plusAssign(h: (Arg) -> R) {
         val old = entries
@@ -196,7 +214,8 @@ class CancellableDelegateEvent<Arg: CancellableEventArg, R>(val invoker: EventIn
         val arr = java.util.Arrays.copyOf(old, n + 1)
         arr[n] = EventHandler(
             handler = h,
-            scope = ScriptExecutionContext.currentScriptScope()
+            scope = ScriptExecutionContext.currentScriptScope(),
+            owner = ScriptExecutionContext.currentScriptOwner()
         )
         entries = arr
     }
@@ -206,6 +225,11 @@ class CancellableDelegateEvent<Arg: CancellableEventArg, R>(val invoker: EventIn
         arg.event = this
         val es = entries
         if (es.isEmpty()) return Result.failure("No handler")
-        return Result.success(invoker(es).invoke(arg))
+        return try {
+            Result.success(invoker(es).invoke(arg))
+        } catch (t: Throwable) {
+            LOGGER.warn("Script cancellable event handler failed for {}", arg.javaClass.name, t)
+            Result.failure("Script event handler failed: ${t.message ?: t.javaClass.name}")
+        }
     }
 }

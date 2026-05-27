@@ -7,15 +7,43 @@ import net.minecraft.client.input.MouseButtonEvent
 import net.minecraft.client.gui.screens.Screen
 import net.minecraft.network.chat.Component
 import top.katton.Katton
+import top.katton.engine.ScriptIssue
+import top.katton.engine.ScriptIssueReporter
 import top.katton.engine.ScriptReloadManager
 import top.katton.pack.ScriptPackManager
 import top.katton.pack.ScriptPackScope
 import top.katton.pack.ScriptPackView
 import top.katton.pack.RemoteScriptSignatureVerifier
 import top.katton.pack.ServerPackCacheManager
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.max
 
 object ScriptPackUi {
+    private val issueReporterInstalled = AtomicBoolean(false)
+
+    @JvmStatic
+    fun installErrorReporter() {
+        if (!issueReporterInstalled.compareAndSet(false, true)) {
+            return
+        }
+        ScriptIssueReporter.addListener { issue ->
+            openScriptIssueScreen(issue)
+        }
+    }
+
+    @JvmStatic
+    fun openScriptIssueScreen(issue: ScriptIssue) {
+        val mc = Minecraft.getInstance()
+        mc.execute {
+            val current = mc.screen
+            if (current is ScriptIssueScreen && current.issue == issue) {
+                return@execute
+            }
+            mc.gui.setOverlayMessage(Component.literal(issue.title), false)
+            mc.setScreen(ScriptIssueScreen(current, issue))
+        }
+    }
+
     @JvmStatic
     fun openInWorldScreen() {
         val mc = Minecraft.getInstance()
@@ -74,6 +102,130 @@ private fun tr(key: String, vararg args: Any): Component = Component.translatabl
 private fun trString(key: String, vararg args: Any): String = tr(key, *args).string
 
 private fun ScriptPackScope.localizedName(): String = trString("katton.pack.scope.${serializedName}")
+
+private class ScriptIssueScreen(
+    private val parent: Screen?,
+    val issue: ScriptIssue
+) : Screen(Component.literal(issue.title)) {
+    private var scrollOffset = 0
+    private var maxScroll = 0
+
+    override fun init() {
+        addRenderableWidget(
+            Button.builder(tr("katton.button.close")) {
+                onClose()
+            }.bounds(width / 2 - 40, height - 28, 80, 20).build()
+        )
+    }
+
+    override fun onClose() {
+        minecraft.setScreen(parent)
+    }
+
+    override fun isPauseScreen(): Boolean = false
+
+    override fun extractRenderState(graphics: GuiGraphicsExtractor, mouseX: Int, mouseY: Int, partialTick: Float) {
+        super.extractRenderState(graphics, mouseX, mouseY, partialTick)
+
+        val panelWidth = (width - 28).coerceAtMost(760)
+        val panelLeft = (width - panelWidth) / 2
+        val panelRight = panelLeft + panelWidth
+        val panelTop = 14
+        val panelBottom = height - 38
+        val contentLeft = panelLeft + 14
+        val contentRight = panelRight - 14
+        val contentWidth = contentRight - contentLeft
+
+        graphics.fill(panelLeft + 4, panelTop + 5, panelRight + 4, panelBottom + 5, 0x66000000)
+        graphics.fill(panelLeft, panelTop, panelRight, panelBottom, 0xE0181818.toInt())
+        graphics.fill(panelLeft + 1, panelTop + 1, panelRight - 1, panelBottom - 1, 0xE8242424.toInt())
+        graphics.fill(panelLeft, panelTop, panelRight, panelTop + 2, 0xFFFF5F5F.toInt())
+
+        graphics.text(font, Component.literal(issue.title), contentLeft, panelTop + 12, 0xFFFFD0D0.toInt(), false)
+
+        val bodyTop = panelTop + 30
+        val bodyBottom = panelBottom - 12
+        val lineHeight = 11
+        val visibleLines = max(1, (bodyBottom - bodyTop) / lineHeight)
+        val lines = wrapText(issue.detail, contentWidth - 8)
+        maxScroll = max(0, lines.size - visibleLines)
+        scrollOffset = scrollOffset.coerceIn(0, maxScroll)
+
+        var y = bodyTop
+        lines.drop(scrollOffset).take(visibleLines).forEach { line ->
+            graphics.text(font, line, contentLeft, y, 0xFFE6E6E6.toInt(), false)
+            y += lineHeight
+        }
+
+        if (maxScroll > 0) {
+            val trackLeft = contentRight - 4
+            val trackTop = bodyTop
+            val trackBottom = bodyBottom
+            val trackHeight = trackBottom - trackTop
+            val thumbHeight = max(16, (trackHeight * visibleLines / lines.size).coerceAtMost(trackHeight))
+            val thumbTop = trackTop + ((trackHeight - thumbHeight) * scrollOffset / maxScroll.coerceAtLeast(1))
+            graphics.fill(trackLeft, trackTop, trackLeft + 2, trackBottom, 0x66333333)
+            graphics.fill(trackLeft, thumbTop, trackLeft + 2, thumbTop + thumbHeight, 0xFFB0B0B0.toInt())
+        }
+    }
+
+    override fun mouseScrolled(mouseX: Double, mouseY: Double, scrollX: Double, scrollY: Double): Boolean {
+        if (maxScroll <= 0) {
+            return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY)
+        }
+        scrollOffset = (scrollOffset - scrollY.toInt()).coerceIn(0, maxScroll)
+        return true
+    }
+
+    private fun wrapText(text: String, maxWidth: Int): List<String> {
+        if (maxWidth <= 0) return listOf(text)
+        val lines = mutableListOf<String>()
+        val whitespace = Regex("\\s+")
+        text.replace("\r\n", "\n").replace('\r', '\n').lineSequence().forEach { raw ->
+            if (raw.isBlank()) {
+                lines += ""
+                return@forEach
+            }
+            var current = ""
+            raw.trim().split(whitespace).forEach { word ->
+                breakLongToken(word, maxWidth).forEach { piece ->
+                    val candidate = if (current.isEmpty()) piece else "$current $piece"
+                    if (font.width(candidate) <= maxWidth) {
+                        current = candidate
+                    } else {
+                        if (current.isNotEmpty()) {
+                            lines += current
+                        }
+                        current = piece
+                    }
+                }
+            }
+            if (current.isNotEmpty()) {
+                lines += current
+            }
+        }
+        return lines.ifEmpty { listOf("") }
+    }
+
+    private fun breakLongToken(token: String, maxWidth: Int): List<String> {
+        if (font.width(token) <= maxWidth) return listOf(token)
+        val pieces = mutableListOf<String>()
+        var current = ""
+        token.forEach { char ->
+            val candidate = current + char
+            if (current.isNotEmpty() && font.width(candidate) > maxWidth) {
+                pieces += current
+                current = char.toString()
+            } else {
+                current = candidate
+            }
+        }
+        if (current.isNotEmpty()) {
+            pieces += current
+        }
+        return pieces
+    }
+}
 
 private class RemoteScriptTrustScreen(
     private val parent: Screen?,

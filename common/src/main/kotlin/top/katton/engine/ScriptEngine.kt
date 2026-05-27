@@ -162,8 +162,8 @@ object ScriptEngine {
     }
 
     @JvmStatic
-    fun compileAndExecuteAll(packs: Collection<ScriptPack>, environment: ScriptEnvironment) {
-        compileAndExecuteAll(packs, environment, null)
+    fun compileAndExecuteAll(packs: Collection<ScriptPack>, environment: ScriptEnvironment): Boolean {
+        return compileAndExecuteAll(packs, environment, null)
     }
 
     @JvmStatic
@@ -171,12 +171,12 @@ object ScriptEngine {
         packs: Collection<ScriptPack>,
         environment: ScriptEnvironment,
         progressReporter: ((String) -> Unit)?
-    ) {
+    ): Boolean {
         val enabledPacks = packs.filter { it.enabled }.toList()
-        if (enabledPacks.isEmpty()) return
+        if (enabledPacks.isEmpty()) return true
 
         val globalJarPacks = enabledPacks.filter { it.scope == ScriptPackScope.GLOBAL && it.kind == ScriptPackKind.JAR }
-        compileAndExecute(enabledPacks, environment, globalJarPacks, progressReporter)
+        return compileAndExecute(enabledPacks, environment, globalJarPacks, progressReporter)
     }
 
     private fun compileAndExecute(
@@ -184,9 +184,10 @@ object ScriptEngine {
         environment: ScriptEnvironment,
         extraClasspathJars: List<ScriptPack>,
         progressReporter: ((String) -> Unit)?
-    ) {
+    ): Boolean {
         val sourcePackCount = packs.count { it.scripts.isNotEmpty() }
         val jarPackCount = packs.count { it.kind == ScriptPackKind.JAR }
+        var ok = true
         LOGGER.info(
             "Preparing {} {} script packs in scope {} (source={}, jar={})",
             packs.size,
@@ -207,7 +208,7 @@ object ScriptEngine {
                 sourcePlan.binaryPacks.size,
                 environment.name.lowercase()
             )
-            val artifact = loadCompiledSourceArtifact(sourcePlan, progressReporter)
+            val artifact = loadCompiledSourceArtifact(sourcePlan, environment, progressReporter)
             if (artifact != null) {
                 reportProgress(progressReporter, "katton.reload.common.execute_source_scripts")
                 runBlocking {
@@ -217,8 +218,10 @@ object ScriptEngine {
                         scope = packs.first().scope,
                         label = "source packs (${sourcePlan.sourcePacks.size})"
                     )
-                    logExecutionResult("source packs", executionResult)
+                    ok = logExecutionResult("source packs", environment, executionResult) && ok
                 }
+            } else {
+                ok = false
             }
         }
 
@@ -236,9 +239,10 @@ object ScriptEngine {
                         scope = packs.first().scope,
                         label = "jar pack ${pack.manifest.name}"
                     )
-                    logExecutionResult(pack.manifest.name, executionResult)
+                    ok = logExecutionResult(pack.manifest.name, environment, executionResult) && ok
                 }
             }
+        return ok
     }
 
     private fun registerConfigs(packs: List<ScriptPack>) {
@@ -352,6 +356,7 @@ object ScriptEngine {
 
     private fun loadCompiledSourceArtifact(
         plan: SourceCompilationPlan,
+        environment: ScriptEnvironment,
         progressReporter: ((String) -> Unit)?
     ): CompiledScriptArtifact? {
         sourceCompileCache[plan.cacheKey]?.let {
@@ -377,6 +382,17 @@ object ScriptEngine {
             compiler(dummyScript, compilationConfig)
         }
         logCompileResult(plan.sourcePacks, compileResult)
+        if (compileResult is ResultWithDiagnostics.Failure) {
+            ScriptIssueReporter.report(
+                title = "Katton script compilation failed",
+                detail = buildString {
+                    appendLine("Environment: ${environment.name.lowercase()}")
+                    appendLine("Packs: ${plan.sourcePacks.joinToString(", ") { it.manifest.name }}")
+                    appendLine()
+                    append(formatDiagnostics(compileResult.reports))
+                }
+            )
+        }
 
         val compiledScript = (compileResult as? ResultWithDiagnostics.Success)?.value
         val artifact = compiledScript?.let { CompiledScriptArtifact(it, cacheJar) }
@@ -451,7 +467,11 @@ object ScriptEngine {
         }
     }
 
-    private fun logExecutionResult(label: String, executionResult: ResultWithDiagnostics<EvaluationResult>) {
+    private fun logExecutionResult(
+        label: String,
+        environment: ScriptEnvironment,
+        executionResult: ResultWithDiagnostics<EvaluationResult>
+    ): Boolean {
         when (executionResult) {
             is ResultWithDiagnostics.Success -> {
                 val summary = (executionResult.value.returnValue as? ResultValue.Value)?.value as? Map<*, *>
@@ -466,16 +486,46 @@ object ScriptEngine {
                     val errorMessages = summary["errorMessages"] as? List<*>
                     if (!errorMessages.isNullOrEmpty()) {
                         LOGGER.warn("[{}] Execution errors:\n{}", label, errorMessages.joinToString("\n"))
+                        ScriptIssueReporter.report(
+                            title = "Katton script execution failed",
+                            detail = buildString {
+                                appendLine("Environment: ${environment.name.lowercase()}")
+                                appendLine("Target: $label")
+                                appendLine()
+                                append(errorMessages.joinToString("\n") { it.toString() })
+                            }
+                        )
+                        return false
                     }
                 } else {
                     LOGGER.info("[{}] Execution finished without summary", label)
                 }
+                return true
             }
 
             is ResultWithDiagnostics.Failure -> {
                 LOGGER.error("[{}] Execution failed: {}", label, executionResult.reports.joinToString("\n"))
+                ScriptIssueReporter.report(
+                    title = "Katton script execution failed",
+                    detail = buildString {
+                        appendLine("Environment: ${environment.name.lowercase()}")
+                        appendLine("Target: $label")
+                        appendLine()
+                        append(formatDiagnostics(executionResult.reports))
+                    }
+                )
+                return false
             }
         }
+    }
+
+    private fun formatDiagnostics(reports: List<ScriptDiagnostic>): String {
+        val importantReports = reports
+            .filter { it.severity >= ScriptDiagnostic.Severity.WARNING }
+            .ifEmpty { reports }
+        return importantReports
+            .joinToString("\n") { it.toString() }
+            .ifBlank { "The compiler did not provide diagnostics." }
     }
 
     private suspend fun executeCombined(

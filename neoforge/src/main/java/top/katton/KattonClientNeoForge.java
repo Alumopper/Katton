@@ -43,6 +43,8 @@ public class KattonClientNeoForge {
     /** Ensures client-only game bus listeners are wired once during client init. */
     @SubscribeEvent
     public static void onAddClientReloadListeners(AddClientReloadListenersEvent event) {
+        ScriptPackUi.installErrorReporter();
+
         // Initialize entity renderer hooks for hot-reloadable renderer registration
         ReflectUtil.INSTANCE.getPossibleClassFromNames(
             "top.katton.platform.NeoForgeEntityRendererHooks"

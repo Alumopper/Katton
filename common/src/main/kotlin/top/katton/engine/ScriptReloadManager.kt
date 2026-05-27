@@ -97,7 +97,11 @@ object ScriptReloadManager {
         }
         tracker.step("katton.reload.client.merge_server_cache_packs")
         tracker.step("katton.reload.common.compile_execute_scripts")
-        ScriptEngine.compileAndExecuteAll(mergedPacks, ScriptEnvironment.CLIENT, tracker::update)
+        val scriptsOk = ScriptEngine.compileAndExecuteAll(mergedPacks, ScriptEnvironment.CLIENT, tracker::update)
+        if (!scriptsOk) {
+            tracker.finish("katton.reload.client.failed")
+            return false
+        }
         tracker.finish("katton.reload.client.finished")
         return true
     }
@@ -111,8 +115,11 @@ object ScriptReloadManager {
         clientReloadFuture = future
         clientReloadExecutor.execute {
             try {
-                reloadClientScripts()
-                future.complete(null)
+                if (reloadClientScripts()) {
+                    future.complete(null)
+                } else {
+                    future.completeExceptionally(IllegalStateException("Client script reload failed"))
+                }
             } catch (t: Throwable) {
                 future.completeExceptionally(t)
                 logger.error("Failed to reload client scripts asynchronously", t)
@@ -153,7 +160,10 @@ object ScriptReloadManager {
     fun initializeGlobalPacks() {
         val globalPacks = ScriptPackManager.collectExecutableGlobalPacks()
         if (globalPacks.isNotEmpty()) {
-            ScriptEngine.compileAndExecuteAll(globalPacks, ScriptEnvironment.SERVER)
+            val ok = ScriptEngine.compileAndExecuteAll(globalPacks, ScriptEnvironment.SERVER)
+            if (!ok) {
+                logger.error("Failed to initialize global script packs")
+            }
         }
     }
 
@@ -214,7 +224,11 @@ object ScriptReloadManager {
         val worldOnlyPacks = ScriptPackManager.collectExecutableWorldPacks()
         tracker.step("katton.reload.common.collect_world_packs")
         tracker.step("katton.reload.common.compile_execute_scripts")
-        ScriptEngine.compileAndExecuteAll(worldOnlyPacks, ScriptEnvironment.SERVER, tracker::update)
+        val scriptsOk = ScriptEngine.compileAndExecuteAll(worldOnlyPacks, ScriptEnvironment.SERVER, tracker::update)
+        if (!scriptsOk) {
+            tracker.finish("katton.reload.server.failed")
+            return false
+        }
         ServerDatapackManager.apply(server)
         tracker.step("katton.reload.server.apply_datapacks")
         tracker.finish("katton.reload.server.finished")
@@ -243,7 +257,7 @@ object ScriptReloadManager {
 
         // Run ALL reload work on background thread — the calling thread
         // (server command thread) returns immediately without blocking.
-        serverReloadExecutor.execute {
+        serverReloadExecutor.execute reloadTask@{
             val tracker = ReloadProgressTracker(22)
             tracker.begin("katton.reload.server.begin")
 
@@ -296,7 +310,17 @@ object ScriptReloadManager {
 
                 // Heavy compilation + execution
                 tracker.step("katton.reload.common.compile_execute_scripts")
-                ScriptEngine.compileAndExecuteAll(worldOnlyPacks, ScriptEnvironment.SERVER, tracker::update)
+                val scriptsOk = ScriptEngine.compileAndExecuteAll(worldOnlyPacks, ScriptEnvironment.SERVER, tracker::update)
+                if (!scriptsOk) {
+                    val reloadFuture = future
+                    server.execute {
+                        ReloadProgressState.finish("katton.reload.server.failed")
+                        reloadFuture.completeExceptionally(IllegalStateException("Server script reload failed"))
+                        onComplete(false)
+                        serverReloadRunning.set(false)
+                    }
+                    return@reloadTask
+                }
 
                 // Post-compilation must run on server thread (registry mutations).
                 val reloadFuture = future

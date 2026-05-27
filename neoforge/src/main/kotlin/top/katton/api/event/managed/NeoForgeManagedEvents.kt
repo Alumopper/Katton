@@ -4,7 +4,9 @@ import net.neoforged.bus.api.Event
 import net.neoforged.bus.api.EventPriority
 import net.neoforged.bus.api.IEventBus
 import net.neoforged.neoforge.common.NeoForge
+import org.slf4j.LoggerFactory
 import top.katton.pack.ScriptPackScope
+import top.katton.util.ScriptExecutionContext
 
 /**
  * NeoForge implementation of [ManagedListenerProvider].
@@ -16,6 +18,7 @@ import top.katton.pack.ScriptPackScope
  * Initialized once in [KattonNeoForge] constructor via [initialize].
  */
 object NeoForgeManagedEvents {
+    private val LOGGER = LoggerFactory.getLogger(NeoForgeManagedEvents::class.java)
     private var nextId = 0L
     private val registrations = mutableMapOf<Long, ManagedRegistration>()
     private val scopeRegistrations = mutableMapOf<ScriptPackScope, MutableSet<Long>>()
@@ -50,7 +53,15 @@ object NeoForgeManagedEvents {
                     ignoreCancelled,
                     eventType
                 ) { event ->
-                    handler(event)
+                    try {
+                        ScriptExecutionContext.withScope(scope) {
+                            ScriptExecutionContext.withOwner(owner) {
+                                handler(event)
+                            }
+                        }
+                    } catch (t: Throwable) {
+                        LOGGER.warn("Managed NeoForge event handler failed for {}", owner, t)
+                    }
                 }
 
                 val registration = ManagedRegistration(id, eventClass, listener, scope)

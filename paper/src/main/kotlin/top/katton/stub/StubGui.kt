@@ -7,6 +7,8 @@ package top.katton.client
 object ScriptPackUi {
     @Deprecated("Client api is unavailable in paper plugin", level = DeprecationLevel.ERROR)
     @JvmStatic fun openInWorldScreen() {}
+    @JvmStatic fun installErrorReporter() {}
+    @JvmStatic fun openScriptIssueScreen(issue: top.katton.engine.ScriptIssue) {}
 }
 
 /**

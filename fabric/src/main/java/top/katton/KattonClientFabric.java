@@ -38,6 +38,7 @@ public class KattonClientFabric implements ClientModInitializer {
 
 		// Initialize common networking (payload type registration)
 		Networking.initialize();
+		ScriptPackUi.installErrorReporter();
 
 		// Initialize client networking for item sync
 		ClientNetworkingFabric.INSTANCE.initialize();

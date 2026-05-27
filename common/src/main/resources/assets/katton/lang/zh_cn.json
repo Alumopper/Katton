@@ -13,7 +13,7 @@
   "katton.button.reload": "重载",
   "katton.button.enable_disable": "启用 / 禁用",
   "katton.button.trust_and_run": "信任并运行",
-  "katton.button.do_not_run": "不要运行",
+  "katton.button.do_not_run": "取消",
 
   "katton.screen.script_packs": "Katton 脚本包",
   "katton.screen.remote_scripts": "Katton 远程脚本",

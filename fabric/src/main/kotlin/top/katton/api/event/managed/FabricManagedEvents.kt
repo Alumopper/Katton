@@ -1,8 +1,10 @@
 package top.katton.api.event.managed
 
 import net.fabricmc.fabric.api.event.Event
+import org.slf4j.LoggerFactory
 import top.katton.pack.ScriptPackScope
 import top.katton.util.ScriptExecutionContext
+import java.lang.reflect.InvocationTargetException
 import java.lang.reflect.Proxy
 
 /**
@@ -15,6 +17,7 @@ import java.lang.reflect.Proxy
  * Initialized once in [KattonFabric.onInitialize] via [initialize].
  */
 object FabricManagedEvents {
+    internal val LOGGER = LoggerFactory.getLogger(FabricManagedEvents::class.java)
     private var nextId = 0L
     val registrations = mutableMapOf<Long, FabricRegistration>()
     private val scopeRegistrations = mutableMapOf<ScriptPackScope, MutableSet<Long>>()
@@ -45,8 +48,17 @@ object FabricManagedEvents {
                 ) { _, _, args ->
                     val reg = registrations[id] ?: return@newProxyInstance null
                     if (reg.active && args != null && args.isNotEmpty()) {
-                        handler(args[0])
-                    } else null
+                        try {
+                            ScriptExecutionContext.withScope(scope) {
+                                ScriptExecutionContext.withOwner(owner) {
+                                    handler(args[0])
+                                }
+                            }
+                        } catch (t: Throwable) {
+                            LOGGER.warn("Managed Fabric event handler failed for {}", owner, t)
+                        }
+                    }
+                    null
                 }
                 val registration = FabricRegistration(id, wrapper, scope, active = true)
                 registrations[id] = registration
@@ -126,7 +138,17 @@ fun <T : Any> registerFabricEvent(
     ) { _, method, args ->
         val reg = FabricManagedEvents.registrations[handle.id]
         if (reg != null && reg.active) {
-            method.invoke(callback, *(args ?: emptyArray()))
+            try {
+                ScriptExecutionContext.withScope(scope) {
+                    ScriptExecutionContext.withOwner(owner) {
+                        method.invoke(callback, *(args ?: emptyArray()))
+                    }
+                }
+            } catch (t: Throwable) {
+                val failure = (t as? InvocationTargetException)?.targetException ?: t
+                FabricManagedEvents.LOGGER.warn("Managed Fabric event handler failed for {}", owner, failure)
+                null
+            }
         } else null
     }
 

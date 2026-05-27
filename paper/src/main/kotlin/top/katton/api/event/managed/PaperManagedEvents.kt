@@ -5,7 +5,9 @@ import org.bukkit.event.EventPriority
 import org.bukkit.event.HandlerList
 import org.bukkit.plugin.EventExecutor
 import org.bukkit.plugin.java.JavaPlugin
+import org.slf4j.LoggerFactory
 import top.katton.pack.ScriptPackScope
+import top.katton.util.ScriptExecutionContext
 
 /**
  * Paper (Bukkit) implementation of [ManagedListenerProvider].
@@ -17,6 +19,7 @@ import top.katton.pack.ScriptPackScope
  * Initialized once in [KattonPaperPlugin.onEnable] via [initialize].
  */
 object PaperManagedEvents {
+    private val LOGGER = LoggerFactory.getLogger(PaperManagedEvents::class.java)
     private var nextId = 0L
     private val registrations = mutableMapOf<Long, ManagedRegistration>()
     private val scopeRegistrations = mutableMapOf<ScriptPackScope, MutableSet<Long>>()
@@ -45,7 +48,15 @@ object PaperManagedEvents {
                 val listener = object : org.bukkit.event.Listener {}
 
                 val executor = EventExecutor { _, event ->
-                    handler(event)
+                    try {
+                        ScriptExecutionContext.withScope(scope) {
+                            ScriptExecutionContext.withOwner(owner) {
+                                handler(event)
+                            }
+                        }
+                    } catch (t: Throwable) {
+                        LOGGER.warn("Managed Paper event handler failed for {}", owner, t)
+                    }
                 }
 
                 @Suppress("UNCHECKED_CAST")

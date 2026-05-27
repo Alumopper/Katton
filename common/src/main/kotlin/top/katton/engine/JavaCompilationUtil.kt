@@ -11,7 +11,9 @@ import java.nio.file.FileSystems
 import java.nio.file.Files
 import java.nio.file.Path
 import java.security.MessageDigest
+import javax.tools.DiagnosticCollector
 import javax.tools.JavaCompiler
+import javax.tools.JavaFileObject
 import javax.tools.ToolProvider
 import kotlin.io.path.bufferedReader
 import kotlin.io.path.createTempDirectory
@@ -46,6 +48,10 @@ object JavaCompilationUtil {
         if (javaFiles.isEmpty()) return null
         val compiler = javac ?: run {
             LOGGER.warn("JavaCompiler not available — is a JDK (not JRE) being used?")
+            ScriptIssueReporter.report(
+                title = "Katton Java script compilation failed",
+                detail = "JavaCompiler is not available. Run Katton with a JDK instead of a JRE."
+            )
             return null
         }
 
@@ -63,6 +69,7 @@ object JavaCompilationUtil {
 
         val result = try {
             val fileManager = compiler.getStandardFileManager(null, null, StandardCharsets.UTF_8)
+            val diagnostics = DiagnosticCollector<JavaFileObject>()
 
             // Write .java files to temp dir so javac can resolve package dirs
             for (file in javaFiles) {
@@ -83,17 +90,30 @@ object JavaCompilationUtil {
                 "-source", System.getProperty("java.specification.version", "25")
             )
 
-            val task = compiler.getTask(null, fileManager, null, options, null, units)
+            val task = compiler.getTask(null, fileManager, diagnostics, options, null, units)
             task.setLocale(java.util.Locale.ROOT)
 
             if (!task.call()) {
                 LOGGER.warn("Java compilation failed for {} source files", javaFiles.size)
+                ScriptIssueReporter.report(
+                    title = "Katton Java script compilation failed",
+                    detail = buildString {
+                        appendLine("Files:")
+                        javaFiles.sortedBy { it.relativePath }.forEach { appendLine("- ${it.relativePath}") }
+                        appendLine()
+                        append(formatJavaDiagnostics(diagnostics))
+                    }
+                )
                 null
             } else {
                 packToJar(classOutput, cacheDir?.resolve("java-$hash.jar"))
             }
         } catch (e: Exception) {
             LOGGER.warn("Java compilation exception", e)
+            ScriptIssueReporter.report(
+                title = "Katton Java script compilation failed",
+                detail = e.stackTraceToString()
+            )
             null
         } finally {
             // Cleanup temp dir
@@ -101,6 +121,15 @@ object JavaCompilationUtil {
         }
 
         return result
+    }
+
+    private fun formatJavaDiagnostics(diagnostics: DiagnosticCollector<JavaFileObject>): String {
+        return diagnostics.diagnostics.joinToString("\n") { diagnostic ->
+            val source = diagnostic.source?.name ?: "<unknown>"
+            val line = diagnostic.lineNumber.takeIf { it >= 0 }?.toString() ?: "?"
+            val column = diagnostic.columnNumber.takeIf { it >= 0 }?.toString() ?: "?"
+            "${diagnostic.kind}: $source:$line:$column: ${diagnostic.getMessage(java.util.Locale.ROOT)}"
+        }.ifBlank { "javac did not provide diagnostics." }
     }
 
     /**
