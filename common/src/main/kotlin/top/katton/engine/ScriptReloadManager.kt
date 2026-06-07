@@ -9,7 +9,9 @@ import top.katton.api.mod.clearItemModifications
 import top.katton.api.event.managed.clearManagedByScope
 import top.katton.client.ReloadProgressState
 import top.katton.client.ReloadProgressTracker
+import top.katton.client.ScriptPackResourceManager
 import top.katton.datapack.ServerDatapackManager
+import top.katton.datapack.ScriptPackDataManager
 import top.katton.pack.ScriptPack
 import top.katton.pack.ScriptPackManager
 import top.katton.pack.ScriptPackScope
@@ -96,11 +98,20 @@ object ScriptReloadManager {
             addAll(ServerPackCacheManager.collectExecutablePacks())
         }
         tracker.step("katton.reload.client.merge_server_cache_packs")
+        val resourcePacksChanged = ScriptPackResourceManager.activateForClient(
+            mutableListOf<ScriptPack>().apply {
+                addAll(ScriptPackManager.collectExecutableGlobalPacks())
+                addAll(mergedPacks)
+            }
+        )
         tracker.step("katton.reload.common.compile_execute_scripts")
         val scriptsOk = ScriptEngine.compileAndExecuteAll(mergedPacks, ScriptEnvironment.CLIENT, tracker::update)
         if (!scriptsOk) {
             tracker.finish("katton.reload.client.failed")
             return false
+        }
+        if (resourcePacksChanged && ScriptPackResourceManager.hasActiveResources()) {
+            ScriptPackResourceManager.reloadActiveResources()
         }
         tracker.finish("katton.reload.client.finished")
         return true
@@ -176,7 +187,7 @@ object ScriptReloadManager {
             return false
         }
 
-        val tracker = ReloadProgressTracker(22)
+        val tracker = ReloadProgressTracker(24)
         tracker.begin("katton.reload.server.begin")
 
         ScriptPackManager.setGameDirectory(Katton.gameDirectory)
@@ -223,12 +234,24 @@ object ScriptReloadManager {
 
         val worldOnlyPacks = ScriptPackManager.collectExecutableWorldPacks()
         tracker.step("katton.reload.common.collect_world_packs")
+        val serverDataPacks = mutableListOf<ScriptPack>().apply {
+            addAll(ScriptPackManager.collectExecutableGlobalPacks())
+            addAll(worldOnlyPacks)
+        }
+        tracker.step("katton.reload.server.collect_data_packs")
         tracker.step("katton.reload.common.compile_execute_scripts")
         val scriptsOk = ScriptEngine.compileAndExecuteAll(worldOnlyPacks, ScriptEnvironment.SERVER, tracker::update)
         if (!scriptsOk) {
             tracker.finish("katton.reload.server.failed")
             return false
         }
+        val dataPacksChanged = ScriptPackDataManager.activateForServer(server, serverDataPacks)
+        tracker.step("katton.reload.server.mount_script_data")
+        if (dataPacksChanged && !ScriptPackDataManager.reloadServerResources(server)) {
+            tracker.finish("katton.reload.server.failed")
+            return false
+        }
+        tracker.step("katton.reload.server.reload_script_data")
         ServerDatapackManager.apply(server)
         tracker.step("katton.reload.server.apply_datapacks")
         tracker.finish("katton.reload.server.finished")
@@ -258,7 +281,7 @@ object ScriptReloadManager {
         // Run ALL reload work on background thread — the calling thread
         // (server command thread) returns immediately without blocking.
         serverReloadExecutor.execute reloadTask@{
-            val tracker = ReloadProgressTracker(22)
+            val tracker = ReloadProgressTracker(24)
             tracker.begin("katton.reload.server.begin")
 
             try {
@@ -307,6 +330,11 @@ object ScriptReloadManager {
 
                 val worldOnlyPacks = ScriptPackManager.collectExecutableWorldPacks()
                 tracker.step("katton.reload.common.collect_world_packs")
+                val serverDataPacks = mutableListOf<ScriptPack>().apply {
+                    addAll(ScriptPackManager.collectExecutableGlobalPacks())
+                    addAll(worldOnlyPacks)
+                }
+                tracker.step("katton.reload.server.collect_data_packs")
 
                 // Heavy compilation + execution
                 tracker.step("katton.reload.common.compile_execute_scripts")
@@ -326,6 +354,16 @@ object ScriptReloadManager {
                 val reloadFuture = future
                 server.execute {
                     try {
+                        val dataPacksChanged = ScriptPackDataManager.activateForServer(server, serverDataPacks)
+                        tracker.step("katton.reload.server.mount_script_data")
+                        if (dataPacksChanged && !ScriptPackDataManager.reloadServerResources(server)) {
+                            ReloadProgressState.finish("katton.reload.server.failed")
+                            reloadFuture.completeExceptionally(IllegalStateException("Server script data reload failed"))
+                            onComplete(false)
+                            serverReloadRunning.set(false)
+                            return@execute
+                        }
+                        tracker.step("katton.reload.server.reload_script_data")
                         ServerDatapackManager.apply(server)
                         tracker.step("katton.reload.server.apply_datapacks")
                         tracker.finish("katton.reload.server.finished")

@@ -161,6 +161,10 @@ Netty thread:
 ```
 
 Pack files are cached under `<gameDir>/serverpacks/<sha256(serverIp)>/<base64(syncId)>/`.
+When a synced pack contains `assets/**`, those files are cached beside the scripts
+and exposed as generated client resource packs after the server is trusted.
+When a synced pack contains `data/**`, those files are cached for integrity and
+layout parity, but they are only mounted by the server as data pack resources.
 
 Remote client scripts have four explicit phases:
 
@@ -234,7 +238,9 @@ public static boolean reloadClientScripts() {
     // 3. Merge local + server-cache packs, compile, execute
     List<ScriptPack> mergedPacks = new ArrayList<>(ScriptPackManager.INSTANCE.collectExecutablePacks());
     mergedPacks.addAll(ServerPackCacheManager.INSTANCE.collectExecutablePacks());
+    ScriptPackResourceManager.INSTANCE.activateForClient(assetsFromGlobalWorldAndServerPacks);
     ScriptEngine.compileAndExecuteAll(mergedPacks, ScriptEnvironment.CLIENT);
+    ScriptPackResourceManager.INSTANCE.reloadActiveResources(); // if active assets changed
 
     // During execution, @ClientScriptEntrypoint functions call:
     //   registerNativeItem()      → Item registered in BuiltInRegistries
@@ -258,7 +264,22 @@ Thread safety is provided by:
 - `AtomicBoolean CLIENT_RELOAD_RUNNING` — prevents concurrent reloads
 - `CompletableFuture<Void> clientReloadFuture` — allows callers to wait via `awaitClientReloadCompletion()`
 
-## 6. Singleplayer vs Multiplayer Flow Comparison
+## 6. Server Script Reload
+
+Server reloads compile and execute world-scoped server scripts, then mount static
+script-pack `data/**` resources as generated required server data packs. If the
+active data set changed, Katton triggers a vanilla server resource reload before
+applying `ServerDatapackManager` mutations produced by script APIs.
+
+Order:
+
+1. Clear world-scoped handlers, managed listeners, injections, registry reload state, and scripted datapack mutation state.
+2. Compile and execute enabled world script packs in the server environment.
+3. Mount enabled global + world script packs that contain `data/**`.
+4. Reload vanilla server data resources when the mounted data pack set changed.
+5. Apply scripted recipes, loot tables, advancements, tags, and villager trade mutations.
+
+## 7. Singleplayer vs Multiplayer Flow Comparison
 
 ```
 SINGLEPLAYER:
@@ -296,7 +317,7 @@ MULTIPLAYER (NeoForge):
     → Client enters world
 ```
 
-## 7. Key Architecture Differences
+## 8. Key Architecture Differences
 
 | Aspect | Fabric | NeoForge |
 |---|---|---|
@@ -309,7 +330,7 @@ MULTIPLAYER (NeoForge):
 | **Entity renderer context** | `EntityRenderers.createEntityRenderers()` HEAD mixin | `EntityRenderersEvent.RegisterRenderers` event listener |
 | **Entity renderer dispatch** | `EntityRenderDispatcherMixin.getRenderer` @HEAD | `EntityRenderDispatcherMixin.getRenderer` @HEAD |
 
-## 8. Timing Constraint (Critical)
+## 9. Timing Constraint (Critical)
 
 The script packs must be received, compiled, and executed **before** the client's registry
 sync validation runs, because scripts register items (via `registerNativeItem`) that need to
@@ -319,10 +340,11 @@ The solution has three parts:
 
 1. **Server eagerly sends** hash + bundle during configuration (no round-trip waiting)
 2. **Client processes** on render thread immediately, blocking Netty thread with `CountDownLatch`
-3. **Component restoration** at `collectGameRegistries` RETURN fixes the
+3. **Script assets are mounted** as generated required resource packs before client entrypoints run
+4. **Component restoration** at `collectGameRegistries` RETURN fixes the
    `DataComponentInitializers.build()` overwrite
 
-## 9. File Map
+## 10. File Map
 
 ```
 common/

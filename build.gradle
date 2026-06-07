@@ -205,8 +205,14 @@ tasks.register('cleanDatapacks') {
     }
 }
 
+tasks.register('buildKattonJars') {
+    group = 'build'
+    description = 'Build Fabric, NeoForge, and Paper deployment jars into the root build directory.'
+    dependsOn ':fabric:jar', ':neoforge:jar', ':paper:shadowJar'
+}
+
 tasks.register('publishAllToPrivateNexus') {
     group = 'publishing'
     description = "Publish all subprojects to ${nexusRepositoryUrl.get()}."
-    dependsOn(subprojects.collect { ":${it.name}:publishAllPublicationsToPrivateNexusRepository" })
+    dependsOn(subprojects.findAll {it.name != "sign-plugin"}.collect { ":${it.name}:publishAllPublicationsToPrivateNexusRepository" })
 }

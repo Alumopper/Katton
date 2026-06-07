@@ -197,24 +197,27 @@ object ScriptPackManager {
         val manifest = ScriptPackManifest.parse(packDirectory, manifestJson)
 
         //collect script files
-        val scriptFiles = collectFiles(packDirectory, ".kt")
+        val scriptFiles = collectFiles(packDirectory, ".kt", excludeAssets = true)
         // we still try to collect java files even if there are no .kt scripts considering future
         // support for Java script entries,
 //        if (scriptFiles.isEmpty()) {
 //            LOGGER.warn("Skipping script pack {} because it contains no .kt scripts", packDirectory)
 //            return null
 //        }
-        val javaFiles = collectFiles(packDirectory, ".java")
-        val hash = computeScriptHash(manifestJson, scriptFiles, javaFiles)
+        val javaFiles = collectFiles(packDirectory, ".java", excludeAssets = true)
+        val assetFiles = collectPackContentFiles(packDirectory, "assets")
+        val dataFiles = collectPackContentFiles(packDirectory, "data")
+        val hash = computeScriptHash(manifestJson, scriptFiles, javaFiles, assetFiles, dataFiles)
         val enabled = forceEnabled ?: readEnabledState(packDirectory, ScriptPackKind.DIRECTORY) ?: manifest.enabledByDefault
         val syncId = syncIdOverride ?: makeSyncId(scope, manifest.id)
-        val contentFiles = (scriptFiles + javaFiles).map {
+        val sourceContentFiles = (scriptFiles + javaFiles).map {
             ScriptPackContentFile(
                 relativePath = it.relativePath,
                 absolutePath = it.absolutePath,
                 bytes = it.bytes
             )
         }
+        val contentFiles = sourceContentFiles + assetFiles + dataFiles
 
         return ScriptPack(
             syncId = syncId,
@@ -230,10 +233,12 @@ object ScriptPackManager {
             compiledJar = null
         ).also {
             LOGGER.info(
-                "Discovered source pack {} with {} .kt scripts and {} .java files at {}",
+                "Discovered source pack {} with {} .kt scripts, {} .java files, {} asset files, and {} data files at {}",
                 it.manifest.name,
                 it.scripts.size,
                 javaFiles.size,
+                assetFiles.size,
+                dataFiles.size,
                 it.location
             )
         }
@@ -278,7 +283,11 @@ object ScriptPackManager {
         }
     }
 
-    internal fun collectFiles(packDirectory: Path, extension: String): List<ScriptPackScriptFile> {
+    internal fun collectFiles(
+        packDirectory: Path,
+        extension: String,
+        excludeAssets: Boolean = false
+    ): List<ScriptPackScriptFile> {
         return runCatching {
             val files = mutableListOf<ScriptPackScriptFile>()
             Files.walk(packDirectory).use { stream ->
@@ -287,6 +296,9 @@ object ScriptPackManager {
                     .filter { it.fileName.toString().endsWith(extension, ignoreCase = true) }
                     .forEach { file ->
                         val relative = packDirectory.relativize(file).toString().replace('\\', '/')
+                        if (excludeAssets && isAssetsRelativePath(relative)) {
+                            return@forEach
+                        }
                         val bytes = runCatching { Files.readAllBytes(file) }.getOrNull() ?: return@forEach
                         files.add(
                             ScriptPackScriptFile(
@@ -304,7 +316,43 @@ object ScriptPackManager {
         }
     }
 
-    internal fun computeScriptHash(manifestJson: String, scripts: List<ScriptPackScriptFile>, javaFiles: List<ScriptPackScriptFile> = emptyList()): String {
+    internal fun collectPackContentFiles(packDirectory: Path, directoryName: String): List<ScriptPackContentFile> {
+        val contentDirectory = packDirectory.resolve(directoryName)
+        if (!Files.isDirectory(contentDirectory)) {
+            return emptyList()
+        }
+
+        return runCatching {
+            val files = mutableListOf<ScriptPackContentFile>()
+            Files.walk(contentDirectory).use { stream ->
+                stream
+                    .filter { Files.isRegularFile(it) }
+                    .forEach { file ->
+                        val relative = packDirectory.relativize(file).toString().replace('\\', '/')
+                        val bytes = runCatching { Files.readAllBytes(file) }.getOrNull() ?: return@forEach
+                        files.add(
+                            ScriptPackContentFile(
+                                relativePath = relative,
+                                absolutePath = file,
+                                bytes = bytes
+                            )
+                        )
+                    }
+            }
+            files.sortedBy { it.relativePath }
+        }.getOrElse {
+            LOGGER.warn("Failed to collect {} files from {}", directoryName, contentDirectory, it)
+            emptyList()
+        }
+    }
+
+    internal fun computeScriptHash(
+        manifestJson: String,
+        scripts: List<ScriptPackScriptFile>,
+        javaFiles: List<ScriptPackScriptFile> = emptyList(),
+        assetFiles: List<ScriptPackContentFile> = emptyList(),
+        dataFiles: List<ScriptPackContentFile> = emptyList()
+    ): String {
         val digest = MessageDigest.getInstance("SHA-256")
         digest.update(manifestJson.toByteArray(StandardCharsets.UTF_8))
 
@@ -319,6 +367,20 @@ object ScriptPackManager {
             digest.update(javaFile.relativePath.toByteArray(StandardCharsets.UTF_8))
             digest.update(0)
             digest.update(javaFile.bytes)
+            digest.update(0)
+        }
+
+        assetFiles.sortedBy { it.relativePath }.forEach { assetFile ->
+            digest.update(assetFile.relativePath.toByteArray(StandardCharsets.UTF_8))
+            digest.update(0)
+            digest.update(assetFile.bytes)
+            digest.update(0)
+        }
+
+        dataFiles.sortedBy { it.relativePath }.forEach { dataFile ->
+            digest.update(dataFile.relativePath.toByteArray(StandardCharsets.UTF_8))
+            digest.update(0)
+            digest.update(dataFile.bytes)
             digest.update(0)
         }
 
@@ -385,5 +447,9 @@ object ScriptPackManager {
 
     private fun makeSyncId(scope: ScriptPackScope, id: String): String {
         return "${scope.serializedName}:$id"
+    }
+
+    private fun isAssetsRelativePath(relativePath: String): Boolean {
+        return relativePath == "assets" || relativePath.startsWith("assets/")
     }
 }

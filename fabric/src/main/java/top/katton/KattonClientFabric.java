@@ -10,6 +10,7 @@ import net.minecraft.resources.Identifier;
 import org.lwjgl.glfw.GLFW;
 import top.katton.client.ClientItemRenderMarkerManager;
 import top.katton.client.ClientPostEffectManager;
+import top.katton.client.ScriptPackResourceManager;
 import top.katton.client.ScriptPackUi;
 import top.katton.network.ClientNetworkingFabric;
 import top.katton.network.Networking;
@@ -57,6 +58,7 @@ public class KattonClientFabric implements ClientModInitializer {
 		ClientPlayConnectionEvents.DISCONNECT.register((_, _) -> {
 			hasJoinedSinceDisconnect = false;
 			Katton.clearWorldAndServerEvents();
+			ScriptPackResourceManager.INSTANCE.clearAll();
 			ClientItemRenderMarkerManager.clear();
 			ClientPostEffectManager.INSTANCE.clearAll();
 			ServerPackCacheManager.INSTANCE.reset();

@@ -77,6 +77,8 @@ tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
 }
 
 shadowJar {
+    archiveFileName = "${project.name}-katton-${project.version}.jar"
+    destinationDirectory = rootProject.layout.buildDirectory
     archiveClassifier = ''
     exclude 'META-INF/versions/**'
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE

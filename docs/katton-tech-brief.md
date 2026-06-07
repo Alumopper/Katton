@@ -54,6 +54,8 @@ Directory model:
 Each pack directory contains:
 - `manifest.json`
 - One or more `.kt` files (any nested structure).
+- Optional `assets/<namespace>/**` standard resource-pack resources.
+- Optional `data/<namespace>/**` standard data-pack resources.
 
 Current parser fields (tolerant):
 - `id`, `name`, `version`, `description`, `authors[]`
@@ -64,7 +66,7 @@ State persistence:
 - Runtime list and toggle managed by `ScriptPackManager`.
 
 Hashing:
-- SHA-256 over `manifest.json` content + ordered script relative paths + script bytes.
+- SHA-256 over `manifest.json` content + ordered script, `assets/**`, and `data/**` relative paths + file bytes.
 
 ## 5. Client/Server Pack Sync Protocol
 
@@ -108,12 +110,14 @@ Server reload (`Katton.reloadScripts`):
 - Refresh global/world pack snapshot.
 - Clear/rebind script-managed state (events, injections, registries, datapack mutation).
 - Compile+execute server scripts.
+- Mount static script-pack `data/**` resources as generated required server data packs.
 - Apply datapack mutations.
 - Sync runtime registry snapshots and script pack hashes to clients.
 
 Client reload (`Katton.reloadClientScripts`):
 - Refresh local packs.
 - Merge local + server-cache script sources and execute client environment scripts.
+- Mount script-pack `assets/**` resources as generated required client resource packs.
 
 ## 8. Notes for Future AI Refactors
 

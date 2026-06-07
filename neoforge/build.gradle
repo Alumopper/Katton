@@ -181,6 +181,8 @@ tasks.named('javadoc', Javadoc) {
 
 tasks.named('jar', Jar) {
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    archiveFileName = "${project.name}-katton-${project.version}.jar"
+    destinationDirectory = rootProject.layout.buildDirectory
     from(commonMainSourceSet.output)
 }
 

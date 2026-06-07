@@ -3,6 +3,7 @@ package top.katton.pack
 import net.minecraft.client.Minecraft
 import top.katton.Katton
 import top.katton.api.LOGGER
+import top.katton.client.ScriptPackResourceManager
 import top.katton.client.ScriptPackUi
 import top.katton.engine.ScriptReloadManager
 import top.katton.network.ScriptPackBundlePacket
@@ -90,6 +91,7 @@ object ServerPackCacheManager {
 
     @Synchronized
     fun reset() {
+        ScriptPackResourceManager.clearServerCacheResources()
         activeServerBucket = null
         expectedHashes = emptyMap()
         activePacks = emptyList()

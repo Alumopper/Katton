@@ -5,14 +5,52 @@
 Global:
 - `<gameDir>/kattonpacks/<packFolder>/manifest.json`
 - `<gameDir>/kattonpacks/<packFolder>/**/*.kt`
+- `<gameDir>/kattonpacks/<packFolder>/assets/<namespace>/**`
+- `<gameDir>/kattonpacks/<packFolder>/data/<namespace>/**`
 
 World:
 - `<worldDir>/kattonpacks/<packFolder>/manifest.json`
 - `<worldDir>/kattonpacks/<packFolder>/**/*.kt`
+- `<worldDir>/kattonpacks/<packFolder>/assets/<namespace>/**`
+- `<worldDir>/kattonpacks/<packFolder>/data/<namespace>/**`
 
 Server-transferred cache on client:
 - `<gameDir>/serverpacks/<sha256(serverAddress)>/<base64(syncId)>/manifest.json`
 - `<gameDir>/serverpacks/<sha256(serverAddress)>/<base64(syncId)>/**/*.kt`
+- `<gameDir>/serverpacks/<sha256(serverAddress)>/<base64(syncId)>/assets/<namespace>/**`
+- `<gameDir>/serverpacks/<sha256(serverAddress)>/<base64(syncId)>/data/<namespace>/**`
+
+Optional `assets/` directories use the standard Minecraft resource pack layout.
+Katton exposes them as generated client resource packs, so script packs can ship
+textures, models, shaders, lang files, and other client resources without asking
+users to enable a separate resource pack. `pack.mcmeta` is not required for this
+generated pack layer.
+
+Optional `data/` directories use the standard Minecraft data pack layout.
+Katton exposes them as generated required server data packs, so script packs can
+ship recipes, loot tables, tags, advancements, functions, predicates, and other
+server data without asking users to enable a separate data pack. `pack.mcmeta`
+is not required for this generated pack layer.
+
+Example:
+
+```text
+kattonpacks/example_pack/
+├── manifest.json
+├── main.kt
+└── assets/
+    └── example_pack/
+        ├── lang/en_us.json
+        ├── models/item/ruby_staff.json
+        └── textures/item/ruby_staff.png
+```
+
+Data file path example:
+
+```text
+kattonpacks/example_pack/data/example_pack/recipe/ruby_staff.json
+kattonpacks/example_pack/data/example_pack/tags/item/magic_tools.json
+```
 
 ## 2. Manifest Example
 
@@ -49,11 +87,16 @@ Side behavior:
 - Runtime side-specific execution is still decided by function annotations (`@ServerScriptEntrypoint`, `@ClientScriptEntrypoint`).
 - `clientSync` only controls whether the server includes the pack in the client download/sync snapshot.
 - Use `"clientSync": false` for pure server-side packs that do not contain client entrypoints or client-required registry/rendering code.
+- `assets/` resources are client-side only. They are loaded on Fabric/NeoForge clients before client script entrypoints run, then refreshed again after scripts execute when the active asset set changed.
+- Paper is server-only, so `assets/` has no client resource-pack effect there.
+- `data/` resources are server-side only. They are loaded as generated required data packs after server scripts execute and before scripted datapack mutations are applied.
+- On Fabric/NeoForge/Paper servers, `data/` can use the standard vanilla data pack namespace layout under `data/<namespace>/...`.
 
 Signature behavior:
 - Signed client-synced packs are verified before they are written to the client's `serverpacks` cache.
 - Unsigned client-synced packs remain compatible, but they rely only on the blocking trust prompt and do not have tamper-evident author verification.
 - The signed payload includes a Katton signature format version, the pack `syncId`, pack scope, the manifest JSON with `signature` removed, and all synced file relative paths plus bytes in sorted order.
+- Synced `assets/**` and `data/**` files are included in the hash, bundle payload, and signature payload.
 - `publicKey` is an X.509-encoded Ed25519 public key in Base64. After the user trusts a server/key, Katton stores the trusted public key in `<gameDir>/.katton/remote-script-trust.json`.
 - If a trusted `keyId` later presents a different embedded public key, verification fails and the remote scripts are rejected.
 
@@ -81,5 +124,9 @@ Current hash calculation uses:
 - raw `manifest.json` string bytes (UTF-8)
 - sorted script relative path bytes
 - script file bytes
+- sorted `assets/**` relative path bytes
+- asset file bytes
+- sorted `data/**` relative path bytes
+- data file bytes
 
 Algorithm: SHA-256 (hex lowercase).
