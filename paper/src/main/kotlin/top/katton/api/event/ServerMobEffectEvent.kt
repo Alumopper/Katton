@@ -10,10 +10,16 @@ import top.katton.util.createAll
 import top.katton.util.createUnit
 
 /**
+ * %en
  * Server mob effect events for Paper (Bukkit) platform.
  *
  * This object provides events related to potion effect addition,
  * removal, and modification on mobs.
+ *
+ * %zh
+ * Paper (Bukkit) 平台的服务器生物效果事件。
+ *
+ * 此对象提供与生物身上的药水效果添加、移除和修改相关的事件。
  */
 @Suppress("unused")
 object ServerMobEffectEvent {

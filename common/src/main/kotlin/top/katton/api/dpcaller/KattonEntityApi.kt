@@ -1,4 +1,4 @@
-@file:Suppress("unused")
+﻿@file:Suppress("unused")
 
 package top.katton.api.dpcaller
 
@@ -37,7 +37,11 @@ import java.util.*
 import kotlin.jvm.optionals.getOrNull
 
 /**
+ * %en
  * Get/Set the NBT data of an Entity.
+ *
+ * %zh
+ * 获取或设置 Entity 的 NBT 数据。
  */
 var Entity.nbt: CompoundTag
     get() = getEntityNbt(this)
@@ -48,53 +52,83 @@ var Entity.nbt: CompoundTag
 //TODO: Entity tick event
 
 /**
+ * %en
  * Collection of all entities across all server levels.
  *
- * @property server The MinecraftServer instance
+ * %zh
+ * 跨所有服务端关卡的实体集合。
+ * @property server
+ * %en The MinecraftServer instance
+ * %zh MinecraftServer 实例。
  */
 class KattonServerEntityCollection(
     private val server: MinecraftServer
 ) {
     /**
-     * All entities across all levels.
-     */
+ * %en
+ * All entities across all levels.
+ *
+ * %zh
+ * 所有关卡中的全部实体。
+ */
     val all
         get() = server.allLevels.flatMap { it.allEntities }
 
     /**
-     * Get entity collection for a specific level.
-     */
+ * %en
+ * Get entity collection for a specific level.
+ *
+ * %zh
+ * 获取指定关卡中的实体集合。
+ */
     operator fun get(level: ServerLevel): KattonLevelEntityCollection {
         return KattonLevelEntityCollection(level)
     }
 
     /**
-     * Find an entity by UUID across all levels.
-     */
+ * %en
+ * Find an entity by UUID across all levels.
+ *
+ * %zh
+ * 在所有关卡中按 UUID 查找实体。
+ */
     operator fun get(uuid: UUID): Entity? {
         return server.allLevels.map { it.getEntity(uuid) }.firstOrNull()
     }
 }
 
 /**
+ * %en
  * Collection of entities within a specific level.
  *
- * @property level The ServerLevel containing the entities
+ * %zh
+ * 指定关卡中的实体集合。
+ * @property level
+ * %en The ServerLevel containing the entities
+ * %zh 包含这些实体的 ServerLevel。
  */
 class KattonLevelEntityCollection(
     val level: ServerLevel
 ) : Iterable<Entity> by level.allEntities {
     /**
-     * Get entities matching a type test and predicate.
-     */
+ * %en
+ * Get entities matching a type test and predicate.
+ *
+ * %zh
+ * 获取与类型测试和谓词匹配的实体。
+ */
     operator fun <T : Entity> get(
         entityTypeTest: EntityTypeTest<Entity, T>,
         predicate: (T) -> Boolean = { true }
     ): List<T> = level.getEntities(entityTypeTest, predicate)
 
     /**
-     * Get entities within an AABB matching a type test and predicate.
-     */
+ * %en
+ * Get entities within an AABB matching a type test and predicate.
+ *
+ * %zh
+ * 获取 AABB 内与类型测试和谓词匹配的实体。
+ */
     operator fun <T : Entity> get(
         entityTypeTest: EntityTypeTest<Entity, T>,
         aabb: AABB,
@@ -102,45 +136,70 @@ class KattonLevelEntityCollection(
     ): List<T> = level.getEntities(entityTypeTest, aabb, predicate)
 
     /**
-     * Get entities using an entity selector.
-     */
+ * %en
+ * Get entities using an entity selector.
+ *
+ * %zh
+ * 使用实体选择器获取实体。
+ */
     operator fun get(selector: EntitySelector): List<Entity> {
         return findEntities(level, selector)
     }
 
     /**
-     * Find an entity by UUID in this level.
-     */
+ * %en
+ * Find an entity by UUID in this level.
+ *
+ * %zh
+ * 在当前关卡中按 UUID 查找实体。
+ */
     operator fun get(uuid: UUID): Entity? {
         return level.getEntity(uuid)
     }
 }
 
 /**
+ * %en
  * Map-like access to a living entity's attribute values.
  *
- * @property entity The LivingEntity whose attributes are being accessed
+ * %zh
+ * 用类似 Map 的方式访问生物实体的属性值。
+ * @property entity
+ * %en The LivingEntity whose attributes are being accessed
+ * %zh 要访问属性的 LivingEntity。
  */
 class KattonEntityAttributeValueMap(
     val entity: LivingEntity
 ) {
     /**
-     * Check if the entity has a given attribute.
-     */
+ * %en
+ * Check if the entity has a given attribute.
+ *
+ * %zh
+ * 检查指定实体是否具有给定属性。
+ */
     fun contains(holder: Holder<Attribute>): Boolean {
         return entity.getAttribute(holder) != null
     }
 
     /**
-     * Get the current value of an attribute.
-     */
+ * %en
+ * Get the current value of an attribute.
+ *
+ * %zh
+ * 获取属性的当前值
+ */
     operator fun get(holder: Holder<Attribute>): Double? {
         return entity.getAttributeValue(holder)
     }
 
     /**
-     * Set the base value of an attribute and optionally add modifiers.
-     */
+ * %en
+ * Set the base value of an attribute and optionally add modifiers.
+ *
+ * %zh
+ * 设置属性的基础值，并可选添加修饰器。
+ */
     fun set(holder: Holder<Attribute>, value: Double, vararg modifiers: AttributeModifier) {
         entity.getAttribute(holder)?.baseValue = value
         modifiers.forEach {
@@ -150,17 +209,30 @@ class KattonEntityAttributeValueMap(
 }
 
 /**
+ * %en
  * Access to a living entity's attribute values.
+ *
+ * %zh
+ * 访问生物实体的属性值。
  */
 val LivingEntity.attributeValues
     get() = KattonEntityAttributeValueMap(this)
 
 /**
+ * %en
  * Get an attribute value from a LivingEntity.
  *
- * @param entity the entity
- * @param attribute attribute holder to read
- * @return current attribute value
+ * %zh
+ * 从 LivingEntity 获取属性值。
+ * @param entity
+ * %en the entity
+ * %zh 实体
+ * @param attribute
+ * %en holder of the attribute to read
+ * %zh 要读取的属性持有者。
+ * @return
+ * %en attribute value
+ * %zh 返回属性值
  */
 fun getAttribute(entity: LivingEntity, attribute: Holder<Attribute>): Double {
     return entity.getAttributeValue(attribute)
@@ -168,11 +240,20 @@ fun getAttribute(entity: LivingEntity, attribute: Holder<Attribute>): Double {
 
 
 /**
+ * %en
  * Check if a LivingEntity has a given attribute.
  *
- * @param entity the entity
- * @param attribute attribute holder to check
- * @return true if attribute present
+ * %zh
+ * 检查 LivingEntity 是否具有给定属性。
+ * @param entity
+ * %en the entity
+ * %zh 实体
+ * @param attribute
+ * %en holder of the attribute to check
+ * %zh 要检查的属性持有者。
+ * @return
+ * %en if attribute present
+ * %zh 如果属性存在则返回 true。
  */
 fun hasAttribute(entity: LivingEntity, attribute: Holder<Attribute>): Boolean {
     return entity.getAttribute(attribute) != null
@@ -180,11 +261,20 @@ fun hasAttribute(entity: LivingEntity, attribute: Holder<Attribute>): Boolean {
 
 
 /**
+ * %en
  * Get base attribute value from a LivingEntity.
  *
- * @param entity the entity
- * @param attribute attribute holder to read
- * @return base value or null if attribute missing
+ * %zh
+ * 从 LivingEntity 获取基础属性值。
+ * @param entity
+ * %en the entity
+ * %zh 实体
+ * @param attribute
+ * %en holder of the attribute to check
+ * %zh 要读取的属性持有者
+ * @return
+ * %en base attribute value; null if attribute not present
+ * %zh 属性值；如果属性不存在则返回 null。
  */
 fun getBaseAttribute(entity: LivingEntity, attribute: Holder<Attribute>): Double? {
     return entity.getAttribute(attribute)?.baseValue
@@ -192,12 +282,23 @@ fun getBaseAttribute(entity: LivingEntity, attribute: Holder<Attribute>): Double
 
 
 /**
+ * %en
  * Set the base attribute value for a LivingEntity.
  *
- * @param entity the entity
- * @param attribute attribute holder to set
- * @param value new base value
- * @return true if changed, false otherwise
+ * %zh
+ * 设置 LivingEntity 的基础属性值。
+ * @param entity
+ * %en the entity
+ * %zh 实体。
+ * @param attribute
+ * %en attribute holder to set
+ * %zh 要设置的属性持有者。
+ * @param value
+ * %en new base value
+ * %zh 新的基础值。
+ * @return
+ * %en if changed, false otherwise
+ * %zh 如果发生变化则返回 true，否则返回 false。
  */
 fun setBaseAttribute(entity: LivingEntity, attribute: Holder<Attribute>, value: Double): Boolean {
     val instance = entity.getAttribute(attribute) ?: return false
@@ -208,11 +309,20 @@ fun setBaseAttribute(entity: LivingEntity, attribute: Holder<Attribute>, value: 
 
 
 /**
+ * %en
  * Add a transient attribute modifier to an entity.
  *
- * @param entity the entity
- * @param attribute attribute holder to modify
- * @param modifier AttributeModifier to add
+ * %zh
+ * 向实体添加临时属性修饰器。
+ * @param entity
+ * %en the entity
+ * %zh 实体。
+ * @param attribute
+ * %en attribute holder to modify
+ * %zh 要修改的属性持有者。
+ * @param modifier
+ * %en AttributeModifier to add
+ * %zh 要添加的 AttributeModifier。
  */
 fun addAttributeModify(entity: LivingEntity, attribute: Holder<Attribute>, modifier: AttributeModifier) {
     entity.getAttribute(attribute)?.addTransientModifier(modifier)
@@ -220,11 +330,20 @@ fun addAttributeModify(entity: LivingEntity, attribute: Holder<Attribute>, modif
 
 
 /**
+ * %en
  * Remove an attribute modifier from an entity.
  *
- * @param entity the entity
- * @param attribute attribute holder to modify
- * @param modifier AttributeModifier to remove
+ * %zh
+ * 从实体移除属性修饰器。
+ * @param entity
+ * %en the entity
+ * %zh 实体。
+ * @param attribute
+ * %en attribute holder to modify
+ * %zh 要修改的属性持有者。
+ * @param modifier
+ * %en AttributeModifier to remove
+ * %zh 要移除的 AttributeModifier。
  */
 fun removeAttributeModify(entity: LivingEntity, attribute: Holder<Attribute>, modifier: AttributeModifier) {
     entity.getAttribute(attribute)?.removeModifier(modifier)
@@ -232,10 +351,17 @@ fun removeAttributeModify(entity: LivingEntity, attribute: Holder<Attribute>, mo
 
 
 /**
+ * %en
  * Damage an entity by an amount using generic damage.
  *
- * @param entity target entity
- * @param amount damage amount
+ * %zh
+ * 使用通用伤害按指定数值伤害实体。
+ * @param entity
+ * %en target entity
+ * %zh 目标实体。
+ * @param amount
+ * %en damage amount
+ * %zh 伤害值。
  */
 fun damage(entity: Entity, amount: Float) {
     entity.hurtServer(
@@ -247,12 +373,23 @@ fun damage(entity: Entity, amount: Float) {
 
 
 /**
+ * %en
  * Damage a target entity from an attacker using a damage type key.
  *
- * @param target the entity to damage
- * @param amount damage amount
- * @param attacker the source entity causing damage
- * @param damageType resource key of the DamageType (default GENERIC)
+ * %zh
+ * 使用伤害类型键，让攻击者对目标实体造成伤害。
+ * @param target
+ * %en the entity to damage
+ * %zh 要伤害的实体。
+ * @param amount
+ * %en damage amount
+ * %zh 伤害值。
+ * @param attacker
+ * %en the source entity causing damage
+ * %zh 造成伤害的来源实体。
+ * @param damageType
+ * %en resource key of the DamageType (default GENERIC)
+ * %zh DamageType 的资源键（默认 GENERIC）。
  */
 fun damage(target: Entity, amount: Float, attacker: Entity, damageType: ResourceKey<DamageType> = DamageTypes.GENERIC) {
     val type = requireServer().registryAccess().lookupOrThrow(Registries.DAMAGE_TYPE).get(damageType)
@@ -270,12 +407,23 @@ fun damage(target: Entity, amount: Float, attacker: Entity, damageType: Resource
 
 
 /**
+ * %en
  * Damage a target entity from an attacker using a DamageType instance.
  *
- * @param target the entity to damage
- * @param amount damage amount
- * @param attacker the source entity causing damage
- * @param damageType DamageType instance to apply
+ * %zh
+ * 使用 DamageType 实例，让攻击者对目标实体造成伤害。
+ * @param target
+ * %en the entity to damage
+ * %zh 要伤害的实体。
+ * @param amount
+ * %en damage amount
+ * %zh 伤害值。
+ * @param attacker
+ * %en the source entity causing damage
+ * %zh 造成伤害的来源实体。
+ * @param damageType
+ * %en DamageType instance to apply
+ * %zh 要应用的 DamageType 实例。
  */
 fun damage(target: Entity, amount: Float, attacker: Entity, damageType: DamageType) {
     target.hurtServer(
@@ -288,12 +436,23 @@ fun damage(target: Entity, amount: Float, attacker: Entity, damageType: DamageTy
 
 
 /**
+ * %en
  * Damage a target entity from a position using a damage type key.
  *
- * @param target entity to damage
- * @param amount damage amount
- * @param pos position of damage source
- * @param damageType resource key of the DamageType (default GENERIC)
+ * %zh
+ * 使用伤害类型键，从指定位置对目标实体造成伤害。
+ * @param target
+ * %en entity to damage
+ * %zh 要伤害的实体。
+ * @param amount
+ * %en damage amount
+ * %zh 伤害值。
+ * @param pos
+ * %en position of damage source
+ * %zh 伤害来源位置。
+ * @param damageType
+ * %en resource key of the DamageType (default GENERIC)
+ * %zh DamageType 的资源键（默认 GENERIC）。
  */
 fun damage(target: Entity, amount: Float, pos: Vec3, damageType: ResourceKey<DamageType> = DamageTypes.GENERIC) {
     val type = requireServer().registryAccess().lookupOrThrow(Registries.DAMAGE_TYPE).get(damageType)
@@ -311,12 +470,23 @@ fun damage(target: Entity, amount: Float, pos: Vec3, damageType: ResourceKey<Dam
 
 
 /**
+ * %en
  * Damage a target entity from a position using a DamageType instance.
  *
- * @param target entity to damage
- * @param amount damage amount
- * @param pos position of damage source
- * @param damageType DamageType instance to apply
+ * %zh
+ * 使用 DamageType 实例，从指定位置对目标实体造成伤害。
+ * @param target
+ * %en entity to damage
+ * %zh 要伤害的实体。
+ * @param amount
+ * %en damage amount
+ * %zh 伤害值。
+ * @param pos
+ * %en position of damage source
+ * %zh 伤害来源位置。
+ * @param damageType
+ * %en DamageType instance to apply
+ * %zh 要应用的 DamageType 实例。
  */
 fun damage(target: Entity, amount: Float, pos: Vec3, damageType: DamageType) {
     target.hurtServer(
@@ -328,14 +498,29 @@ fun damage(target: Entity, amount: Float, pos: Vec3, damageType: DamageType) {
 
 
 /**
+ * %en
  * Add a mob effect to a LivingEntity.
  *
- * @param entity target entity
- * @param effect holder of the MobEffect to apply
- * @param duration effect duration in ticks (default 600)
- * @param amplifier effect amplifier level (default 0)
- * @param showParticles whether to show particles
- * @param ambient whether effect is ambient
+ * %zh
+ * 向 LivingEntity 添加状态效果。
+ * @param entity
+ * %en target entity
+ * %zh 目标实体。
+ * @param effect
+ * %en holder of the MobEffect to apply
+ * %zh 要应用的 MobEffect Holder。
+ * @param duration
+ * %en effect duration in ticks (default 600)
+ * %zh 效果持续时间，单位为 tick，默认 600。
+ * @param amplifier
+ * %en effect amplifier level (default 0)
+ * %zh 效果放大等级，默认 0。
+ * @param showParticles
+ * %en whether to show particles
+ * %zh 是否显示粒子。
+ * @param ambient
+ * %en whether effect is ambient
+ * %zh 是否为环境效果。
  */
 fun addEffect(entity: LivingEntity, effect: Holder<MobEffect>, duration: Int = 600, amplifier: Int = 0, showParticles: Boolean = true, ambient: Boolean = false) {
     entity.addEffect(MobEffectInstance(effect, duration, amplifier, ambient, showParticles))
@@ -343,10 +528,17 @@ fun addEffect(entity: LivingEntity, effect: Holder<MobEffect>, duration: Int = 6
 
 
 /**
+ * %en
  * Remove a specific effect from a LivingEntity.
  *
- * @param entity target entity
- * @param effect holder of the MobEffect to remove
+ * %zh
+ * 从 LivingEntity 移除指定效果。
+ * @param entity
+ * %en target entity
+ * %zh 目标实体。
+ * @param effect
+ * %en holder of the MobEffect to remove
+ * %zh 要移除的 MobEffect Holder。
  */
 fun removeEffect(entity: LivingEntity, effect: Holder<MobEffect>) {
     entity.removeEffect(effect)
@@ -354,9 +546,14 @@ fun removeEffect(entity: LivingEntity, effect: Holder<MobEffect>) {
 
 
 /**
+ * %en
  * Clear all effects from a LivingEntity.
  *
- * @param entity target entity
+ * %zh
+ * 清除 LivingEntity 身上的所有效果。
+ * @param entity
+ * %en target entity
+ * %zh 目标实体。
  */
 fun clearEffects(entity: LivingEntity) {
     entity.removeAllEffects()
@@ -364,11 +561,20 @@ fun clearEffects(entity: LivingEntity) {
 
 
 /**
+ * %en
  * Mount a passenger on a vehicle entity.
  *
- * @param passenger entity to mount
- * @param vehicle entity to be ridden
- * @return true if mounting succeeded, false otherwise
+ * %zh
+ * 让乘客骑乘载具实体。
+ * @param passenger
+ * %en entity to mount
+ * %zh 要发起骑乘的实体。
+ * @param vehicle
+ * %en entity to be ridden
+ * %zh 要被骑乘的实体。
+ * @return
+ * %en if mounting succeeded, false otherwise
+ * %zh 如果骑乘成功则返回 true，否则返回 false。
  */
 fun mount(passenger: Entity, vehicle: Entity): Boolean {
     val exisingVehicle = passenger.vehicle
@@ -392,10 +598,17 @@ fun mount(passenger: Entity, vehicle: Entity): Boolean {
 
 
 /**
+ * %en
  * Dismount a passenger from its vehicle.
  *
- * @param passenger entity to dismount
- * @return true if dismounted, false if not riding
+ * %zh
+ * 让乘客从载具上解除骑乘。
+ * @param passenger
+ * %en entity to dismount
+ * %zh 要解除骑乘的实体。
+ * @return
+ * %en if dismounted, false if not riding
+ * %zh 如果已解除骑乘则返回 true，否则在未骑乘时返回 false。
  */
 fun dismount(passenger: Entity): Boolean {
     if(passenger.vehicle == null){
@@ -408,11 +621,20 @@ fun dismount(passenger: Entity): Boolean {
 
 
 /**
+ * %en
  * Rotate an entity by a Vec2 (pitch, yaw).
  *
- * @param target target entity
- * @param rot rotation vector (x=pitch, y=yaw)
- * @param relative whether rotation is relative
+ * %zh
+ * 使用 Vec2（pitch, yaw）旋转实体。
+ * @param target
+ * %en target entity
+ * %zh 目标实体。
+ * @param rot
+ * %en rotation vector (x=pitch, y=yaw)
+ * %zh 旋转向量（x=pitch, y=yaw）。
+ * @param relative
+ * %en whether rotation is relative
+ * %zh 是否按相对角度旋转。
  */
 fun rotate(target: Entity, rot: Vec2, relative: Boolean = false){
     target.forceSetRotation(rot.y, relative, rot.x, relative)
@@ -420,12 +642,23 @@ fun rotate(target: Entity, rot: Vec2, relative: Boolean = false){
 
 
 /**
+ * %en
  * Rotate an entity to look at another entity.
  *
- * @param target entity to rotate
- * @param lookAt entity to look at
- * @param targetAnchor anchor point on the target
- * @param lookAtAnchor anchor point on lookAt entity
+ * %zh
+ * 旋转实体，使其看向另一个实体。
+ * @param target
+ * %en entity to rotate
+ * %zh 要旋转的实体。
+ * @param lookAt
+ * %en entity to look at
+ * %zh 要看向的实体。
+ * @param targetAnchor
+ * %en anchor point on the target
+ * %zh 目标实体上的锚点。
+ * @param lookAtAnchor
+ * %en anchor point on lookAt entity
+ * %zh 被看向实体上的锚点。
  */
 fun rotate(target: Entity, lookAt: Entity, targetAnchor: EntityAnchorArgument.Anchor = EntityAnchorArgument.Anchor.FEET, lookAtAnchor: EntityAnchorArgument.Anchor = EntityAnchorArgument.Anchor.FEET){
     if(target is ServerPlayer){
@@ -437,26 +670,52 @@ fun rotate(target: Entity, lookAt: Entity, targetAnchor: EntityAnchorArgument.An
 
 
 /**
+ * %en
  * Rotate an entity to look at a position.
  *
- * @param target entity to rotate
- * @param lookAt position to look at
- * @param targetAnchor anchor on target entity
+ * %zh
+ * 旋转实体，使其看向指定位置。
+ * @param target
+ * %en entity to rotate
+ * %zh 要旋转的实体。
+ * @param lookAt
+ * %en position to look at
+ * %zh 要看向的位置。
+ * @param targetAnchor
+ * %en anchor point on the target
+ * %zh 目标实体上的锚点。
  */
 fun rotate(target: Entity, lookAt: Vec3, targetAnchor: EntityAnchorArgument.Anchor = EntityAnchorArgument.Anchor.FEET, lookAtAnchor: EntityAnchorArgument.Anchor = EntityAnchorArgument.Anchor.FEET){
     target.lookAt(targetAnchor, lookAt)
 }
 
 /**
+ * %en
  * Spread players around a center point.
  *
- * @param level server level used for context
- * @param center center position vector (x=z, y ignored)
- * @param spreadDistance minimum distance between players
- * @param maxRange max spread radius
- * @param maxHeight maximum height difference
- * @param respectTeams whether to keep teams together
- * @param targets collection of entities to spread
+ * %zh
+ * 将玩家分散到中心点周围。
+ * @param level
+ * %en server level used for context
+ * %zh 用作上下文的服务端关卡。
+ * @param center
+ * %en center position vector (x/z used, y ignored)
+ * %zh 中心位置向量（使用 x/z，忽略 y）。
+ * @param spreadDistance
+ * %en minimum distance between players
+ * %zh 玩家之间的最小距离。
+ * @param maxRange
+ * %en max spread radius
+ * %zh 最大分散半径。
+ * @param maxHeight
+ * %en maximum height difference
+ * %zh 最大高度差。
+ * @param respectTeams
+ * %en whether to keep teams together
+ * %zh 是否保持队伍成员在一起。
+ * @param targets
+ * %en entities to spread
+ * %zh 要分散的实体集合。
  */
 fun spreadPlayers(
     level: ServerLevel,
@@ -474,13 +733,26 @@ fun spreadPlayers(
 
 
 /**
+ * %en
  * Summon an entity of a given type at a position with optional NBT.
  *
- * @param level server level to spawn in
- * @param reference reference to the EntityType to summon
- * @param vec3 spawn position
- * @param entityData optional NBT override for the entity
- * @return spawned Entity or null on failure
+ * %zh
+ * 在指定位置召唤给定类型的实体，并可选应用 NBT。
+ * @param level
+ * %en server level to spawn in
+ * %zh 用于生成实体的服务端关卡。
+ * @param reference
+ * %en reference to the EntityType to summon
+ * %zh 要召唤的 EntityType 引用。
+ * @param vec3
+ * %en spawn position
+ * %zh 生成位置。
+ * @param entityData
+ * %en optional NBT override for the entity
+ * %zh 可选的实体 NBT 覆盖数据。
+ * @return
+ * %en Entity or null on failure
+ * %zh 返回生成的实体；失败时返回 null。
  */
 fun summon(
     level: ServerLevel,
@@ -543,10 +815,17 @@ fun summon(
 
 
 /**
+ * %en
  * Get tags attached to an entity.
  *
- * @param entity target entity
- * @return mutable collection of tag strings
+ * %zh
+ * 获取附加到实体上的标签。
+ * @param entity
+ * %en target entity
+ * %zh 目标实体。
+ * @return
+ * %en tag string collection
+ * %zh 返回标签字符串集合。
  */
 fun getTags(entity: Entity): MutableCollection<String> {
     return entity.entityTags()
@@ -554,11 +833,20 @@ fun getTags(entity: Entity): MutableCollection<String> {
 
 
 /**
+ * %en
  * Add a tag to an entity.
  *
- * @param entity target entity
- * @param string tag to add
- * @return true if tag was added, false if already present
+ * %zh
+ * 向实体添加标签。
+ * @param entity
+ * %en target entity
+ * %zh 目标实体。
+ * @param string
+ * %en tag to add
+ * %zh 要添加的标签。
+ * @return
+ * %en if tag was added, false if already present
+ * %zh 如果标签已添加则返回 true，若已存在则返回 false。
  */
 fun addTag(entity: Entity, string: String): Boolean {
     return entity.addTag(string)
@@ -566,14 +854,21 @@ fun addTag(entity: Entity, string: String): Boolean {
 
 
 /**
+ * %en
  * Remove a tag from an entity.
  *
- * @param entity target entity
- * @param string tag to remove
- * @return true if the tag was removed
+ * %zh
+ * 从实体移除标签。
+ * @param entity
+ * %en target entity
+ * %zh 目标实体。
+ * @param string
+ * %en tag to remove
+ * %zh 要移除的标签。
+ * @return
+ * %en if the tag was removed
+ * %zh 如果标签已移除则返回 true。
  */
 fun removeTag(entity: Entity, string: String): Boolean {
     return entity.removeTag(string)
 }
-
-

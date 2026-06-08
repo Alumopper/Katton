@@ -17,10 +17,15 @@ import top.katton.paper.PaperNmsBridge
 import top.katton.util.createUnit
 
 /**
+ * %en
  * Server lifecycle events for Paper (Bukkit) platform.
  *
  * This object provides events related to server startup/shutdown, tick,
  * world load/unload/save, and datapack reload operations.
+ *
+ * %zh
+ * Paper (Bukkit) 平台的服务器生命周期事件。
+ * 此对象提供与服务器启动/停止、tick、世界加载/卸载/保存以及数据包重载相关的事件。
  */
 @Suppress("unused")
 object ServerEvent {

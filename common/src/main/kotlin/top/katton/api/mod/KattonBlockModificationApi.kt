@@ -14,13 +14,20 @@ import top.katton.registry.id
 import top.katton.util.ReflectUtil
 
 /**
+ * %en
  * Configuration for modifying existing block properties.
- * 
+ *
  * This class provides a fluent API for modifying properties of existing
  * blocks registered in Minecraft's block registry. Similar to KubeJS's block
  * modification system.
- * 
- * @property blockId The identifier of the block to modify
+ *
+ * %zh
+ * 用于修改现有方块属性的配置对象。
+ * 这个类提供一个流式 API，用于修改已经注册到 Minecraft 方块注册表中的方块属性。
+ * 风格上类似 KubeJS 的方块修改系统。
+ * @property blockId
+ * %en The identifier of the block to modify
+ * %zh 要修改的方块标识符。
  */
 class BlockModificationConfig(
     val blockId: Identifier
@@ -107,17 +114,28 @@ class BlockModificationConfig(
 }
 
 /**
+ * %en
  * Modifies an existing block's properties.
- * 
+ *
  * This function allows you to modify properties of blocks already registered
  * in Minecraft's block registry. Changes are applied to the block's default
  * state and will affect all instances of that block.
- * 
- * @param blockId The identifier of the block to modify (e.g., "minecraft:stone")
- * @param configure Configuration lambda for block modifications
- * @return The modified Block instance
- * 
+ *
+ * %zh
+ * 修改已有方块的属性。
+ * 这个函数允许你修改已经注册到 Minecraft 方块注册表中的方块属性。
+ * 变更会作用到方块的默认状态，并影响该方块的所有实例。
+ * @param blockId
+ * %en The identifier of the block to modify (e.g., "minecraft:stone")
+ * %zh 要修改的方块标识符（例如 "minecraft:stone"）。
+ * @param configure
+ * %en Configuration lambda for block modifications
+ * %zh 方块修改配置 lambda。
+ * @return
+ * %en modified Block instance
+ * %zh 返回修改后的方块实例。
  * @example
+ * %en
  * ```kotlin
  * modifyBlock("minecraft:stone") {
  *     hardness = 1.0f
@@ -126,6 +144,7 @@ class BlockModificationConfig(
  *     friction = 0.8f
  * }
  * ```
+ * %zh 示例代码见英文部分。
  */
 @ApiStatus.Experimental
 fun modifyBlock(blockId: String, configure: BlockModificationConfig.() -> Unit): Block {
@@ -133,11 +152,20 @@ fun modifyBlock(blockId: String, configure: BlockModificationConfig.() -> Unit):
 }
 
 /**
+ * %en
  * Modifies an existing block's properties.
- * 
- * @param blockId The identifier of the block to modify
- * @param configure Configuration lambda for block modifications
- * @return The modified Block instance
+ *
+ * %zh
+ * 修改已有方块的属性。
+ * @param blockId
+ * %en The identifier of the block to modify
+ * %zh 要修改的方块标识符。
+ * @param configure
+ * %en Configuration lambda for block modifications
+ * %zh 方块修改配置 lambda。
+ * @return
+ * %en modified Block instance
+ * %zh 返回修改后的方块实例。
  */
 @ApiStatus.Experimental
 fun modifyBlock(blockId: Identifier, configure: BlockModificationConfig.() -> Unit): Block {
@@ -257,40 +285,68 @@ private fun statePredicate(value: Boolean): BlockBehaviour.StatePredicate {
 }
 
 /**
+ * %en
  * Gets a block by its identifier.
- * 
- * @param blockId The block identifier
- * @return The Block instance, or null if not found
+ *
+ * %zh
+ * 根据标识符获取方块。
+ * @param blockId
+ * %en The block identifier
+ * %zh 方块标识符。
+ * @return
+ * %en Block instance, or null if not found
+ * %zh 找到时返回方块实例，未找到时返回 null。
  */
 fun getBlock(blockId: String): Block? {
     return getBlock(id(blockId))
 }
 
 /**
+ * %en
  * Gets a block by its identifier.
- * 
- * @param blockId The block identifier
- * @return The Block instance, or null if not found
+ *
+ * %zh
+ * 根据标识符获取方块。
+ * @param blockId
+ * %en The block identifier
+ * %zh 方块标识符。
+ * @return
+ * %en Block instance, or null if not found
+ * %zh 找到时返回方块实例，未找到时返回 null。
  */
 fun getBlock(blockId: Identifier): Block? {
     return BuiltInRegistries.BLOCK.getOptional(blockId).orElse(null)
 }
 
 /**
+ * %en
  * Gets the default block state for a block.
- * 
- * @param blockId The block identifier
- * @return The default BlockState, or null if block not found
+ *
+ * %zh
+ * 获取方块的默认方块状态。
+ * @param blockId
+ * %en The block identifier
+ * %zh 方块标识符。
+ * @return
+ * %en default BlockState, or null if block not found
+ * %zh 找到时返回默认方块状态，未找到时返回 null。
  */
 fun getBlockState(blockId: String): BlockState? {
     return getBlockState(id(blockId))
 }
 
 /**
+ * %en
  * Gets the default block state for a block.
- * 
- * @param blockId The block identifier
- * @return The default BlockState, or null if block not found
+ *
+ * %zh
+ * 获取方块的默认方块状态。
+ * @param blockId
+ * %en The block identifier
+ * %zh 方块标识符。
+ * @return
+ * %en default BlockState, or null if block not found
+ * %zh 找到时返回默认方块状态，未找到时返回 null。
  */
 fun getBlockState(blockId: Identifier): BlockState? {
     val block = getBlock(blockId) ?: return null

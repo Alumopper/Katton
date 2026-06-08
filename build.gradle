@@ -124,6 +124,8 @@ jar {
 
 kattonApiDocs {
     outputDir = layout.buildDirectory.dir('docs')
+    locales = ['en', 'zh']
+    defaultLocale = 'en'
 
     module('common') {
         displayName = 'Common'

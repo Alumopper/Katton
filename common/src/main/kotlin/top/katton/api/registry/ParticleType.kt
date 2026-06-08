@@ -9,12 +9,23 @@ import top.katton.registry.RegisterMode
 import top.katton.registry.id
 
 /**
+ * %en
  * Registers a native ParticleType with hot-reload support.
  *
- * @param id Particle identifier (e.g., "mymod:custom_particle")
- * @param registerMode Registration mode (GLOBAL, WORLD, or RELOADABLE)
- * @param particleTypeFactory Factory function to create the ParticleType instance
- * @return The registered KattonParticleTypeEntry
+ * %zh
+ * 注册原生 ParticleType，并支持热重载。
+ * @param id
+ * %en Particle identifier (e.g., "mymod:custom_particle")
+ * %zh 粒子标识符，例如 "mymod:custom_particle"。
+ * @param registerMode
+ * %en Registration mode (GLOBAL, WORLD, or RELOADABLE)
+ * %zh 注册模式（GLOBAL、WORLD 或 RELOADABLE）。
+ * @param particleTypeFactory
+ * %en Factory function to create the ParticleType instance
+ * %zh 创建 ParticleType 实例的工厂函数。
+ * @return
+ * %en registered KattonParticleTypeEntry
+ * %zh 已注册的 KattonParticleTypeEntry。
  */
 fun registerNativeParticleType(
     id: String,
@@ -23,12 +34,23 @@ fun registerNativeParticleType(
 ): KattonRegistry.KattonParticleTypeEntry = registerNativeParticleType(id(id), registerMode, particleTypeFactory)
 
 /**
+ * %en
  * Registers a native ParticleType with hot-reload support.
  *
- * @param id Particle identifier
- * @param registerMode Registration mode
- * @param particleTypeFactory Factory function to create the ParticleType instance
- * @return The registered KattonParticleTypeEntry
+ * %zh
+ * 注册原生 ParticleType，并支持热重载。
+ * @param id
+ * %en Particle identifier
+ * %zh 粒子标识符。
+ * @param registerMode
+ * %en Registration mode
+ * %zh 注册模式。
+ * @param particleTypeFactory
+ * %en Factory function to create the ParticleType instance
+ * %zh 创建 ParticleType 实例的工厂函数。
+ * @return
+ * %en registered KattonParticleTypeEntry
+ * %zh 已注册的 KattonParticleTypeEntry。
  */
 fun registerNativeParticleType(
     id: Identifier,

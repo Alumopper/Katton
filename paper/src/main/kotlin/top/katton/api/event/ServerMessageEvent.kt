@@ -16,10 +16,16 @@ import top.katton.util.createCancellableUnit
 import top.katton.util.createUnit
 
 /**
+ * %en
  * Server message events for Paper (Bukkit) platform.
  *
  * This object provides events related to chat messages, broadcast
  * messages, and command dispatch.
+ *
+ * %zh
+ * Paper (Bukkit) 平台的服务器消息事件。
+ *
+ * 此对象提供与聊天消息、广播消息以及命令分发相关的事件。
  */
 @Suppress("unused")
 object ServerMessageEvent {

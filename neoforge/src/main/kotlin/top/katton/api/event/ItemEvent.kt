@@ -10,10 +10,15 @@ import top.katton.Katton
 import top.katton.util.createReturnIfNot
 
 /**
+ * %en
  * Item interaction events for NeoForge platform.
  *
  * This object provides events related to item usage including
  * using items on blocks and general item use events.
+ *
+ * %zh
+ * NeoForge 平台的物品交互事件。
+ * 此对象提供与物品使用相关的事件，包括对方块使用物品以及一般的物品使用事件。
  */
 @Suppress("unused")
 @EventBusSubscriber(

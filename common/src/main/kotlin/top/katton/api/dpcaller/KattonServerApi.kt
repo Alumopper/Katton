@@ -1,4 +1,4 @@
-@file:Suppress("unused")
+﻿@file:Suppress("unused")
 
 package top.katton.api.dpcaller
 
@@ -22,6 +22,7 @@ import top.katton.api.requireServer
 import java.util.*
 
 /**
+ * %en
  * Server management API providing access to server-level operations.
  *
  * This module provides functions for server administration including:
@@ -29,34 +30,62 @@ import java.util.*
  * - Command execution
  * - Game rules and difficulty
  * - Server storage and scoreboard access
+ *
+ * %zh
+ * 面向服务器级操作的服务器管理 API。
+ * 本模块提供用于服务器管理的函数，包括：
+ * - 玩家管理（查找、封禁、踢出、设置管理员权限）
+ * - 命令执行
+ * - 游戏规则和难度
+ * - 服务器存储和计分板访问
  */
 
 /**
+ * %en
  * Access to all online players.
+ *
+ * %zh
+ * 访问所有在线玩家。
  */
 val players: KattonPlayerList
     get() = KattonPlayerList(requireServer().playerList)
 
 /**
+ * %en
  * Access to all entities across all levels.
+ *
+ * %zh
+ * 访问所有维度中的全部实体。
  */
 val entities: KattonServerEntityCollection
     get() = KattonServerEntityCollection(requireServer())
 
 /**
+ * %en
  * Server command storage for persistent data.
+ *
+ * %zh
+ * 用于保存持久数据的服务器命令存储。
  */
 val storage: CommandStorage
     get() = requireServer().commandStorage
 
 /**
+ * %en
  * Server scoreboard instance.
+ *
+ * %zh
+ * 服务器计分板实例。
  */
 val scoreboard: Scoreboard
     get() = requireServer().scoreboard
 
 /**
+ * %en
  * Current server difficulty setting.
+ *
+ * %zh
+ * 当前服务器难度设置。
  */
 var difficulty: Difficulty
     get() = requireServer().overworld().difficulty
@@ -65,17 +94,29 @@ var difficulty: Difficulty
     }
 
 /**
+ * %en
  * Execute a command string.
  *
- * @param command the command string to execute
+ * %zh
+ * 执行一条命令字符串。
+ * @param command
+ * %en the command string to execute
+ * %zh 要执行的命令字符串。
  */
 fun execute(command: String) = executeCommandAsServer(command)
 
 /**
+ * %en
  * Execute a command as the provided command source.
  *
- * @param source the command source to run the command as
- * @param command the command string to execute
+ * %zh
+ * 以指定的命令源执行命令。
+ * @param source
+ * %en the command source to run the command as
+ * %zh 用作执行主体的命令源。
+ * @param command
+ * %en the command string to execute
+ * %zh 要执行的命令字符串。
  */
 fun executeCommand(source: CommandSourceStack, command: String) {
     val srv = source.server
@@ -84,9 +125,14 @@ fun executeCommand(source: CommandSourceStack, command: String) {
 
 
 /**
+ * %en
  * Execute a command as the server console.
  *
- * @param command the command string to execute
+ * %zh
+ * 以服务器控制台身份执行命令。
+ * @param command
+ * %en the command string to execute
+ * %zh 要执行的命令字符串。
  */
 fun executeCommandAsServer(command: String) {
     val srv = requireServer()
@@ -95,41 +141,71 @@ fun executeCommandAsServer(command: String) {
 }
 
 /**
+ * %en
  * Find a player by name.
  *
- * @param player the player name to search for
- * @return the ServerPlayer if found, null otherwise
+ * %zh
+ * 根据名称查找玩家。
+ * @param player
+ * %en the player name to search for
+ * %zh 要查找的玩家名称。
+ * @return
+ * %en ServerPlayer if found, null otherwise
+ * %zh 找到则返回 ServerPlayer，否则返回 null。
  */
 fun findPlayer(player: String): ServerPlayer?{
     return requireServer().playerList.getPlayerByName(player)
 }
 
 /**
+ * %en
  * Find a player by UUID.
  *
- * @param uuid the player UUID to search for
- * @return the ServerPlayer if found, null otherwise
+ * %zh
+ * 根据 UUID 查找玩家。
+ * @param uuid
+ * %en the player UUID to search for
+ * %zh 要查找的玩家 UUID。
+ * @return
+ * %en ServerPlayer if found, null otherwise
+ * %zh 找到则返回 ServerPlayer，否则返回 null。
  */
 fun findPlayer(uuid: UUID): ServerPlayer?{
     return requireServer().playerList.getPlayer(uuid)
 }
 
 /**
+ * %en
  * Find entities using an entity selector in a level.
  *
- * @param level the ServerLevel to search in
- * @param selector the EntitySelector to use
- * @return list of matching entities
+ * %zh
+ * 在指定维度中使用实体选择器查找实体。
+ * @param level
+ * %en the ServerLevel to search in
+ * %zh 要搜索的 ServerLevel。
+ * @param selector
+ * %en the EntitySelector to use
+ * %zh 要使用的 EntitySelector。
+ * @return
+ * %en of matching entities
+ * %zh 返回匹配的实体列表。
  */
 fun findEntities(level: ServerLevel, selector: EntitySelector): List<Entity> {
     return selector.findEntities(requireServer().createCommandSourceStack().withLevel(level))
 }
 
 /**
+ * %en
  * Find an entity by UUID across all levels.
  *
- * @param uuid the entity UUID to search for
- * @return the Entity if found, null otherwise
+ * %zh
+ * 在所有维度中根据 UUID 查找实体。
+ * @param uuid
+ * %en the entity UUID to search for
+ * %zh 要查找的实体 UUID。
+ * @return
+ * %en Entity if found, null otherwise
+ * %zh 找到则返回 Entity，否则返回 null。
  */
 fun findEntity(uuid: UUID): Entity?{
     return requireServer().allLevels.firstNotNullOfOrNull { it.getEntity(uuid) }
@@ -137,9 +213,14 @@ fun findEntity(uuid: UUID): Entity?{
 
 
 /**
+ * %en
  * Ban a player by adding them to the server ban list and disconnecting them.
  *
- * @param player the ServerPlayer to ban
+ * %zh
+ * 将玩家加入服务器封禁列表并断开其连接。
+ * @param player
+ * %en the ServerPlayer to ban
+ * %zh 要封禁的 ServerPlayer。
  */
 fun ban(player: ServerPlayer) {
     val userBanList = requireServer().playerList.bans
@@ -155,9 +236,14 @@ fun ban(player: ServerPlayer) {
 
 
 /**
+ * %en
  * Ban an IP address and disconnect matching players.
  *
- * @param ip IP address string to ban
+ * %zh
+ * 封禁一个 IP 地址，并断开所有匹配玩家的连接。
+ * @param ip
+ * %en IP address string to ban
+ * %zh 要封禁的 IP 地址字符串。
  */
 fun banIp(ip: String) {
     val ipBanList = requireServer().playerList.ipBans
@@ -174,9 +260,14 @@ fun banIp(ip: String) {
 
 
 /**
+ * %en
  * De-op a player (remove operator status).
  *
- * @param player ServerPlayer to de-op
+ * %zh
+ * 取消玩家的管理员权限。
+ * @param player
+ * %en ServerPlayer to de-op
+ * %zh 要取消权限的 ServerPlayer。
  */
 fun deop(player: ServerPlayer) {
     requireServer().playerList.deop(player.nameAndId())
@@ -184,9 +275,14 @@ fun deop(player: ServerPlayer) {
 
 
 /**
+ * %en
  * Op a player (grant operator status).
  *
- * @param player ServerPlayer to op
+ * %zh
+ * 授予玩家管理员权限。
+ * @param player
+ * %en ServerPlayer to op
+ * %zh 要授予权限的 ServerPlayer。
  */
 fun op(player: ServerPlayer) {
     requireServer().playerList.op(player.nameAndId())
@@ -194,10 +290,17 @@ fun op(player: ServerPlayer) {
 
 
 /**
+ * %en
  * Set server difficulty.
  *
- * @param difficulty new Difficulty
- * @param ignoreLock whether to ignore difficulty lock
+ * %zh
+ * 设置服务器难度。
+ * @param difficulty
+ * %en new Difficulty
+ * %zh 新的 Difficulty。
+ * @param ignoreLock
+ * %en whether to ignore difficulty lock
+ * %zh 是否忽略难度锁定。
  */
 fun setDifficulty(difficulty: Difficulty, ignoreLock: Boolean = true) {
     requireServer().setDifficulty(difficulty, ignoreLock)
@@ -205,10 +308,17 @@ fun setDifficulty(difficulty: Difficulty, ignoreLock: Boolean = true) {
 
 
 /**
+ * %en
  * Run a function (data pack function) with an optional command source.
  *
- * @param id function identifier
- * @param source command source to use (defaults to server)
+ * %zh
+ * 使用可选的命令源执行函数（数据包函数）。
+ * @param id
+ * %en function identifier
+ * %zh 函数标识符。
+ * @param source
+ * %en command source to use (defaults to server)
+ * %zh 要使用的命令源（默认使用服务器）。
  */
 fun runFunction(id: Identifier, source: CommandSourceStack = requireServer().createCommandSourceStack()) {
     requireServer().functions.get(id).ifPresent {
@@ -218,10 +328,17 @@ fun runFunction(id: Identifier, source: CommandSourceStack = requireServer().cre
 
 
 /**
+ * %en
  * Set a player's game mode.
  *
- * @param player target ServerPlayer
- * @param gameMode target GameType
+ * %zh
+ * 设置玩家的游戏模式。
+ * @param player
+ * %en target ServerPlayer
+ * %zh 目标 ServerPlayer。
+ * @param gameMode
+ * %en target GameType
+ * %zh 目标 GameType。
  */
 fun setGameMode(player: ServerPlayer, gameMode: GameType) {
     player.setGameMode(gameMode)
@@ -229,10 +346,17 @@ fun setGameMode(player: ServerPlayer, gameMode: GameType) {
 
 
 /**
+ * %en
  * Get a player's current GameType.
  *
- * @param player target ServerPlayer
- * @return current GameType
+ * %zh
+ * 获取玩家当前的 GameType。
+ * @param player
+ * %en target ServerPlayer
+ * %zh 目标 ServerPlayer。
+ * @return
+ * %en GameType
+ * %zh 返回 GameType。
  */
 fun getGameMode(player: ServerPlayer): GameType {
     return player.gameMode.gameModeForPlayer
@@ -240,10 +364,17 @@ fun getGameMode(player: ServerPlayer): GameType {
 
 
 /**
+ * %en
  * Set a game rule value on the server overworld.
  *
- * @param key GameRule key
- * @param value value to set
+ * %zh
+ * 在服务器主世界中设置游戏规则值。
+ * @param key
+ * %en GameRule key
+ * %zh GameRule 键。
+ * @param value
+ * %en value to set
+ * %zh 要设置的值。
  */
 fun <T : Any> setGameRule(key: GameRule<T>, value: T) {
     try{
@@ -255,10 +386,17 @@ fun <T : Any> setGameRule(key: GameRule<T>, value: T) {
 
 
 /**
+ * %en
  * Get a game rule value from the server overworld.
  *
- * @param key GameRule key
- * @return value of the game rule
+ * %zh
+ * 从服务器主世界获取游戏规则值。
+ * @param key
+ * %en GameRule key
+ * %zh GameRule 键。
+ * @return
+ * %en of the game rule
+ * %zh 返回该游戏规则的值。
  */
 fun <T : Any> getGameRule(key: GameRule<T>): T {
     return requireServer().overworld().gameRules.get(key)
@@ -266,15 +404,20 @@ fun <T : Any> getGameRule(key: GameRule<T>): T {
 
 
 /**
+ * %en
  * Kick a player with an optional reason component.
  *
- * @param player target Player (ServerPlayer required to disconnect)
- * @param reason disconnect reason component
+ * %zh
+ * 踢出玩家，并可附带可选的原因组件。
+ * @param player
+ * %en target Player (ServerPlayer required to disconnect)
+ * %zh 目标玩家（需要是 ServerPlayer 才能断开连接）。
+ * @param reason
+ * %en disconnect reason component
+ * %zh 断开连接原因组件。
  */
 fun kick(player: Player, reason: Component = Component.translatable("multiplayer.disconnect.kicked")) {
     if (player is ServerPlayer) {
         player.connection.disconnect(reason)
     }
 }
-
-

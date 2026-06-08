@@ -17,6 +17,7 @@ import top.katton.registry.id
 private val LOGGER = LoggerFactory.getLogger("top.katton.api.mod.KattonVillagerTradeModificationApi")
 
 /**
+ * %en
  * Configuration for a single trade to be appended to an existing
  * [TradeSet] via [addVillagerTrade].
  *
@@ -25,29 +26,71 @@ private val LOGGER = LoggerFactory.getLogger("top.katton.api.mod.KattonVillagerT
  * maxUses, int xp, float priceMultiplier, ...)` constructor on MC
  * 26.1.2 — every value here is plain enough to keep stable across patch
  * releases.
+ *
+ * %zh
+ * 用于向现有 [TradeSet] 追加单条交易的配置对象，可由 [addVillagerTrade] 使用。
+ * 这些字段直接对应 MC 26.1.2 中公开的 `VillagerTrade(TradeCost wants,
+ * Optional<TradeCost> additionalWants, ItemStackTemplate gives, int maxUses,
+ * int xp, float priceMultiplier, ...)` 构造器，因此足够稳定，能跨补丁版本保持兼容。
  */
 class VillagerTradeAdditionConfig internal constructor(
     val tradeSet: ResourceKey<TradeSet>,
 ) {
-    /** Item the merchant wants from the player. */
+    /**
+ * %en
+ * Item the merchant wants from the player.
+ *
+ * %zh
+ * 商人希望玩家提供的物品。
+ */
     var costItemId: Identifier? = null
     var costItemCount: Int = 1
 
-    /** Optional secondary cost. */
+    /**
+ * %en
+ * Optional secondary cost.
+ *
+ * %zh
+ * 可选的第二种花费。
+ */
     var costBItemId: Identifier? = null
     var costBItemCount: Int = 1
 
-    /** Item the merchant gives back. */
+    /**
+ * %en
+ * Item the merchant gives back.
+ *
+ * %zh
+ * 商人回赠的物品。
+ */
     var resultItemId: Identifier? = null
     var resultItemCount: Int = 1
 
-    /** Maximum trade uses (vanilla farmer level 1 emerald-bread = 16). */
+    /**
+ * %en
+ * Maximum number of times the trade can be used.
+ *
+ * %zh
+ * 交易可使用的最大次数（例如原版农民 1 级的绿宝石-面包为 16）。
+ */
     var maxUses: Int = 12
 
-    /** Villager XP awarded per trade. */
+    /**
+ * %en
+ * Villager XP awarded per trade.
+ *
+ * %zh
+ * 每次交易奖励的村民经验。
+ */
     var xp: Int = 2
 
-    /** Vanilla price multiplier (0.05 default; matches farmer baselines). */
+    /**
+ * %en
+ * Vanilla price multiplier (0.05 default; matches farmer baselines).
+ *
+ * %zh
+ * 原版价格倍率（默认 0.05；与农民基线一致）。
+ */
     var priceMultiplier: Float = 0.05f
 
     fun cost(itemId: String, count: Int = 1) {
@@ -101,6 +144,7 @@ class VillagerTradeAdditionConfig internal constructor(
 }
 
 /**
+ * %en
  * Appends a new trade entry to an existing villager / wandering trader
  * [TradeSet].
  *
@@ -118,7 +162,19 @@ class VillagerTradeAdditionConfig internal constructor(
  * - the trade-set id cannot be parsed,
  * - the configuration is missing required fields (`cost` / `result`).
  *
+ * %zh
+ * 向现有村民或流浪商人 [TradeSet] 追加一条新交易。
+ * `tradeSetKey` 是来自 `minecraft:trade_set` 的注册表标识，例如
+ * `"minecraft:farmer/level_1"` 或 `"minecraft:wandering_trader/buying"`。
+ * 变更会先通过 [VillagerTradeManager] 暂存，再在标准重载流程中刷出
+ *（也就是脚本执行后、服务器线程上）。在 `/katton reload` 之外调用也没问题，
+ * 变更要等服务器应用待处理的数据包修改后才会生效。
+ * 在以下情况下会返回 `false` 并记录警告：
+ * - 服务器未运行
+ * - 无法解析交易组标识
+ * - 配置缺少必需字段（`cost` / `result`）
  * @example
+ * %en
  * ```kotlin
  * addVillagerTrade("minecraft:farmer/level_1") {
  *     cost("minecraft:emerald", count = 1)
@@ -128,6 +184,7 @@ class VillagerTradeAdditionConfig internal constructor(
  *     priceMultiplier = 0.05f
  * }
  * ```
+ * %zh 示例代码见英文部分。
  */
 @ApiStatus.Experimental
 fun addVillagerTrade(
@@ -141,7 +198,13 @@ fun addVillagerTrade(
     return addVillagerTrade(tradeSetId, configure)
 }
 
-/** Identifier overload of [addVillagerTrade]. */
+/**
+ * %en
+ *  Identifier overload of [addVillagerTrade].
+ *
+ * %zh
+ * `addVillagerTrade` 的 Identifier 重载。
+ */
 @ApiStatus.Experimental
 fun addVillagerTrade(
     tradeSetId: Identifier,

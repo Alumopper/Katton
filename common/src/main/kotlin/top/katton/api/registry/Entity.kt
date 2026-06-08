@@ -19,19 +19,34 @@ import top.katton.registry.id
 import top.katton.platform.SpawnPlacementHooks
 
 /**
+ * %en
  * Registers a complete native Entity with hot-reload support.
  *
  * This is the primary API for registering custom entities from scripts.
  * It handles EntityType registration plus optional attributes, spawn egg,
  * and spawn placement configuration in a single call.
  *
- * @param id Entity identifier (e.g., "mymod:custom_mob")
- * @param registerMode Registration mode (GLOBAL, WORLD, or RELOADABLE)
- * @param configure Configuration lambda for entity properties (dimensions, category, attributes, etc.)
- * @param entityFactory Factory function to create the EntityType instance
- * @return The registered KattonEntityTypeEntry
- *
+ * %zh
+ * 注册完整的原生 Entity，并支持热重载。
+ * 这是脚本中注册自定义实体的主要 API。
+ * 它会在一次调用中完成 EntityType 注册，以及可选的属性、刷怪蛋和生成位置配置。
+ * @param id
+ * %en Entity identifier (e.g., "mymod:custom_mob")
+ * %zh Entity 标识符，例如 "mymod:custom_mob"。
+ * @param registerMode
+ * %en Registration mode (GLOBAL, WORLD, or RELOADABLE)
+ * %zh 注册模式（GLOBAL、WORLD 或 RELOADABLE）。
+ * @param configure
+ * %en Configuration lambda for entity properties (dimensions, category, attributes, etc.)
+ * %zh Entity 属性配置 lambda（尺寸、类别、属性等）。
+ * @param entityFactory
+ * %en Factory function to create the EntityType instance
+ * %zh 创建 EntityType 实例的工厂函数。
+ * @return
+ * %en registered KattonEntityTypeEntry
+ * %zh 已注册的 KattonEntityTypeEntry。
  * @example
+ * %en
  * ```kotlin
  * registerNativeEntity(
  *     id = "mymod:custom_mob",
@@ -53,6 +68,7 @@ import top.katton.platform.SpawnPlacementHooks
  *         .build(ResourceKey.create(Registries.ENTITY_TYPE, id(props.id)))
  * }
  * ```
+ * %zh 示例代码见英文部分。
  */
 @ApiStatus.Experimental
 fun registerNativeEntity(
@@ -63,7 +79,11 @@ fun registerNativeEntity(
 ): KattonRegistry.KattonEntityTypeEntry = registerNativeEntity(id(id), registerMode, configure, entityFactory)
 
 /**
+ * %en
  * Registers a complete native Entity with hot-reload support (Identifier overload).
+ *
+ * %zh
+ * 注册完整的原生 Entity，并支持热重载（Identifier 重载）。
  */
 fun registerNativeEntity(
     id: Identifier,
@@ -76,6 +96,7 @@ fun registerNativeEntity(
 }
 
 /**
+ * %en
  * Registers entity default attributes independently.
  *
  * Use this when you want to register attributes for an entity that was
@@ -87,10 +108,24 @@ fun registerNativeEntity(
  * For global entities, use [registerNativeEntity] which routes
  * through the correct mode-aware path.
  *
- * @param id Entity identifier
- * @param entityType The already-registered entity type
- * @param configure Configuration lambda for attributes
- * @param reloadable true for RELOADABLE, false for GLOBAL
+ * %zh
+ * 独立注册实体的默认属性。
+ * 当你要为已经通过 [registerNativeEntityType] 注册的实体补充属性时使用此方法。
+ * 对于新实体，优先使用 [registerNativeEntity]，它会自动处理属性注册。
+ * 注意：这里默认使用可重载路径，因为独立的属性注册通常发生在热重载期间。
+ * 对于全局实体，请使用 [registerNativeEntity]，它会走正确的模式分流路径。
+ * @param id
+ * %en Entity identifier
+ * %zh 实体标识符。
+ * @param entityType
+ * %en The already-registered entity type
+ * %zh 已注册的实体类型。
+ * @param configure
+ * %en Configuration lambda for attributes
+ * %zh 属性配置 lambda。
+ * @param reloadable
+ * %en true for RELOADABLE, false for GLOBAL
+ * %zh `true` 表示 RELOADABLE，`false` 表示 GLOBAL。
  */
 @ApiStatus.Experimental
 fun registerEntityAttributes(
@@ -107,14 +142,29 @@ fun registerEntityAttributes(
 }
 
 /**
+ * %en
  * Registers a spawn placement rule independently.
  *
- * @param T The mob entity type
- * @param entityType The entity type
- * @param placementType Where the entity can spawn (e.g., ON_GROUND, IN_WATER)
- * @param heightmap The heightmap type for spawn checks
- * @param predicate Custom spawn predicate
- * @param reloadable true for RELOADABLE, false for GLOBAL
+ * %zh
+ * 独立注册生成位置规则。
+ * @param T
+ * %en The mob entity type
+ * %zh 生物实体类型。
+ * @param entityType
+ * %en The entity type
+ * %zh 实体类型。
+ * @param placementType
+ * %en Where the entity can spawn (e.g., ON_GROUND, IN_WATER)
+ * %zh 实体可生成的位置，例如 ON_GROUND、IN_WATER。
+ * @param heightmap
+ * %en The heightmap type for spawn checks
+ * %zh 用于生成检查的 Heightmap 类型。
+ * @param predicate
+ * %en Custom spawn predicate
+ * %zh 自定义生成条件。
+ * @param reloadable
+ * %en true for RELOADABLE, false for GLOBAL
+ * %zh `true` 表示 RELOADABLE，`false` 表示 GLOBAL。
  */
 @ApiStatus.Experimental
 @Suppress("UNCHECKED_CAST")
@@ -133,6 +183,7 @@ fun <T : net.minecraft.world.entity.Mob> registerSpawnPlacement(
 }
 
 /**
+ * %en
  * Registers a spawn egg item for an entity type independently.
  *
  * Use this to create a spawn egg for an entity registered via
@@ -142,10 +193,23 @@ fun <T : net.minecraft.world.entity.Mob> registerSpawnPlacement(
  * In MC 1.21.11+, spawn egg colors are derived from the entity type
  * automatically.
  *
- * @param id Spawn egg item identifier (e.g., "mymod:custom_mob_spawn_egg")
- * @param entityType The entity type this egg spawns
- * @param registerMode Registration mode
- * @return The registered KattonItemEntry
+ * %zh
+ * 独立为某个实体类型注册刷怪蛋物品。
+ * 当实体是通过 [registerNativeEntityType] 注册时，可以使用这个方法创建刷怪蛋。
+ * 对于新实体，优先使用带有 `withSpawnEgg()` 的 [registerNativeEntity]。
+ * 在 MC 1.21.11+ 中，刷怪蛋颜色会自动根据实体类型推导。
+ * @param id
+ * %en Spawn egg item identifier (e.g., "mymod:custom_mob_spawn_egg")
+ * %zh 刷怪蛋物品标识符，例如 "mymod:custom_mob_spawn_egg"。
+ * @param entityType
+ * %en The entity type this egg spawns
+ * %zh 该刷怪蛋生成的实体类型。
+ * @param registerMode
+ * %en Registration mode
+ * %zh 注册模式。
+ * @return
+ * %en registered KattonItemEntry
+ * %zh 已注册的 KattonItemEntry。
  */
 @ApiStatus.Experimental
 fun registerSpawnEgg(
@@ -155,7 +219,11 @@ fun registerSpawnEgg(
 ): KattonRegistry.KattonItemEntry = registerSpawnEgg(id(id), entityType, registerMode)
 
 /**
+ * %en
  * Registers a spawn egg item for an entity type independently (Identifier overload).
+ *
+ * %zh
+ * 独立为某个实体类型注册刷怪蛋物品（Identifier 重载）。
  */
 @ApiStatus.Experimental
 fun registerSpawnEgg(

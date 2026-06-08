@@ -16,10 +16,16 @@ import top.katton.util.createCancellableUnit
 import top.katton.util.createUnit
 
 /**
+ * %en
  * Chunk and block events for Paper (Bukkit) platform.
  *
  * This object provides events related to chunk load/unload, block
  * break/place, and explosion events.
+ *
+ * %zh
+ * Paper (Bukkit) 平台的区块和方块事件。
+ *
+ * 此对象提供与区块加载/卸载、方块破坏/放置以及爆炸相关的事件。
  */
 @Suppress("unused")
 object ChunkAndBlockEvent {

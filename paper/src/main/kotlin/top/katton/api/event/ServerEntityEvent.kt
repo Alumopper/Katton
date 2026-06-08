@@ -18,10 +18,15 @@ import top.katton.util.createCancellableUnit
 import top.katton.util.createUnit
 
 /**
+ * %en
  * Server entity events for Paper (Bukkit) platform.
  *
  * This object provides events related to entity lifecycle including
  * load/unload, equipment change, teleport, enderman anger, and world change.
+ *
+ * %zh
+ * Paper (Bukkit) 平台的服务端实体事件。
+ * 此对象提供与实体生命周期相关的事件，包括加载/卸载、装备变更、传送、末影人仇恨以及世界切换。
  */
 @Suppress("unused")
 object ServerEntityEvent {

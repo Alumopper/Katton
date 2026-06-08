@@ -7,10 +7,16 @@ import top.katton.bridger.EventResult
 import top.katton.util.*
 
 /**
- * Living entity behavior events for Fabric platform.
+ * %en
+ * Living behavior events for Fabric platform.
  *
- * This object provides events related to living entity behaviors including
- * elytra flight, sleeping, animal taming, and baby spawning.
+ * This object provides events related to mob behaviors including taming,
+ * breeding, sleeping, elytra flight, and bed interaction.
+ *
+ * %zh
+ * Fabric 平台的生物行为事件。
+ *
+ * 此对象提供与生物行为相关的事件，包括驯服、繁殖、睡眠、鞘翅飞行以及床交互。
  */
 @Suppress("unused")
 object LivingBehaviorEvent {
@@ -81,64 +87,131 @@ object LivingBehaviorEvent {
     // === Elytra Events ===
 
     /**
-     * Event triggered to check if an entity is allowed to use elytra.
-     *
-     * @return true to allow elytra usage, false to deny.
-     */
+ * %en
+ * Living behavior events for Fabric platform.
+ *
+ * This object provides events related to mob behaviors including taming,
+ * breeding, sleeping, elytra flight, and bed interaction.
+ *
+ * %zh
+ * Fabric 平台的生物行为事件。
+ *
+ * 此对象提供与生物行为相关的事件，包括驯服、繁殖、睡眠、鞘翅飞行以及床交互。
+ */
     val onElytraAllow = createAll<ElytraAllowArg>()
 
     /**
-     * Event triggered to provide custom elytra flight behavior.
-     *
-     * @return true if custom behavior is applied, false to use default.
-     */
+ * %en
+ * Living behavior events for Fabric platform.
+ *
+ * This object provides events related to mob behaviors including taming,
+ * breeding, sleeping, elytra flight, and bed interaction.
+ *
+ * %zh
+ * Fabric 平台的生物行为事件。
+ *
+ * 此对象提供与生物行为相关的事件，包括驯服、繁殖、睡眠、鞘翅飞行以及床交互。
+ */
     val onElytraCustom = createAll<ElytraCustomArg>()
 
     // === Sleep Events ===
 
     /**
-     * Event triggered to check if a player is allowed to sleep.
-     *
-     * @return BedSleepingProblem if sleep is denied, null to allow.
-     */
+ * %en
+ * Living behavior events for Fabric platform.
+ *
+ * This object provides events related to mob behaviors including taming,
+ * breeding, sleeping, elytra flight, and bed interaction.
+ *
+ * %zh
+ * Fabric 平台的生物行为事件。
+ *
+ * 此对象提供与生物行为相关的事件，包括驯服、繁殖、睡眠、鞘翅飞行以及床交互。
+ */
     val onAllowSleeping = createFirstNotNullOfOrNull<AllowSleepingArg, Player.BedSleepingProblem?>()
 
     /**
-     * Event triggered when a player starts sleeping.
-     */
+ * %en
+ * Living behavior events for Fabric platform.
+ *
+ * This object provides events related to mob behaviors including taming,
+ * breeding, sleeping, elytra flight, and bed interaction.
+ *
+ * %zh
+ * Fabric 平台的生物行为事件。
+ *
+ * 此对象提供与生物行为相关的事件，包括驯服、繁殖、睡眠、鞘翅飞行以及床交互。
+ */
     val onStartSleeping = createUnit<SleepingArg>()
 
     /**
-     * Event triggered when a player stops sleeping.
-     */
+ * %en
+ * Living behavior events for Fabric platform.
+ *
+ * This object provides events related to mob behaviors including taming,
+ * breeding, sleeping, elytra flight, and bed interaction.
+ *
+ * %zh
+ * Fabric 平台的生物行为事件。
+ *
+ * 此对象提供与生物行为相关的事件，包括驯服、繁殖、睡眠、鞘翅飞行以及床交互。
+ */
     val onStopSleeping = createUnit<SleepingArg>()
 
     /**
-     * Event triggered to check if a player is allowed to use a bed.
-     *
-     * @return EventResult indicating the result of the check.
-     */
+ * %en
+ * Living behavior events for Fabric platform.
+ *
+ * This object provides events related to mob behaviors including taming,
+ * breeding, sleeping, elytra flight, and bed interaction.
+ *
+ * %zh
+ * Fabric 平台的生物行为事件。
+ *
+ * 此对象提供与生物行为相关的事件，包括驯服、繁殖、睡眠、鞘翅飞行以及床交互。
+ */
     val onAllowBed = createReturnIfNot<AllowBedArg, EventResult>(EventResult.PASS)
 
     /**
-     * Event triggered to check if nearby monsters prevent sleeping.
-     *
-     * @return EventResult indicating whether monsters should prevent sleep.
-     */
+ * %en
+ * Living behavior events for Fabric platform.
+ *
+ * This object provides events related to mob behaviors including taming,
+ * breeding, sleeping, elytra flight, and bed interaction.
+ *
+ * %zh
+ * Fabric 平台的生物行为事件。
+ *
+ * 此对象提供与生物行为相关的事件，包括驯服、繁殖、睡眠、鞘翅飞行以及床交互。
+ */
     val onAllowNearbyMonsters = createReturnIfNot<AllowNearbyMonstersArg, EventResult>(EventResult.PASS)
 
     /**
-     * Event triggered to check if time should reset after sleeping.
-     *
-     * @return true to allow time reset, false to prevent it.
-     */
+ * %en
+ * Living behavior events for Fabric platform.
+ *
+ * This object provides events related to mob behaviors including taming,
+ * breeding, sleeping, elytra flight, and bed interaction.
+ *
+ * %zh
+ * Fabric 平台的生物行为事件。
+ *
+ * 此对象提供与生物行为相关的事件，包括驯服、繁殖、睡眠、鞘翅飞行以及床交互。
+ */
     val onAllowResettingTime = createAll<AllowResettingTimeArg>()
 
     /**
-     * Event triggered to modify the sleeping direction when entering a bed.
-     *
-     * @return The modified direction for the player to face.
-     */
+ * %en
+ * Living behavior events for Fabric platform.
+ *
+ * This object provides events related to mob behaviors including taming,
+ * breeding, sleeping, elytra flight, and bed interaction.
+ *
+ * %zh
+ * Fabric 平台的生物行为事件。
+ *
+ * 此对象提供与生物行为相关的事件，包括驯服、繁殖、睡眠、鞘翅飞行以及床交互。
+ */
     val onModifySleepingDirection = create { events ->
         { arg: ModifySleepingDirectionArg ->
             var d = arg.direction
@@ -148,24 +221,45 @@ object LivingBehaviorEvent {
     }
 
     /**
-     * Event triggered to check if spawn point should be set when sleeping.
-     *
-     * @return true to allow setting spawn, false to prevent it.
-     */
+ * %en
+ * Living behavior events for Fabric platform.
+ *
+ * This object provides events related to mob behaviors including taming,
+ * breeding, sleeping, elytra flight, and bed interaction.
+ *
+ * %zh
+ * Fabric 平台的生物行为事件。
+ *
+ * 此对象提供与生物行为相关的事件，包括驯服、繁殖、睡眠、鞘翅飞行以及床交互。
+ */
     val onAllowSettingSpawn = createAll<AllowSleepingArg>()
 
     /**
-     * Event triggered to set the bed occupation state.
-     *
-     * @return true if the state was handled, false for default behavior.
-     */
+ * %en
+ * Living behavior events for Fabric platform.
+ *
+ * This object provides events related to mob behaviors including taming,
+ * breeding, sleeping, elytra flight, and bed interaction.
+ *
+ * %zh
+ * Fabric 平台的生物行为事件。
+ *
+ * 此对象提供与生物行为相关的事件，包括驯服、繁殖、睡眠、鞘翅飞行以及床交互。
+ */
     val onSetBedOccupationState = createAny<SetBedOccupationStateArg>()
 
     /**
-     * Event triggered to modify the player's wake-up position.
-     *
-     * @return The modified Vec3 wake-up position.
-     */
+ * %en
+ * Living behavior events for Fabric platform.
+ *
+ * This object provides events related to mob behaviors including taming,
+ * breeding, sleeping, elytra flight, and bed interaction.
+ *
+ * %zh
+ * Fabric 平台的生物行为事件。
+ *
+ * 此对象提供与生物行为相关的事件，包括驯服、繁殖、睡眠、鞘翅飞行以及床交互。
+ */
     val onModifyWakeUpPosition = create { events ->
         { arg: ModifyWakeUpPositionArg ->
             var p = arg.wakeUpPos
@@ -175,8 +269,17 @@ object LivingBehaviorEvent {
     }
 
     /**
-     * Event triggered when a player wakes up from sleeping.
-     */
+ * %en
+ * Living behavior events for Fabric platform.
+ *
+ * This object provides events related to mob behaviors including taming,
+ * breeding, sleeping, elytra flight, and bed interaction.
+ *
+ * %zh
+ * Fabric 平台的生物行为事件。
+ *
+ * 此对象提供与生物行为相关的事件，包括驯服、繁殖、睡眠、鞘翅飞行以及床交互。
+ */
     @JvmField
     val onPlayerWakeUp = createUnit<PlayerWakeUpArg>()
 }

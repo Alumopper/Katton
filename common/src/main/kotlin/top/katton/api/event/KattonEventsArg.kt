@@ -36,6 +36,7 @@ import top.katton.bridger.EnchantingContext
 import top.katton.util.CancellableEventArg
 
 /**
+ * %en
  * Event argument data classes for server-side events.
  *
  * This file contains all the data classes used as arguments for various events
@@ -44,20 +45,41 @@ import top.katton.util.CancellableEventArg
  *
  * Events marked with [CancellableEventArg] can be cancelled to prevent the
  * default game behavior.
+ *
+ * %zh
+ * 服务端事件的参数数据类。
+ *
+ * 本文件包含 Katton 事件系统中各类事件使用的参数数据类。
+ * 每个数据类都表示对应事件触发时传递给处理器的上下文。
+ *
+ * 标记为 [CancellableEventArg] 的事件可以被取消，以阻止默认游戏行为。
  */
 
 /**
+ * %en
  * Argument for server-level events.
  *
  * @property server The MinecraftServer instance
+ *
+ * %zh
+ * 服务端级事件的参数。
+ *
+ * @property server MinecraftServer 实例。
  */
 data class ServerArg(val server: MinecraftServer)
 
 /**
+ * %en
  * Argument for datapack contents synchronization event.
  *
  * @property player The player receiving the sync
  * @property joined Whether this sync is due to player joining
+ *
+ * %zh
+ * 数据包内容同步事件的参数。
+ *
+ * @property player 接收同步内容的玩家。
+ * @property joined 是否因为玩家加入而触发本次同步。
  */
 data class SyncDatapackContentsArg(
     val player: ServerPlayer,
@@ -65,10 +87,17 @@ data class SyncDatapackContentsArg(
 )
 
 /**
+ * %en
  * Argument for datapack reload start event.
  *
  * @property server The MinecraftServer instance
  * @property resourceManager The resource manager being reloaded
+ *
+ * %zh
+ * 数据包重载开始事件的参数。
+ *
+ * @property server MinecraftServer 实例。
+ * @property resourceManager 正在重载的资源管理器。
  */
 data class StartDatapackReloadArg(
     val server: MinecraftServer,
@@ -76,11 +105,19 @@ data class StartDatapackReloadArg(
 )
 
 /**
+ * %en
  * Argument for datapack reload end event.
  *
  * @property server The MinecraftServer instance
  * @property resourceManager The resource manager that was reloaded
  * @property success Whether the reload completed successfully
+ *
+ * %zh
+ * 数据包重载结束事件的参数。
+ *
+ * @property server MinecraftServer 实例。
+ * @property resourceManager 已完成重载的资源管理器。
+ * @property success 重载是否成功完成。
  */
 data class EndDatapackReloadArg(
     val server: MinecraftServer,
@@ -89,11 +126,19 @@ data class EndDatapackReloadArg(
 )
 
 /**
+ * %en
  * Argument for server save event.
  *
  * @property server The MinecraftServer instance
  * @property flush Whether data should be flushed to disk
  * @property force Whether this is a forced save
+ *
+ * %zh
+ * 服务端保存事件的参数。
+ *
+ * @property server MinecraftServer 实例。
+ * @property flush 是否将数据立即刷新到磁盘。
+ * @property force 是否为强制保存。
  */
 data class ServerSaveArg(
     val server: MinecraftServer,

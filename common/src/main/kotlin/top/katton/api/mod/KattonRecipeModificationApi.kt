@@ -16,13 +16,20 @@ import top.katton.datapack.ServerDatapackManager
 import top.katton.registry.id
 
 /**
+ * %en
  * Configuration for modifying existing recipe properties.
  *
  * This class provides a fluent API for modifying properties of existing
  * recipes registered in Minecraft's recipe manager. Similar to KubeJS's recipe
  * modification system.
  *
- * @property recipeId The identifier of the recipe to modify
+ * %zh
+ * 用于修改现有配方属性的配置对象。
+ * 这个类提供一个流式 API，用于修改已经注册到 Minecraft 配方管理器中的配方属性。
+ * 风格上类似 KubeJS 的配方修改系统。
+ * @property recipeId
+ * %en The identifier of the recipe to modify
+ * %zh 要修改的配方标识符。
  */
 class RecipeModificationConfig(
     val recipeId: Identifier
@@ -65,16 +72,25 @@ class RecipeModificationConfig(
 }
 
 /**
+ * %en
  * Modifies an existing recipe's properties.
  *
  * This function allows you to modify properties of recipes already registered
  * in Minecraft's recipe manager. Changes are applied by re-registering the
  * modified recipe through the datapack system.
  *
- * @param recipeId The identifier of the recipe to modify (e.g., "minecraft:iron_ingot_from_smelting")
- * @param configure Configuration lambda for recipe modifications
- *
+ * %zh
+ * 修改已有配方的属性。
+ * 这个函数允许你修改已经注册到 Minecraft 配方管理器中的配方属性。
+ * 变更会通过数据包系统重新注册修改后的配方来应用。
+ * @param recipeId
+ * %en The identifier of the recipe to modify (e.g., "minecraft:iron_ingot_from_smelting")
+ * %zh 要修改的配方标识符（例如 "minecraft:iron_ingot_from_smelting"）。
+ * @param configure
+ * %en Configuration lambda for recipe modifications
+ * %zh 配方修改配置 lambda。
  * @example
+ * %en
  * ```kotlin
  * modifyRecipe("minecraft:iron_ingot_from_smelting") {
  *     result = "minecraft:gold_ingot"
@@ -82,6 +98,7 @@ class RecipeModificationConfig(
  *     cookingTime = 100
  * }
  * ```
+ * %zh 示例代码见英文部分。
  */
 @ApiStatus.Experimental
 fun modifyRecipe(recipeId: String, configure: RecipeModificationConfig.() -> Unit) {
@@ -89,10 +106,17 @@ fun modifyRecipe(recipeId: String, configure: RecipeModificationConfig.() -> Uni
 }
 
 /**
+ * %en
  * Modifies an existing recipe's properties.
  *
- * @param recipeId The identifier of the recipe to modify
- * @param configure Configuration lambda for recipe modifications
+ * %zh
+ * 修改已有配方的属性。
+ * @param recipeId
+ * %en The identifier of the recipe to modify
+ * %zh 要修改的配方标识符。
+ * @param configure
+ * %en Configuration lambda for recipe modifications
+ * %zh 配方修改配置 lambda。
  */
 @ApiStatus.Experimental
 fun modifyRecipe(recipeId: Identifier, configure: RecipeModificationConfig.() -> Unit) {
@@ -151,20 +175,34 @@ private fun applyRecipeModifications(json: JsonObject, config: RecipeModificatio
 }
 
 /**
+ * %en
  * Gets a recipe by its identifier as a JsonObject.
  *
- * @param recipeId The recipe identifier
- * @return The recipe as JsonObject, or null if not found
+ * %zh
+ * 根据标识符获取配方，并以 JsonObject 形式返回。
+ * @param recipeId
+ * %en The recipe identifier
+ * %zh 配方标识符。
+ * @return
+ * %en recipe as JsonObject, or null if not found
+ * %zh 找到时返回配方的 JsonObject，未找到时返回 null。
  */
 fun getRecipe(recipeId: String): JsonObject? {
     return getRecipe(id(recipeId))
 }
 
 /**
+ * %en
  * Gets a recipe by its identifier as a JsonObject.
  *
- * @param recipeId The recipe identifier
- * @return The recipe as JsonObject, or null if not found
+ * %zh
+ * 根据标识符获取配方，并以 JsonObject 形式返回。
+ * @param recipeId
+ * %en The recipe identifier
+ * %zh 配方标识符。
+ * @return
+ * %en recipe as JsonObject, or null if not found
+ * %zh 找到时返回配方的 JsonObject，未找到时返回 null。
  */
 fun getRecipe(recipeId: Identifier): JsonObject? {
     val server = server ?: return null
@@ -177,18 +215,28 @@ fun getRecipe(recipeId: Identifier): JsonObject? {
 }
 
 /**
+ * %en
  * Removes a recipe by its identifier.
  *
- * @param recipeId The recipe identifier
+ * %zh
+ * 根据标识符移除配方。
+ * @param recipeId
+ * %en The recipe identifier
+ * %zh 配方标识符。
  */
 fun removeRecipe(recipeId: String) {
     removeRecipe(id(recipeId))
 }
 
 /**
+ * %en
  * Removes a recipe by its identifier.
  *
- * @param recipeId The recipe identifier
+ * %zh
+ * 根据标识符移除配方。
+ * @param recipeId
+ * %en The recipe identifier
+ * %zh 配方标识符。
  */
 fun removeRecipe(recipeId: Identifier) {
     ServerDatapackManager.removeRecipe(recipeId)

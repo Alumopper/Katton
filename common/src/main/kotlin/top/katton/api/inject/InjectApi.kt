@@ -10,91 +10,91 @@ import java.lang.reflect.Method
 /**
  * Unsafe injection API for runtime method interception.
  *
- * This module provides low-level access to inject custom code into arbitrary
- * Java methods at runtime. This is a powerful but potentially dangerous feature
- * that should be used with caution.
+ * %zh
+ * 运行时方法拦截的危险注入 API。
  *
- * Key features:
- * - Before/after method injection
- * - Constructor injection
- * - Method replacement
- * - Method redirection
+ * 这个模块提供了在运行时向任意 Java 方法注入自定义代码的底层能力。
+ * 它很强大，但也有风险，使用时要格外谨慎。
  *
- * **Warning**: Improper use of this API can cause crashes, data corruption,
- * or other unexpected behavior. Always test thoroughly and use appropriate
- * error handling.
+ * 主要功能：
+ * - 方法前置/后置注入
+ * - 构造器注入
+ * - 方法替换
+ * - 方法重定向
+ *
+ * **警告**：不当使用这个 API 可能导致崩溃、数据损坏或其他异常行为。
+ * 请务必充分测试，并配合合适的错误处理。
  */
 
 /**
- * Handle for a registered injection, used for rollback operations.
+ * 注册注入的句柄，用于回滚操作。
  *
- * @property id Injection registration id, used for rollback
+ * @property id 注入注册 ID，用于回滚。
  */
 class InjectionHandle internal constructor(
     val id: String
 )
 
 /**
- * Invocation context passed to unsafe callbacks.
+ * 传给不安全回调的调用上下文。
  *
- * Provides access to the method being invoked, the receiver instance,
- * arguments, and control over the invocation flow.
+ * 可访问正在调用的方法、接收实例、参数，并控制调用流程。
  *
- * @property delegate The underlying injection invocation delegate
+ * @property delegate 底层的注入调用委托。
  */
 class InjectionInvocationContext internal constructor(
     private val delegate: InjectionManager.InjectionInvocation
 ) {
     /**
-     * Method currently being invoked.
+     * 当前正在调用的方法。
      */
     val method: Method get() = delegate.method
 
     /**
-     * Method receiver instance, or `null` for static methods.
+     * 方法接收实例；对于静态方法则为 `null`。
      */
     val instance: Any? get() = delegate.instance
 
     /**
-     * Raw argument array.
+     * 原始参数数组。
      */
     val arguments: Array<Any?> get() = delegate.arguments
 
     /**
-     * Bound script owner for this invocation.
+     * 这次调用绑定的脚本归属。
      */
     val owner: String? get() = delegate.owner
 
     /**
-     * Mutates argument at [index] for current invocation.
+     * 修改当前调用中指定位置的参数。
      *
-     * @param index The argument index to modify
-     * @param value The new value for the argument
+     * @param index 要修改的参数下标。
+     * @param value 参数的新值。
      */
     fun setArgument(index: Int, value: Any?) {
         delegate.setArgument(index, value)
     }
 
     /**
-     * Cancels current invocation. Return value becomes type default if not overridden.
+     * 取消当前调用。若未覆写返回值，则使用该类型的默认值。
      */
     fun cancel() {
         delegate.cancel()
     }
 
     /**
-     * Cancels current invocation and overrides return value immediately.
+     * 取消当前调用，并立即指定返回值。
      *
-     * @param returnValue The value to return instead of executing the method
+     * @param returnValue 用来替代方法执行结果的返回值。
      */
     fun cancelWith(returnValue: Any?) {
         delegate.cancelWith(returnValue)
     }
 
     /**
-     * Overrides return value in after phase.
+     * 在 after 阶段覆写返回值。
      *
-     * @param returnValue The value to return instead of the original result
+     * @param returnValue 用来替代原始结果的返回值。
      */
     fun setReturnValue(returnValue: Any?) {
         delegate.setReturnValue(returnValue)
@@ -102,20 +102,20 @@ class InjectionInvocationContext internal constructor(
 }
 
 /**
- * Constructor invocation context passed to unsafe constructor callbacks.
+ * 传给不安全构造器回调的构造器调用上下文。
  *
- * @property delegate The underlying constructor invocation delegate
+ * @property delegate 底层的构造器调用委托。
  */
 class ConstructorInvocationContext internal constructor(
     private val delegate: InjectionManager.ConstructorInvocation
 ) {
     /**
-     * Constructor currently being invoked.
+     * 当前正在调用的构造器。
      */
     val constructor: Constructor<*> get() = delegate.constructor
 
     /**
-     * Constructed instance (`this`) when available.
+     * 已构造的实例（`this`），如果可用。
      */
     val instance: Any? get() = delegate.instance
 

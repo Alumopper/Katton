@@ -12,20 +12,36 @@ import top.katton.registry.id
 import top.katton.util.ReflectUtil
 
 /**
+ * %en
  * CreativeModeTab registration API.
  *
  * This module provides functions to register custom CreativeModeTabs with hot-reload support.
+ *
+ * %zh
+ * CreativeModeTab 注册 API。
+ * 该模块提供在热重载支持下注册自定义 CreativeModeTab 的函数。
  */
 
 /**
+ * %en
  * Registers a native CreativeModeTab with hot-reload support.
  *
- * @param id Tab identifier (e.g., "mymod:custom_tab")
- * @param registerMode Registration mode (GLOBAL, WORLD, or RELOADABLE)
- * @param tabFactory Factory function to create the CreativeModeTab instance
- * @return The registered KattonCreativeTabEntry
- *
+ * %zh
+ * 注册原生 CreativeModeTab，并支持热重载。
+ * @param id
+ * %en Tab identifier (e.g., "mymod:custom_tab")
+ * %zh 标签页标识符，例如 "mymod:custom_tab"。
+ * @param registerMode
+ * %en Registration mode (GLOBAL, WORLD, or RELOADABLE)
+ * %zh 注册模式（GLOBAL、WORLD 或 RELOADABLE）。
+ * @param tabFactory
+ * %en Factory function to create the CreativeModeTab instance
+ * %zh 创建 CreativeModeTab 实例的工厂函数。
+ * @return
+ * %en registered KattonCreativeTabEntry
+ * %zh 已注册的 KattonCreativeTabEntry。
  * @example
+ * %en
  * ```kotlin
  * registerNativeCreativeTab("mymod:custom_tab") {
  *     CreativeModeTab.builder(CreativeModeTab.Row.TOP, 0)
@@ -35,6 +51,7 @@ import top.katton.util.ReflectUtil
  *         .build()
  * }
  * ```
+ * %zh 示例代码见英文部分。
  */
 @ApiStatus.Experimental
 fun registerNativeCreativeTab(
@@ -44,7 +61,11 @@ fun registerNativeCreativeTab(
 ): KattonRegistry.KattonCreativeTabEntry = registerNativeCreativeTab(id(id), registerMode, tabFactory)
 
 /**
+ * %en
  * Registers a native CreativeModeTab with hot-reload support (Identifier overload).
+ *
+ * %zh
+ * 注册原生 CreativeModeTab，并支持热重载（Identifier 重载）。
  */
 @ApiStatus.Experimental
 fun registerNativeCreativeTab(
@@ -56,15 +77,26 @@ fun registerNativeCreativeTab(
 }
 
 /**
+ * %en
  * Reorders a creative tab within the global tabs list.
  *
  * Uses reflection on Minecraft's internal `CreativeModeTabs` to move a tab
  * after or before another tab. If reflection fails, the tab stays at its
  * default position.
  *
- * @param tab The tab to reorder
- * @param after Move after this tab identifier (e.g., "minecraft:building_blocks")
- * @param before Move before this tab identifier
+ * %zh
+ * 在全局标签页列表中重新排序某个 CreativeModeTab。
+ * 该方法会反射 Minecraft 内部的 `CreativeModeTabs`，将标签页移动到其他标签页之后或之前。
+ * 如果反射失败，标签页会保持在默认位置。
+ * @param tab
+ * %en The tab to reorder
+ * %zh 需要重新排序的标签页。
+ * @param after
+ * %en Move after this tab identifier (e.g., "minecraft:building_blocks")
+ * %zh 移动到该标签页之后，例如 "minecraft:building_blocks"。
+ * @param before
+ * %en Move before this tab identifier
+ * %zh 移动到该标签页之前。
  */
 @ApiStatus.Experimental
 fun reorderCreativeTab(tab: CreativeModeTab, after: String? = null, before: String? = null) {
@@ -103,7 +135,11 @@ fun reorderCreativeTab(tab: CreativeModeTab, after: String? = null, before: Stri
 }
 
 /**
+ * %en
  * Extracts the Identifier from a registered CreativeModeTab via the registry.
+ *
+ * %zh
+ * 通过注册表从已注册的 CreativeModeTab 中提取 Identifier。
  */
 private fun getTabIdentifier(tab: CreativeModeTab): Identifier? {
     return net.minecraft.core.registries.BuiltInRegistries.CREATIVE_MODE_TAB.getKey(tab)

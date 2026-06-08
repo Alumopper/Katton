@@ -9,12 +9,23 @@ import top.katton.registry.RegisterMode
 import top.katton.registry.id
 
 /**
+ * %en
  * Registers a native SoundEvent with hot-reload support.
  *
- * @param id Sound identifier (e.g., "mymod:custom_sound")
- * @param registerMode Registration mode (GLOBAL, WORLD, or RELOADABLE)
- * @param soundEventFactory Factory function to create the SoundEvent instance
- * @return The registered KattonSoundEventEntry
+ * %zh
+ * 注册原生 SoundEvent，并支持热重载。
+ * @param id
+ * %en Sound identifier (e.g., "mymod:custom_sound")
+ * %zh 声音标识符，例如 "mymod:custom_sound"。
+ * @param registerMode
+ * %en Registration mode (GLOBAL, WORLD, or RELOADABLE)
+ * %zh 注册模式（GLOBAL、WORLD 或 RELOADABLE）。
+ * @param soundEventFactory
+ * %en Factory function to create the SoundEvent instance
+ * %zh 创建 SoundEvent 实例的工厂函数。
+ * @return
+ * %en registered KattonSoundEventEntry
+ * %zh 已注册的 KattonSoundEventEntry。
  */
 fun registerNativeSoundEvent(
     id: String,
@@ -23,12 +34,23 @@ fun registerNativeSoundEvent(
 ): KattonRegistry.KattonSoundEventEntry = registerNativeSoundEvent(id(id), registerMode, soundEventFactory)
 
 /**
+ * %en
  * Registers a native SoundEvent with hot-reload support.
  *
- * @param id Sound identifier
- * @param registerMode Registration mode
- * @param soundEventFactory Factory function to create the SoundEvent instance
- * @return The registered KattonSoundEventEntry
+ * %zh
+ * 注册原生 SoundEvent，并支持热重载。
+ * @param id
+ * %en Sound identifier
+ * %zh 声音标识符。
+ * @param registerMode
+ * %en Registration mode
+ * %zh 注册模式。
+ * @param soundEventFactory
+ * %en Factory function to create the SoundEvent instance
+ * %zh 创建 SoundEvent 实例的工厂函数。
+ * @return
+ * %en registered KattonSoundEventEntry
+ * %zh 已注册的 KattonSoundEventEntry。
  */
 fun registerNativeSoundEvent(
     id: Identifier,
@@ -39,10 +61,17 @@ fun registerNativeSoundEvent(
 }
 
 /**
+ * %en
  * Utility factory for quickly creating a variable-range SoundEvent.
  *
- * @param id The sound identifier
- * @return A new SoundEvent with variable range
+ * %zh
+ * 用于快速创建可变范围 SoundEvent 的工厂函数。
+ * @param id
+ * %en The sound identifier
+ * %zh 声音标识符。
+ * @return
+ * %en new SoundEvent with variable range
+ * %zh 具有可变范围的新 SoundEvent。
  */
 fun createVariableRangeSoundEvent(id: String): SoundEvent =
     SoundEvent.createVariableRangeEvent(id(id))

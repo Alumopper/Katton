@@ -19,6 +19,7 @@ import top.katton.registry.id
 import top.katton.util.ReflectUtil
 
 /**
+ * %en
  * Configuration for modifying default attributes of an existing
  * [EntityType] (vanilla or modded).
  *
@@ -26,44 +27,108 @@ import top.katton.util.ReflectUtil
  * but applies to already-registered entity types via
  * [top.katton.registry.DefaultAttributesHelper].
  *
- * @property entityId The identifier of the entity type being modified.
+ * %zh
+ * 用于修改现有 EntityType 默认属性的配置对象（原版或模组添加的实体都适用）。
+ * 它的属性面与 [top.katton.registry.KattonEntityProperties] 对应，但作用对象是已经注册的实体类型，
+ * 并通过 [top.katton.registry.DefaultAttributesHelper] 生效。
+ * @property entityId
+ * %en The identifier of the entity type being modified.
+ * %zh 要修改的实体类型标识符。
  */
 class EntityTypeModificationConfig(val entityId: Identifier) {
     private val overrides = linkedMapOf<Holder<Attribute>, Double>()
 
     /**
-     * Overrides the base value of an arbitrary attribute.
-     */
+ * %en
+ * Overrides the base value of an arbitrary attribute.
+ *
+ * %zh
+ * 覆盖任意属性的基础值。
+ */
     fun attribute(attribute: Holder<Attribute>, value: Double): EntityTypeModificationConfig {
         overrides[attribute] = value
         return this
     }
 
-    /** Overrides max health (`generic.max_health`). */
+    /**
+ * %en
+ *  Overrides max health (`generic.max_health`).
+ *
+ * %zh
+ * 覆盖最大生命值（`generic.max_health`）。
+ */
     fun maxHealth(value: Double): EntityTypeModificationConfig = attribute(Attributes.MAX_HEALTH, value)
 
-    /** Overrides movement speed (`generic.movement_speed`). */
+    /**
+ * %en
+ *  Overrides movement speed (`generic.movement_speed`).
+ *
+ * %zh
+ * 覆盖移动速度（`generic.movement_speed`）。
+ */
     fun movementSpeed(value: Double): EntityTypeModificationConfig = attribute(Attributes.MOVEMENT_SPEED, value)
 
-    /** Overrides knockback resistance (`generic.knockback_resistance`). */
+    /**
+ * %en
+ *  Overrides knockback resistance (`generic.knockback_resistance`).
+ *
+ * %zh
+ * 覆盖击退抗性（`generic.knockback_resistance`）。
+ */
     fun knockbackResistance(value: Double): EntityTypeModificationConfig = attribute(Attributes.KNOCKBACK_RESISTANCE, value)
 
-    /** Overrides attack damage (`generic.attack_damage`). */
+    /**
+ * %en
+ *  Overrides attack damage (`generic.attack_damage`).
+ *
+ * %zh
+ * 覆盖攻击伤害（`generic.attack_damage`）。
+ */
     fun attackDamage(value: Double): EntityTypeModificationConfig = attribute(Attributes.ATTACK_DAMAGE, value)
 
-    /** Overrides attack speed (`generic.attack_speed`). */
+    /**
+ * %en
+ *  Overrides attack speed (`generic.attack_speed`).
+ *
+ * %zh
+ * 覆盖攻击速度（`generic.attack_speed`）。
+ */
     fun attackSpeed(value: Double): EntityTypeModificationConfig = attribute(Attributes.ATTACK_SPEED, value)
 
-    /** Overrides armor (`generic.armor`). */
+    /**
+ * %en
+ *  Overrides armor (`generic.armor`).
+ *
+ * %zh
+ * 覆盖护甲（`generic.armor`）。
+ */
     fun armor(value: Double): EntityTypeModificationConfig = attribute(Attributes.ARMOR, value)
 
-    /** Overrides armor toughness (`generic.armor_toughness`). */
+    /**
+ * %en
+ *  Overrides armor toughness (`generic.armor_toughness`).
+ *
+ * %zh
+ * 覆盖护甲韧性（`generic.armor_toughness`）。
+ */
     fun armorToughness(value: Double): EntityTypeModificationConfig = attribute(Attributes.ARMOR_TOUGHNESS, value)
 
-    /** Overrides follow range (`generic.follow_range`). */
+    /**
+ * %en
+ *  Overrides follow range (`generic.follow_range`).
+ *
+ * %zh
+ * 覆盖追踪范围（`generic.follow_range`）。
+ */
     fun followRange(value: Double): EntityTypeModificationConfig = attribute(Attributes.FOLLOW_RANGE, value)
 
-    /** Overrides luck (`generic.luck`). */
+    /**
+ * %en
+ *  Overrides luck (`generic.luck`).
+ *
+ * %zh
+ * 覆盖幸运值（`generic.luck`）。
+ */
     fun luck(value: Double): EntityTypeModificationConfig = attribute(Attributes.LUCK, value)
 
     internal fun overridesSnapshot(): Map<Holder<Attribute>, Double> = overrides.toMap()
@@ -72,6 +137,7 @@ class EntityTypeModificationConfig(val entityId: Identifier) {
 private val LOGGER = LoggerFactory.getLogger("top.katton.api.mod.KattonEntityTypeModificationApi")
 
 /**
+ * %en
  * Modifies the default attributes of an existing entity type.
  *
  * If the entity type already has default attributes registered, the existing
@@ -83,12 +149,25 @@ private val LOGGER = LoggerFactory.getLogger("top.katton.api.mod.KattonEntityTyp
  * `DefaultAttributes.SUPPLIERS`). Works for vanilla entity types as well as
  * modded ones that register attributes through the same mechanism.
  *
- * @param entityId Entity type identifier (e.g. `"minecraft:zombie"`).
- * @param configure Configuration lambda.
- * @return `true` when the supplier was replaced; `false` when the entity type
+ * %zh
+ * 修改现有实体类型的默认属性。
+ * 如果该实体类型已经注册了默认属性供应器，就以现有供应器为基础，再逐项覆盖属性基础值。
+ * 如果没有默认供应器，则会使用 [LivingEntity.createLivingAttributes] 构建一个新的基础供应器。
+ * 该过程通过 [DefaultAttributesHelper] 生效（会反射 `DefaultAttributes.SUPPLIERS`）。
+ * 它既适用于原版实体类型，也适用于以相同机制注册属性的模组实体。
+ * @param entityId
+ * %en Entity type identifier (e.g. `"minecraft:zombie"`).
+ * %zh 实体类型标识符（例如 "minecraft:zombie"）。
+ * @param configure
+ * %en Configuration lambda.
+ * %zh 配置 lambda。
+ * @return
+ * %en when the supplier was replaced; `false` when the entity type
+ * %zh 当供应器已被替换时返回 `true`；当实体类型无法解析或底层注册表不是生物类型时返回 `false`。
+ * %en
  *         could not be resolved or the underlying registry is non-living.
- *
  * @example
+ * %en
  * ```kotlin
  * modifyEntityType("minecraft:zombie") {
  *     maxHealth(40.0)
@@ -96,6 +175,7 @@ private val LOGGER = LoggerFactory.getLogger("top.katton.api.mod.KattonEntityTyp
  *     movementSpeed(0.32)
  * }
  * ```
+ * %zh 示例代码见英文部分。
  */
 @ApiStatus.Experimental
 fun modifyEntityType(entityId: String, configure: EntityTypeModificationConfig.() -> Unit): Boolean {
@@ -103,7 +183,11 @@ fun modifyEntityType(entityId: String, configure: EntityTypeModificationConfig.(
 }
 
 /**
+ * %en
  * Identifier overload of [modifyEntityType].
+ *
+ * %zh
+ * `modifyEntityType` 的 Identifier 重载。
  */
 @ApiStatus.Experimental
 fun modifyEntityType(entityId: Identifier, configure: EntityTypeModificationConfig.() -> Unit): Boolean {
@@ -145,6 +229,7 @@ private fun buildSupplier(
 }
 
 /**
+ * %en
  * Builds a fresh [AttributeSupplier.Builder] seeded with every attribute that
  * the existing supplier exposes, except for the ones that the caller is going
  * to override.
@@ -152,6 +237,12 @@ private fun buildSupplier(
  * Reads the supplier through [AttributeSupplier.getValue] for every override
  * key and through reflection-free public APIs for everything else, so this
  * stays compatible across MC patch versions even if internal field names move.
+ *
+ * %zh
+ * 构建一个新的 [AttributeSupplier.Builder]，其初始内容包含现有供应器暴露出的所有属性，
+ * 但会排除调用方准备覆盖的那些属性。
+ * 对每个覆盖键，会通过 [AttributeSupplier.getValue] 读取供应器；其余内容则通过无反射的公共 API 读取，
+ * 因此即使内部字段名在 MC 补丁版本中变动，也能保持兼容。
  */
 private fun copyExistingSupplier(
     existing: AttributeSupplier,

@@ -6,10 +6,15 @@ import top.katton.network.ServerItemRenderMarkerManager
 import top.katton.util.createUnit
 
 /**
+ * %en
  * Server lifecycle events for Fabric platform.
  *
  * This object provides events related to server lifecycle including
  * server start/stop, datapack reload, save hooks, and tick events.
+ *
+ * %zh
+ * Fabric 平台的服务器生命周期事件。
+ * 此对象提供与服务器生命周期相关的事件，包括启动、停止、数据包重载、保存钩子和刻事件。
  */
 object ServerEvent {
 
@@ -33,67 +38,119 @@ object ServerEvent {
     }
 
     /**
-     * Event triggered when the server is starting (before worlds are loaded).
-     */
+ * %en
+ * Event triggered when the server is starting (before worlds are loaded).
+ *
+ * %zh
+ * 当服务器启动中（世界加载前）时触发。
+ */
     val onServerStarting = createUnit<ServerArg>()
 
     /**
-     * Event triggered when the server has started (after worlds are loaded).
-     */
+ * %en
+ * Event triggered when the server has started (after worlds are loaded).
+ *
+ * %zh
+ * 当服务器已启动（世界加载后）时触发。
+ */
     val onServerStarted = createUnit<ServerArg>()
 
     /**
-     * Event triggered when the server is stopping.
-     */
+ * %en
+ * Event triggered when the server is stopping.
+ *
+ * %zh
+ * 当服务器正在停止时触发。
+ */
     val onServerStopping = createUnit<ServerArg>()
 
     /**
-     * Event triggered when the server has stopped.
-     */
+ * %en
+ * Event triggered when the server has stopped.
+ *
+ * %zh
+ * 当服务器已停止时触发。
+ */
     val onServerStopped = createUnit<ServerArg>()
 
     /**
-     * Event triggered when datapack contents are being synced to players.
-     */
+ * %en
+ * Event triggered when datapack contents are being synced to players.
+ *
+ * %zh
+ * 当数据包内容正在同步给玩家时触发。
+ */
     val onSyncDatapackContents = createUnit<SyncDatapackContentsArg>()
 
     /**
-     * Event triggered when a datapack reload is starting.
-     */
+ * %en
+ * Event triggered when a datapack reload is starting.
+ *
+ * %zh
+ * 当数据包重载开始时触发。
+ */
     val onStartDatapackReload = createUnit<StartDatapackReloadArg>()
 
     /**
-     * Event triggered when a datapack reload has completed.
-     */
+ * %en
+ * Event triggered when a datapack reload has completed.
+ *
+ * %zh
+ * 当数据包重载完成时触发。
+ */
     val onEndDatapackReload = createUnit<EndDatapackReloadArg>()
 
     /**
-     * Event triggered before the server saves data.
-     */
+ * %en
+ * Event triggered before the server saves data.
+ *
+ * %zh
+ * 当服务器保存数据之前触发。
+ */
     val onBeforeSave = createUnit<ServerSaveArg>()
 
     /**
-     * Event triggered after the server has saved data.
-     */
+ * %en
+ * Event triggered after the server has saved data.
+ *
+ * %zh
+ * 当服务器保存数据之后触发。
+ */
     val onAfterSave = createUnit<ServerSaveArg>()
 
     /**
-     * Event triggered at the start of each server tick.
-     */
+ * %en
+ * Event triggered at the start of each server tick.
+ *
+ * %zh
+ * 当每个服务器 tick 开始时触发。
+ */
     val onStartServerTick = createUnit<ServerTickArg>()
 
     /**
-     * Event triggered at the end of each server tick.
-     */
+ * %en
+ * Event triggered at the end of each server tick.
+ *
+ * %zh
+ * 当每个服务器 tick 结束时触发。
+ */
     val onEndServerTick = createUnit<ServerTickArg>()
 
     /**
-     * Event triggered at the start of each world/level tick.
-     */
+ * %en
+ * Event triggered at the start of each world/level tick.
+ *
+ * %zh
+ * 当每个世界/维度 tick 开始时触发。
+ */
     val onStartWorldTick = createUnit<WorldTickArg>()
 
     /**
-     * Event triggered at the end of each world/level tick.
-     */
+ * %en
+ * Event triggered at the end of each world/level tick.
+ *
+ * %zh
+ * 当每个世界/维度 tick 结束时触发。
+ */
     val onEndWorldTick = createUnit<WorldTickArg>()
 }

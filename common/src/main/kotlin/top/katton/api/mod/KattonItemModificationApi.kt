@@ -34,13 +34,20 @@ import top.katton.util.ReflectUtil
 import java.util.concurrent.ConcurrentHashMap
 
 /**
+ * %en
  * Configuration for modifying existing item properties.
- * 
+ *
  * This class provides a fluent API for modifying properties of existing
  * items registered in Minecraft's item registry. Similar to KubeJS's item
  * modification system.
- * 
- * @property itemId The identifier of the item to modify
+ *
+ * %zh
+ * 用于修改现有物品属性的配置对象。
+ * 这个类提供一个流式 API，用于修改已经注册到 Minecraft 物品注册表中的物品属性。
+ * 风格上类似 KubeJS 的物品修改系统。
+ * @property itemId
+ * %en The identifier of the item to modify
+ * %zh 要修改的物品标识符。
  */
 class ItemModificationConfig(
     val itemId: Identifier
@@ -93,17 +100,28 @@ class ItemModificationConfig(
 }
 
 /**
+ * %en
  * Modifies an existing item's properties.
- * 
+ *
  * This function allows you to modify properties of items already registered
  * in Minecraft's item registry. Changes are applied to the item's default
  * components and will affect all ItemStacks of that type.
- * 
- * @param itemId The identifier of the item to modify (e.g., "minecraft:diamond")
- * @param configure Configuration lambda for item modifications
- * @return The modified Item instance
- * 
+ *
+ * %zh
+ * 修改已有物品的属性。
+ * 这个函数允许你修改已经注册到 Minecraft 物品注册表中的物品属性。
+ * 变更会作用到物品的默认组件，并影响该类型的所有 ItemStack。
+ * @param itemId
+ * %en The identifier of the item to modify (e.g., "minecraft:diamond")
+ * %zh 要修改的物品标识符（例如 "minecraft:diamond"）。
+ * @param configure
+ * %en Configuration lambda for item modifications
+ * %zh 物品修改配置 lambda。
+ * @return
+ * %en modified Item instance
+ * %zh 返回修改后的 Item 实例。
  * @example
+ * %en
  * ```kotlin
  * modifyItem("minecraft:diamond") {
  *     maxStackSize = 16
@@ -111,6 +129,7 @@ class ItemModificationConfig(
  *     name(Component.literal("Super Diamond"))
  * }
  * ```
+ * %zh 示例代码见英文部分。
  */
 @ApiStatus.Experimental
 fun modifyItem(itemId: String, configure: ItemModificationConfig.() -> Unit): Item {
@@ -118,11 +137,20 @@ fun modifyItem(itemId: String, configure: ItemModificationConfig.() -> Unit): It
 }
 
 /**
+ * %en
  * Modifies an existing item's properties.
- * 
- * @param itemId The identifier of the item to modify
- * @param configure Configuration lambda for item modifications
- * @return The modified Item instance
+ *
+ * %zh
+ * 修改已有物品的属性。
+ * @param itemId
+ * %en The identifier of the item to modify
+ * %zh 要修改的物品标识符。
+ * @param configure
+ * %en Configuration lambda for item modifications
+ * %zh 物品修改配置 lambda。
+ * @return
+ * %en modified Item instance
+ * %zh 返回修改后的 Item 实例。
  */
 @ApiStatus.Experimental
 fun modifyItem(itemId: Identifier, configure: ItemModificationConfig.() -> Unit): Item {
@@ -245,42 +273,74 @@ private val ACTIVE_ITEM_MODIFICATIONS = ConcurrentHashMap<Identifier, ItemModifi
 private val LOGGER = LoggerFactory.getLogger("top.katton.api.mod.KattonItemModificationApi")
 
 /**
+ * %en
  * Gets an item by its identifier.
- * 
- * @param itemId The item identifier
- * @return The Item instance, or null if not found
+ *
+ * %zh
+ * 根据标识符获取物品。
+ * @param itemId
+ * %en The item identifier
+ * %zh 物品标识符。
+ * @return
+ * %en Item instance, or null if not found
+ * %zh 找到时返回 Item 实例，未找到时返回 null。
  */
 fun getItem(itemId: String): Item? {
     return getItem(id(itemId))
 }
 
 /**
+ * %en
  * Gets an item by its identifier.
- * 
- * @param itemId The item identifier
- * @return The Item instance, or null if not found
+ *
+ * %zh
+ * 根据标识符获取物品。
+ * @param itemId
+ * %en The item identifier
+ * %zh 物品标识符。
+ * @return
+ * %en Item instance, or null if not found
+ * %zh 找到时返回 Item 实例，未找到时返回 null。
  */
 fun getItem(itemId: Identifier): Item? {
     return BuiltInRegistries.ITEM.getOptional(itemId).orElse(null)
 }
 
 /**
+ * %en
  * Creates an ItemStack for an item.
- * 
- * @param itemId The item identifier
- * @param count The stack size
- * @return The created ItemStack
+ *
+ * %zh
+ * 为指定物品创建一个 ItemStack。
+ * @param itemId
+ * %en The item identifier
+ * %zh 物品标识符。
+ * @param count
+ * %en The stack size
+ * %zh 堆叠数量。
+ * @return
+ * %en created ItemStack
+ * %zh 返回创建好的 ItemStack。
  */
 fun itemStack(itemId: String, count: Int = 1): ItemStack {
     return itemStack(id(itemId), count)
 }
 
 /**
+ * %en
  * Creates an ItemStack for an item.
- * 
- * @param itemId The item identifier
- * @param count The stack size
- * @return The created ItemStack
+ *
+ * %zh
+ * 为指定物品创建一个 ItemStack。
+ * @param itemId
+ * %en The item identifier
+ * %zh 物品标识符。
+ * @param count
+ * %en The stack size
+ * %zh 堆叠数量。
+ * @return
+ * %en created ItemStack
+ * %zh 返回创建好的 ItemStack。
  */
 fun itemStack(itemId: Identifier, count: Int = 1): ItemStack {
     val item = getItem(itemId) ?: throw IllegalArgumentException("Item not found: $itemId")

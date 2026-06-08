@@ -356,28 +356,67 @@ class ExecutionContext(
     }
 }
 /**
+ * %en
  * Determines which position the returned [ExecutionContext] uses.
+ *
+ * %zh
+ * 决定返回的 [ExecutionContext] 使用哪个位置。
  */
 enum class BonePositionMode {
-    /** Bone world-space position (entity position + bone offset, rotated by yaw). */
+    /**
+ * %en
+ *  Bone world-space position (entity position + bone offset, rotated by yaw).
+ *
+ * %zh
+ * 骨骼的世界空间位置（实体位置 + 骨骼偏移，并按实体 yaw 旋转）。
+ */
     BONE,
-    /** Entity world-space position (ignoring the bone). */
+    /**
+ * %en
+ *  Entity world-space position (ignoring the bone).
+ *
+ * %zh
+ * 实体的世界空间位置（忽略骨骼）。
+ */
     ENTITY
 }
 
 /**
+ * %en
  * Determines which facing direction the returned [ExecutionContext] uses.
+ *
+ * %zh
+ * 决定返回的 [ExecutionContext] 使用哪个朝向。
  */
 enum class BoneOrientationMode {
-    /** Bone's local rotation + entity rotation (approximate world-space facing). */
+    /**
+ * %en
+ *  Bone's local rotation + entity rotation (approximate world-space facing).
+ *
+ * %zh
+ * 骨骼局部旋转 + 实体旋转（近似世界空间朝向）。
+ */
     BONE,
-    /** Entity's natural yaw/pitch. */
+    /**
+ * %en
+ *  Entity's natural yaw/pitch.
+ *
+ * %zh
+ * 实体自身的 yaw/pitch。
+ */
     ENTITY,
-    /** Default — [Vec2.ZERO] (no rotation). */
+    /**
+ * %en
+ *  Default: [Vec2.ZERO] (no rotation).
+ *
+ * %zh
+ * 默认方向 [Vec2.ZERO]，不应用旋转。
+ */
     WORLD
 }
 
 /**
+ * %en
  * Computes the world-space position of a [ModelPart] bone on the given [entity].
  *
  * The bone offset (pixels, 1/16 block) is rotated by the entity's yaw and added
@@ -385,6 +424,14 @@ enum class BoneOrientationMode {
  *
  * Call AFTER animations have been applied ([net.minecraft.client.animation.KeyframeAnimation.apply]),
  * so that [ModelPart.x]/[ModelPart.y]/[ModelPart.z] reflect the animated pose.
+ *
+ * %zh
+ * 计算给定 [entity] 上 [ModelPart] 骨骼的世界空间位置。
+ *
+ * 骨骼偏移以像素为单位（1/16 方块），会按实体 yaw 旋转并加到实体的插值位置上。
+ *
+ * 请在动画应用之后调用（[net.minecraft.client.animation.KeyframeAnimation.apply]），
+ * 这样 [ModelPart.x]/[ModelPart.y]/[ModelPart.z] 才能反映动画姿态。
  */
 fun Entity.computeBoneWorldPos(bone: ModelPart, partialTick: Float = 1.0f): Vec3 {
     // ModelPart coords are in pixels (1/16 block).
@@ -393,8 +440,8 @@ fun Entity.computeBoneWorldPos(bone: ModelPart, partialTick: Float = 1.0f): Vec3
     val localZ = bone.z / 16.0
 
     // MC yaw: 0=south(+Z), 90=west(-X), 180=north(-Z), -90=east(+X).
-    // Render PoseStack applies rotation of (180 - yRot)° around Y,
-    // equivalent to (yRot - 180)° for mapping model-local → world.
+    // Render PoseStack applies rotation of (180 - yRot) degrees around Y,
+    // equivalent to (yRot - 180) degrees for mapping model-local to world.
     val radians = Math.toRadians((yRot - 180.0))
     val cosA = cos(radians)
     val sinA = sin(radians)
@@ -411,21 +458,28 @@ fun Entity.computeBoneWorldPos(bone: ModelPart, partialTick: Float = 1.0f): Vec3
 }
 
 /**
+ * %en
  * Creates an [ExecutionContext] positioned at a [ModelPart] bone on an [entity].
  *
  * Combines [BonePositionMode] and [BoneOrientationMode] to set the context's
  * `pos` and `rotation`. Use the returned [ExecutionContext] to execute commands
  * at the bone's world position, or read `pos` / `rotation` directly for custom effects.
  *
- * On a dedicated client (multiplayer), the server reference may be unavailable —
+ * On a dedicated client (multiplayer), the server reference may be unavailable;
  * in that case the returned context has position/rotation set but no command
  * execution capability.
  *
- * @param modelPart       direct [ModelPart] reference (e.g. `model.rightArm`, `model.head`)
- * @param positionMode    [BonePositionMode.BONE] or [BonePositionMode.ENTITY]
- * @param orientationMode [BoneOrientationMode.BONE], [BoneOrientationMode.ENTITY], or [BoneOrientationMode.WORLD]
- *
+ * @param modelPart
+ * %en direct [ModelPart] reference (e.g. `model.rightArm`, `model.head`)
+ * %zh 直接的 [ModelPart] 引用，例如 `model.rightArm` 或 `model.head`。
+ * @param positionMode
+ * %en [BonePositionMode.BONE] or [BonePositionMode.ENTITY]
+ * %zh [BonePositionMode.BONE] 或 [BonePositionMode.ENTITY]。
+ * @param orientationMode
+ * %en [BoneOrientationMode.BONE], [BoneOrientationMode.ENTITY], or [BoneOrientationMode.WORLD]
+ * %zh [BoneOrientationMode.BONE]、[BoneOrientationMode.ENTITY] 或 [BoneOrientationMode.WORLD]。
  * @example
+ * %en
  * ```kotlin
  * val ctx = createBoneExecution(
  *     modelPart = model.rightArm,
@@ -434,6 +488,19 @@ fun Entity.computeBoneWorldPos(bone: ModelPart, partialTick: Float = 1.0f): Vec3
  *     orientationMode = BoneOrientationMode.BONE
  * )
  * // Execute command at bone position
+ * ctx.source().let { stack ->
+ *     ctx.server?.commands?.performCommand(stack, "particle minecraft:flame ~ ~ ~ 0 0 0 0.1 5")
+ * }
+ * ```
+ * %zh
+ * ```kotlin
+ * val ctx = createBoneExecution(
+ *     modelPart = model.rightArm,
+ *     entity = entity,
+ *     positionMode = BonePositionMode.BONE,
+ *     orientationMode = BoneOrientationMode.BONE
+ * )
+ * // 在骨骼位置执行命令
  * ctx.source().let { stack ->
  *     ctx.server?.commands?.performCommand(stack, "particle minecraft:flame ~ ~ ~ 0 0 0 0.1 5")
  * }

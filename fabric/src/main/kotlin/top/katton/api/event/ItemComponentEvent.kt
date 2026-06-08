@@ -10,19 +10,30 @@ import top.katton.util.createUnit
 import top.katton.util.toFabric
 
 /**
+ * %en
  * Item component and enchantment events for Fabric platform.
  *
  * This object provides events related to default item component modification
  * and enchantment handling (allowing/modifying enchantments).
+ *
+ * %zh
+ * Fabric 平台的物品组件和附魔事件。
+ *
+ * 此对象提供与默认物品组件修改以及附魔处理（允许或修改附魔）相关的事件。
  */
 @Suppress("unused")
 object ItemComponentEvent {
 
     /**
-     * Argument class for item component modification events.
-     *
-     * @property context The modification context containing item and registry information
-     */
+ * %en
+ * Argument class for item component modification events.
+ *
+ * %zh
+ * 物品组件修改事件的参数类。
+ * @property context
+ * %en The modification context containing item and registry information
+ * %zh 包含物品和注册表信息的修改上下文。
+ */
     data class ModifyComponentArg(val context: DefaultItemComponentEvents.ModifyContext)
 
     fun initialize() {
@@ -45,32 +56,55 @@ object ItemComponentEvent {
     // === Default Item Component Modification ===
 
     /**
-     * Event triggered to modify default item components for items.
-     * Use this to add custom components to items during registration.
-     */
+ * %en
+ * Event triggered to modify default item components for items.
+ * Use this to add custom components to items during registration.
+ *
+ * %zh
+ * 当需要修改物品的默认组件时触发。
+ * 可用于在注册期间为物品添加自定义组件。
+ */
     val onModifyComponent = createUnit<ModifyComponentArg>()
 
     // === Enchantment Events ===
 
     /**
-     * Event triggered to allow or deny an enchantment being applied to an item.
-     *
-     * @return TriState indicating whether to allow (TRUE), deny (FALSE), or use default (DEFAULT).
-     */
+ * %en
+ * Event triggered to allow or deny an enchantment being applied to an item.
+ *
+ * %zh
+ * 当检查是否允许对物品附加附魔时触发。
+ * @return
+ * %en indicating whether to allow (TRUE), deny (FALSE), or use default (DEFAULT).
+ * %zh 返回值表示允许（TRUE）、拒绝（FALSE）或使用默认值（DEFAULT）。
+ */
     val onAllowEnchanting = createTriState<AllowEnchantingArg>()
 
     /**
-     * Event triggered when an item's enchantment is being modified.
-     * Use this to customize enchantment behavior.
-     */
+ * %en
+ * Event triggered when an item's enchantment is being modified.
+ * Use this to customize enchantment behavior.
+ *
+ * %zh
+ * 当物品的附魔正在被修改时触发。
+ * 可用于自定义附魔行为。
+ */
     val onModifyEnchantment = createUnit<ModifyEnchantmentArg>()
 
     /**
-     * Converts Fabric's EnchantingContext to the common bridger type.
-     *
-     * @param arg The Fabric enchanting context
-     * @return The corresponding bridger enchanting context
-     */
+ * %en
+ * Converts Fabric's EnchantingContext to the common bridger type.
+ *
+ * %zh
+ * 将 Fabric 的 EnchantingContext 转换为通用 bridger 类型。
+ *
+ * @param arg
+ * %en The Fabric enchanting context
+ * %zh Fabric 的附魔上下文。
+ * @return
+ * %en corresponding bridger enchanting context
+ * %zh 对应的 bridger 附魔上下文。
+ */
     private fun fromFabricEnchantingContext(arg: EnchantingContext): top.katton.bridger.EnchantingContext {
         return when(arg){
             EnchantingContext.PRIMARY -> top.katton.bridger.EnchantingContext.PRIMARY
@@ -79,11 +113,19 @@ object ItemComponentEvent {
     }
 
     /**
-     * Converts Fabric's EnchantmentSource to the common bridger type.
-     *
-     * @param arg The Fabric enchantment source
-     * @return The corresponding bridger enchantment source
-     */
+ * %en
+ * Converts Fabric's EnchantmentSource to the common bridger type.
+ *
+ * %zh
+ * 将 Fabric 的 EnchantmentSource 转换为通用 bridger 类型。
+ *
+ * @param arg
+ * %en The Fabric enchantment source
+ * %zh Fabric 的附魔来源。
+ * @return
+ * %en corresponding bridger enchantment source
+ * %zh 对应的 bridger 附魔来源。
+ */
     private fun fromFabricEnchantmentSource(arg: EnchantmentSource): top.katton.bridger.EnchantmentSource {
         return when(arg){
             EnchantmentSource.VANILLA -> top.katton.bridger.EnchantmentSource.VANILLA

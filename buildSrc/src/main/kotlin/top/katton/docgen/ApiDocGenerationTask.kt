@@ -33,9 +33,12 @@ internal class ApiDocGenerator(
     private val projectDir: File,
     private val logger: Logger
 ) {
-    fun generate(outputDir: File, modules: List<ApiModuleSnapshot>) {
+    fun generate(outputDir: File, modules: List<ApiModuleSnapshot>, locales: List<String>, defaultLocale: String) {
         outputDir.deleteRecursively()
         outputDir.mkdirs()
+
+        val localeCodes = normalizeLocales(locales, defaultLocale)
+        val defaultLocaleCode = normalizeLocaleCode(defaultLocale).takeIf { it.isNotBlank() } ?: localeCodes.first()
 
         writeThemeFiles(outputDir)
 
@@ -43,23 +46,41 @@ internal class ApiDocGenerator(
         try {
             val psiFactory = createPsiFactory(disposable)
             val pages = modules.flatMap { module ->
-                collectModulePages(module, psiFactory)
+                collectModulePages(module, psiFactory, localeCodes.toSet())
             }
 
-            writeApiIndex(outputDir, pages)
-            writeSidebarFile(outputDir, pages, modules)
-            modules.forEach { module ->
-                val modulePages = pages.filter { it.moduleName == module.name }
-                writeModuleIndex(outputDir, module, modulePages)
-                modulePages.forEach { page ->
-                    writePage(outputDir, page)
+            localeCodes.forEach { locale ->
+                writeApiIndex(outputDir, pages, locale, defaultLocaleCode)
+                writeSidebarFile(outputDir, pages, modules, locale, defaultLocaleCode)
+                modules.forEach { module ->
+                    val modulePages = pages.filter { it.moduleName == module.name }
+                    writeModuleIndex(outputDir, module, modulePages, locale, defaultLocaleCode)
+                    modulePages.forEach { page ->
+                        writePage(outputDir, page, locale, defaultLocaleCode)
+                    }
                 }
             }
 
-            logger.lifecycle("Generated ${pages.size} API documentation page(s) in ${outputDir.absolutePath}")
+            logger.lifecycle("Generated ${pages.size} API documentation page(s) for ${localeCodes.size} locale(s) in ${outputDir.absolutePath}")
         } finally {
             Disposer.dispose(disposable)
         }
+    }
+
+    private fun normalizeLocales(locales: List<String>, defaultLocale: String): List<String> {
+        val normalized = (listOf(defaultLocale) + locales)
+            .mapNotNull { locale -> normalizeLocaleCode(locale).takeIf { it.isNotBlank() } }
+            .filter { it.isNotBlank() }
+            .distinct()
+        return normalized.ifEmpty { listOf("en", "zh") }
+    }
+
+    private fun normalizeLocaleCode(locale: String): String {
+        val normalized = locale.trim().lowercase(Locale.ROOT)
+        require(normalized.isBlank() || normalized.matches(LOCALE_CODE_PATTERN)) {
+            "Invalid API docs locale '$locale'. Use lowercase language tags such as 'en', 'zh', or 'en-us'."
+        }
+        return normalized
     }
 
     @OptIn(K1Deprecation::class)
@@ -78,14 +99,18 @@ internal class ApiDocGenerator(
         return KtPsiFactory(environment.project, false)
     }
 
-    private fun collectModulePages(module: ApiModuleSnapshot, psiFactory: KtPsiFactory): List<ApiPage> {
+    private fun collectModulePages(
+        module: ApiModuleSnapshot,
+        psiFactory: KtPsiFactory,
+        localizedLocales: Set<String>
+    ): List<ApiPage> {
         val pages = mutableListOf<ApiPage>()
         module.sourceRoots.forEach { sourceRoot ->
             sourceRoot.walkTopDown()
                 .filter { it.isFile && it.extension == "kt" }
                 .sortedBy { it.invariantPath() }
                 .forEach { file ->
-                    val page = parsePage(module, sourceRoot, file, psiFactory)
+                    val page = parsePage(module, sourceRoot, file, psiFactory, localizedLocales)
                     if (page != null) {
                         pages += page
                     }
@@ -98,12 +123,15 @@ internal class ApiDocGenerator(
         module: ApiModuleSnapshot,
         sourceRoot: File,
         file: File,
-        psiFactory: KtPsiFactory
+        psiFactory: KtPsiFactory,
+        localizedLocales: Set<String>
     ): ApiPage? {
         val content = file.readText().replace("\r\n", "\n")
         val ktFile = psiFactory.createFile(file.name, content)
         val declarations = ktFile.declarations
-            .mapNotNull { declaration -> extractDeclaration(declaration, file, content, parentPath = emptyList()) }
+            .mapNotNull { declaration ->
+                extractDeclaration(declaration, file, content, parentPath = emptyList(), localizedLocales)
+            }
 
         if (declarations.isEmpty()) {
             return null
@@ -139,7 +167,8 @@ internal class ApiDocGenerator(
         declaration: KtDeclaration,
         file: File,
         content: String,
-        parentPath: List<String>
+        parentPath: List<String>,
+        localizedLocales: Set<String>
     ): ApiDeclaration? {
         if (declaration !is KtNamedDeclaration) {
             return null
@@ -149,11 +178,17 @@ internal class ApiDocGenerator(
         }
 
         val children = when (declaration) {
-            is KtClassOrObject -> collectChildren(declaration.getBody(), file, content, parentPath + declaration.name.orEmpty())
+            is KtClassOrObject -> collectChildren(
+                declaration.getBody(),
+                file,
+                content,
+                parentPath + declaration.name.orEmpty(),
+                localizedLocales
+            )
             else -> emptyList()
         }
 
-        val docs = parseKDoc(extractKDocText(declaration, content))
+        val docs = parseKDoc(extractKDocText(declaration, content), localizedLocales)
         if (docs.isEmpty() && children.isEmpty()) {
             return null
         }
@@ -174,13 +209,14 @@ internal class ApiDocGenerator(
         body: KtClassBody?,
         file: File,
         content: String,
-        parentPath: List<String>
+        parentPath: List<String>,
+        localizedLocales: Set<String>
     ): List<ApiDeclaration> {
         if (body == null) {
             return emptyList()
         }
         return body.declarations
-            .mapNotNull { child -> extractDeclaration(child, file, content, parentPath) }
+            .mapNotNull { child -> extractDeclaration(child, file, content, parentPath, localizedLocales) }
     }
 
     private fun declarationKind(declaration: KtDeclaration): String = when (declaration) {
@@ -260,7 +296,7 @@ internal class ApiDocGenerator(
             .trimStart()
     }
 
-    private fun parseKDoc(kdocText: String?): ParsedKDoc {
+    private fun parseKDoc(kdocText: String?, localizedLocales: Set<String>): ParsedKDoc {
         if (kdocText == null) {
             return ParsedKDoc.EMPTY
         }
@@ -272,52 +308,100 @@ internal class ApiDocGenerator(
             .map { line -> line.trim().removePrefix("*").trim() }
 
         val descriptionLines = mutableListOf<String>()
+        val localizedDescriptionLines = linkedMapOf<String, MutableList<String>>()
         val tags = linkedMapOf<String, MutableList<KDocTagEntry>>()
         var currentTag: String? = null
         var currentName: String? = null
-        val currentValue = StringBuilder()
+        var currentLocale: String? = null
+        var currentDescriptionLocale: String? = null
+        val currentValues = linkedMapOf<String?, StringBuilder>()
+
+        fun appendCurrentValue(value: String) {
+            val builder = currentValues.getOrPut(currentLocale) { StringBuilder() }
+            if (builder.isNotEmpty()) {
+                builder.append('\n')
+            }
+            builder.append(value)
+        }
 
         fun flushTag() {
             val tagName = currentTag ?: return
+            val defaultValue = currentValues[null]?.toString()?.trim()?.normalizeBlankLines().orEmpty()
+            val localizedValues = currentValues
+                .filterKeys { it != null }
+                .mapKeys { (locale, _) -> locale.orEmpty() }
+                .mapValues { (_, value) -> value.toString().trim().normalizeBlankLines() }
+                .filterValues { it.isNotBlank() }
             tags.getOrPut(tagName) { mutableListOf() }.add(
                 KDocTagEntry(
                     name = currentName,
-                    value = currentValue.toString().trim().normalizeBlankLines()
+                    value = defaultValue,
+                    localizedValues = localizedValues
                 )
             )
             currentTag = null
             currentName = null
-            currentValue.setLength(0)
+            currentLocale = null
+            currentValues.clear()
+        }
+
+        fun appendLocalizedValue(locale: String, value: String) {
+            if (currentTag != null) {
+                currentLocale = locale
+                appendCurrentValue(value)
+            } else {
+                currentDescriptionLocale = locale
+                localizedDescriptionLines.getOrPut(locale) { mutableListOf() } += value
+            }
+        }
+
+        fun localeMarker(line: String): Pair<String, String>? {
+            val match = LOCALIZED_KDOC_MARKER_PATTERN.matchEntire(line) ?: return null
+            val locale = match.groupValues[1].lowercase(Locale.ROOT)
+            if (locale !in localizedLocales) {
+                return null
+            }
+            return locale to match.groupValues[2].trim()
         }
 
         lines.forEach { rawLine ->
             val line = rawLine.trimStart()
-            if (line.startsWith("@")) {
-                flushTag()
+            val marker = localeMarker(line)
+            if (marker != null) {
+                appendLocalizedValue(marker.first, marker.second)
+            } else if (line.startsWith("@")) {
                 val match = Regex("@([A-Za-z]+)\\s*(\\S+)?\\s*(.*)").matchEntire(line)
                 if (match != null) {
                     val tag = match.groupValues[1]
                     val name = match.groupValues[2].ifBlank { null }
                     val remainder = match.groupValues[3].trim()
-                    currentTag = tag
-                    currentName = when (tag) {
-                        "return", "receiver" -> null
-                        else -> name
-                    }
-                    currentValue.append(
-                        when (tag) {
-                            "return", "receiver" -> listOfNotNull(name, remainder).joinToString(" ").trim()
-                            else -> remainder
+                    val locale = tag.lowercase(Locale.ROOT).takeIf { it in localizedLocales }
+                    if (locale != null) {
+                        val localizedValue = listOfNotNull(name, remainder).joinToString(" ").trim()
+                        appendLocalizedValue(locale, localizedValue)
+                    } else {
+                        flushTag()
+                        currentDescriptionLocale = null
+                        currentTag = tag
+                        currentName = when (tag) {
+                            "return", "receiver" -> null
+                            else -> name
                         }
-                    )
+                        currentLocale = null
+                        appendCurrentValue(
+                            when (tag) {
+                                "return", "receiver" -> listOfNotNull(name, remainder).joinToString(" ").trim()
+                                else -> remainder
+                            }
+                        )
+                    }
                 } else {
                     descriptionLines += line
                 }
             } else if (currentTag != null) {
-                if (currentValue.isNotEmpty()) {
-                    currentValue.append('\n')
-                }
-                currentValue.append(rawLine.trim())
+                appendCurrentValue(rawLine.trim())
+            } else if (currentDescriptionLocale != null) {
+                localizedDescriptionLines.getOrPut(currentDescriptionLocale.orEmpty()) { mutableListOf() } += rawLine
             } else {
                 descriptionLines += rawLine
             }
@@ -325,6 +409,9 @@ internal class ApiDocGenerator(
         flushTag()
 
         val description = descriptionLines.joinToString("\n").trim().normalizeBlankLines()
+        val localizedDescriptions = localizedDescriptionLines
+            .mapValues { (_, lines) -> lines.joinToString("\n").trim().normalizeBlankLines() }
+            .filterValues { it.isNotBlank() }
         val summary = description
             .split(Regex("\\n\\s*\\n"))
             .firstOrNull()
@@ -335,7 +422,8 @@ internal class ApiDocGenerator(
         return ParsedKDoc(
             summary = summary,
             description = description,
-            tags = tags.mapValues { (_, entries) -> entries.filter { it.value.isNotBlank() } }
+            localizedDescriptions = localizedDescriptions,
+            tags = tags.mapValues { (_, entries) -> entries.filterNot { it.isEmpty() } }
                 .filterValues { it.isNotEmpty() }
         )
     }
@@ -382,55 +470,64 @@ internal class ApiDocGenerator(
         componentDir.resolve("ApiMemberCard.vue").writeText(apiMemberCardComponent())
     }
 
-    private fun writeApiIndex(outputDir: File, pages: List<ApiPage>) {
+    private fun writeApiIndex(outputDir: File, pages: List<ApiPage>, locale: String, defaultLocale: String) {
         val byModule = pages.groupBy { it.moduleName }
-        val apiDir = outputDir.resolve("api")
+        val labels = localeLabels(locale)
+        val apiDir = outputDir.resolve(apiContentRoot(locale, defaultLocale))
         apiDir.mkdirs()
         val content = buildString {
             appendLine("---")
-            appendLine("title: API Docs")
+            appendLine("title: ${labels.apiDocsTitle}")
             appendLine("outline: false")
             appendLine("---")
             appendLine()
-            appendLine("# API Docs")
+            appendLine("# ${labels.apiDocsTitle}")
             appendLine()
-            appendLine("These pages are generated from Kotlin KDoc comments and are ready to copy into a VitePress docs workspace.")
+            appendLine(labels.apiDocsIntro)
             appendLine()
-            appendLine("## Modules")
+            appendLine("## ${labels.modulesTitle}")
             appendLine()
             byModule.toSortedMap().forEach { (module, modulePages) ->
                 appendLine("- [$module](./$module/index.md) (${modulePages.size} page(s))")
             }
             appendLine()
-            appendLine("## Generated VitePress Files")
+            appendLine("## ${labels.generatedFilesTitle}")
             appendLine()
-            appendLine("Copy `build/docs/api` into your VitePress content tree, then copy `build/docs/.vitepress/theme` and `build/docs/.vitepress/api-sidebar.ts` into your VitePress configuration.")
+            appendLine(labels.generatedFilesIntro(apiContentRoot(locale, defaultLocale), sidebarFileName(locale, defaultLocale)))
         }
         apiDir.resolve("index.md").writeText(content)
     }
 
-    private fun writeSidebarFile(outputDir: File, pages: List<ApiPage>, modules: List<ApiModuleSnapshot>) {
+    private fun writeSidebarFile(
+        outputDir: File,
+        pages: List<ApiPage>,
+        modules: List<ApiModuleSnapshot>,
+        locale: String,
+        defaultLocale: String
+    ) {
         val vitepressDir = outputDir.resolve(".vitepress")
         vitepressDir.mkdirs()
+        val routeRoot = apiRouteRoot(locale, defaultLocale)
+        val labels = localeLabels(locale)
         val content = buildString {
             appendLine("import type { DefaultTheme } from 'vitepress'")
             appendLine()
             appendLine("const apiSidebar: DefaultTheme.SidebarMulti = {")
-            appendLine("  '/api/': [")
+            appendLine("  '$routeRoot': [")
             appendLine("    {")
-            appendLine("      text: 'API',")
-            appendLine("      link: '/api/',")
+            appendLine("      text: '${escapeTsString(labels.apiSidebarText)}',")
+            appendLine("      link: '$routeRoot',")
             appendLine("      items: [")
             modules.forEachIndexed { index, module ->
                 val modulePages = pages.filter { it.moduleName == module.name }
                 appendLine("        {")
                 appendLine("          text: '${escapeTsString(module.displayName)}',")
-                appendLine("          link: '/api/${module.name}/',")
+                appendLine("          link: '${routeRoot}${module.name}/',")
                 appendLine("          collapsed: false,")
                 appendLine("          items: [")
                 modulePages.forEachIndexed { pageIndex, page ->
                     val suffix = if (pageIndex == modulePages.lastIndex) "" else ","
-                    appendLine("            { text: '${escapeTsString(page.title)}', link: '${page.vitePressRoute()}' }$suffix")
+                    appendLine("            { text: '${escapeTsString(page.title)}', link: '${page.vitePressRoute(locale, defaultLocale)}' }$suffix")
                 }
                 appendLine("          ]")
                 appendLine("        }${if (index == modules.lastIndex) "" else ","}")
@@ -442,68 +539,80 @@ internal class ApiDocGenerator(
             appendLine()
             appendLine("export default apiSidebar")
         }
-        vitepressDir.resolve("api-sidebar.ts").writeText(content)
+        vitepressDir.resolve(sidebarFileName(locale, defaultLocale)).writeText(content)
     }
 
-    private fun writeModuleIndex(outputDir: File, module: ApiModuleSnapshot, pages: List<ApiPage>) {
-        val moduleDir = outputDir.resolve("api/${module.name}")
+    private fun writeModuleIndex(
+        outputDir: File,
+        module: ApiModuleSnapshot,
+        pages: List<ApiPage>,
+        locale: String,
+        defaultLocale: String
+    ) {
+        val labels = localeLabels(locale)
+        val moduleDir = outputDir.resolve("${apiContentRoot(locale, defaultLocale)}/${module.name}")
         moduleDir.mkdirs()
         val content = buildString {
             appendLine("---")
-            appendLine("title: ${module.displayName} API")
+            appendLine("title: ${module.displayName} ${labels.apiSuffix}")
             appendLine("outline: false")
             appendLine("---")
             appendLine()
-            appendLine("# ${module.displayName} API")
+            appendLine("# ${module.displayName} ${labels.apiSuffix}")
             appendLine()
-            appendLine("Generated from module `${module.name}`.")
+            appendLine(labels.moduleIntro(module.name))
             appendLine()
             if (module.sourceRoots.isNotEmpty()) {
-                appendLine("## Source Roots")
+                appendLine("## ${labels.sourceRootsTitle}")
                 appendLine()
                 module.sourceRoots.sortedBy { it.invariantPath() }.forEach { sourceRoot ->
                     appendLine("- `${projectRelativePath(sourceRoot)}`")
                 }
                 appendLine()
             }
-            appendLine("## Pages")
+            appendLine("## ${labels.pagesTitle}")
             appendLine()
             pages.forEach { page ->
-                val relativeLink = Path.of("api", module.name, "index.md").parent.relativize(Path.of(page.relativeOutputPath)).invariantSeparatorsPathString
-                val summarySuffix = page.summary?.let { " - ${escapeInline(it)}" }.orEmpty()
+                val localizedPage = page.localized(locale, defaultLocale)
+                val relativeLink = Path.of(apiContentRoot(locale, defaultLocale), module.name, "index.md")
+                    .parent
+                    .relativize(Path.of(page.localizedOutputPath(locale, defaultLocale)))
+                    .invariantSeparatorsPathString
+                val summarySuffix = localizedPage.summary?.let { " - ${escapeInline(it)}" }.orEmpty()
                 appendLine("- [${page.title}](./${relativeLink})${summarySuffix}")
             }
         }
         moduleDir.resolve("index.md").writeText(content)
     }
 
-    private fun writePage(outputDir: File, page: ApiPage) {
-        val target = outputDir.resolve(page.relativeOutputPath)
+    private fun writePage(outputDir: File, page: ApiPage, locale: String, defaultLocale: String) {
+        val localizedPage = page.localized(locale, defaultLocale)
+        val target = outputDir.resolve(page.localizedOutputPath(locale, defaultLocale))
         target.parentFile.mkdirs()
 
-        val flattened = page.flattenedDeclarations()
+        val flattened = localizedPage.flattenedDeclarations()
         val content = buildString {
             appendLine("---")
-            appendLine("title: ${page.title}")
+            appendLine("title: ${localizedPage.title}")
             appendLine("outline: [2, 2]")
             appendLine("---")
             appendLine()
             appendLine("<ApiDocPage")
-            appendLine("  title=\"${escapeHtmlAttribute(page.title)}\"")
-            appendLine("  module=\"${escapeHtmlAttribute(page.moduleDisplayName)}\"")
-            appendLine("  module-key=\"${escapeHtmlAttribute(page.moduleName.slugify())}\"")
-            appendLine("  package-name=\"${escapeHtmlAttribute(page.packageName)}\"")
-            appendLine("  source-file=\"${escapeHtmlAttribute(page.relativeSourcePath)}\"")
+            appendLine("  title=\"${escapeHtmlAttribute(localizedPage.title)}\"")
+            appendLine("  module=\"${escapeHtmlAttribute(localizedPage.moduleDisplayName)}\"")
+            appendLine("  module-key=\"${escapeHtmlAttribute(localizedPage.moduleName.slugify())}\"")
+            appendLine("  package-name=\"${escapeHtmlAttribute(localizedPage.packageName)}\"")
+            appendLine("  source-file=\"${escapeHtmlAttribute(localizedPage.relativeSourcePath)}\"")
             appendLine(">")
-            appendLine(page.summary ?: "Generated from Kotlin KDoc in `${page.relativeSourcePath}`.")
+            appendLine(localizedPage.summary ?: localeLabels(locale).generatedFromKDoc(localizedPage.relativeSourcePath))
             appendLine("</ApiDocPage>")
             appendLine()
 
             appendLine("<ApiMembersList items-json='${escapeHtmlAttribute(membersJson(flattened))}' />")
             appendLine()
 
-            page.declarations.forEach { declaration ->
-                renderDeclaration(this, page, declaration, 2)
+            localizedPage.declarations.forEach { declaration ->
+                renderDeclaration(this, localizedPage, declaration, 2, locale)
             }
         }
 
@@ -514,8 +623,10 @@ internal class ApiDocGenerator(
         builder: StringBuilder,
         page: ApiPage,
         declaration: ApiDeclaration,
-        headingLevel: Int
+        headingLevel: Int,
+        locale: String
     ) {
+        val labels = localeLabels(locale)
         val heading = "#".repeat(headingLevel.coerceIn(2, 6))
         builder.appendLine("$heading ${declaration.path.joinToString(".")}")
         builder.appendLine()
@@ -539,16 +650,16 @@ internal class ApiDocGenerator(
             builder.appendLine()
         }
 
-        renderTagTable(builder, "Parameters", declaration.docs.tags["param"], "Parameter")
-        renderTagTable(builder, "Properties", declaration.docs.tags["property"], "Property")
-        renderSingleTag(builder, "Returns", declaration.docs.tags["return"]?.firstOrNull()?.value)
-        renderSingleTag(builder, "Receiver", declaration.docs.tags["receiver"]?.firstOrNull()?.value)
-        renderTagTable(builder, "Throws", declaration.docs.tags["throws"], "Exception")
-        renderTagTable(builder, "See Also", declaration.docs.tags["see"], "Reference")
+        renderTagTable(builder, labels.parametersTitle, declaration.docs.tags["param"], labels.parameterLabel, labels.descriptionLabel)
+        renderTagTable(builder, labels.propertiesTitle, declaration.docs.tags["property"], labels.propertyLabel, labels.descriptionLabel)
+        renderSingleTag(builder, labels.returnsTitle, declaration.docs.tags["return"]?.firstOrNull()?.value)
+        renderSingleTag(builder, labels.receiverTitle, declaration.docs.tags["receiver"]?.firstOrNull()?.value)
+        renderTagTable(builder, labels.throwsTitle, declaration.docs.tags["throws"], labels.exceptionLabel, labels.descriptionLabel)
+        renderTagTable(builder, labels.seeAlsoTitle, declaration.docs.tags["see"], labels.referenceLabel, labels.descriptionLabel)
 
         if (declaration.children.isNotEmpty()) {
             declaration.children.forEach { child ->
-                renderDeclaration(builder, page, child, headingLevel + 1)
+                renderDeclaration(builder, page, child, headingLevel + 1, locale)
             }
         }
 
@@ -560,14 +671,15 @@ internal class ApiDocGenerator(
         builder: StringBuilder,
         title: String,
         entries: List<KDocTagEntry>?,
-        label: String
+        label: String,
+        descriptionLabel: String
     ) {
         if (entries.isNullOrEmpty()) {
             return
         }
         builder.appendLine("### $title")
         builder.appendLine()
-        builder.appendLine("| $label | Description |")
+        builder.appendLine("| $label | $descriptionLabel |")
         builder.appendLine("| --- | --- |")
         entries.forEach { entry ->
             val name = entry.name?.let { "`$it`" } ?: "-"
@@ -634,6 +746,15 @@ internal class ApiDocGenerator(
         .replace("\"", "\\\"")
 
     private fun escapeTsString(value: String): String = value.replace("'", "\\'")
+
+    private fun apiContentRoot(locale: String, defaultLocale: String): String =
+        if (locale == defaultLocale) "api" else "$locale/api"
+
+    private fun apiRouteRoot(locale: String, defaultLocale: String): String =
+        if (locale == defaultLocale) "/api/" else "/$locale/api/"
+
+    private fun sidebarFileName(locale: String, defaultLocale: String): String =
+        if (locale == defaultLocale) "api-sidebar.ts" else "api-sidebar-$locale.ts"
 }
 
 private data class ApiPage(
@@ -650,7 +771,19 @@ private data class ApiPage(
         listOf(declaration) + declaration.flattenedChildren()
     }
 
-    fun vitePressRoute(): String = "/" + relativeOutputPath.removeSuffix(".md").removeSuffix("/index")
+    fun localized(locale: String, fallbackLocale: String): ApiPage {
+        val localizedDeclarations = declarations.map { it.localized(locale, fallbackLocale) }
+        return copy(
+            declarations = localizedDeclarations,
+            summary = localizedDeclarations.firstNotNullOfOrNull { it.docs.summary }
+        )
+    }
+
+    fun localizedOutputPath(locale: String, defaultLocale: String): String =
+        if (locale == defaultLocale) relativeOutputPath else "$locale/$relativeOutputPath"
+
+    fun vitePressRoute(locale: String, defaultLocale: String): String =
+        "/" + localizedOutputPath(locale, defaultLocale).removeSuffix(".md").removeSuffix("/index")
 }
 
 private data class ApiDeclaration(
@@ -668,24 +801,143 @@ private data class ApiDeclaration(
     fun flattenedChildren(): List<ApiDeclaration> = children.flatMap { child ->
         listOf(child) + child.flattenedChildren()
     }
+
+    fun localized(locale: String, fallbackLocale: String): ApiDeclaration = copy(
+        docs = docs.localized(locale, fallbackLocale),
+        children = children.map { it.localized(locale, fallbackLocale) }
+    )
 }
 
 private data class ParsedKDoc(
     val summary: String?,
     val description: String,
+    val localizedDescriptions: Map<String, String>,
     val tags: Map<String, List<KDocTagEntry>>
 ) {
-    fun isEmpty(): Boolean = summary == null && description.isBlank() && tags.isEmpty()
+    fun isEmpty(): Boolean = summary == null && description.isBlank() && localizedDescriptions.isEmpty() && tags.isEmpty()
+
+    fun localized(locale: String, fallbackLocale: String): ParsedKDoc {
+        val localizedDescription = localizedDescriptions[locale]
+            ?: localizedDescriptions[fallbackLocale]
+            ?: description
+        val localizedTags = tags.mapValues { (_, entries) ->
+            entries.map { it.localized(locale, fallbackLocale) }
+                .filterNot { it.isEmpty() }
+        }.filterValues { it.isNotEmpty() }
+        val localizedSummary = localizedDescription
+            .split(Regex("\\n\\s*\\n"))
+            .firstOrNull()
+            ?.replace(Regex("\\s+"), " ")
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+        return copy(
+            summary = localizedSummary,
+            description = localizedDescription,
+            tags = localizedTags
+        )
+    }
 
     companion object {
-        val EMPTY = ParsedKDoc(summary = null, description = "", tags = emptyMap())
+        val EMPTY = ParsedKDoc(summary = null, description = "", localizedDescriptions = emptyMap(), tags = emptyMap())
     }
 }
 
 private data class KDocTagEntry(
     val name: String?,
-    val value: String
+    val value: String,
+    val localizedValues: Map<String, String>
+) {
+    fun isEmpty(): Boolean = value.isBlank() && localizedValues.isEmpty()
+
+    fun localized(locale: String, fallbackLocale: String): KDocTagEntry = copy(
+        value = localizedValues[locale] ?: localizedValues[fallbackLocale] ?: value,
+        localizedValues = emptyMap()
+    )
+}
+
+private val LOCALIZED_KDOC_MARKER_PATTERN = Regex("%([A-Za-z][A-Za-z0-9-]*)\\s*(.*)")
+
+private val LOCALE_CODE_PATTERN = Regex("[a-z][a-z0-9-]*")
+
+private data class ApiDocLabels(
+    val apiDocsTitle: String,
+    val apiDocsIntro: String,
+    val modulesTitle: String,
+    val generatedFilesTitle: String,
+    val apiSidebarText: String,
+    val apiSuffix: String,
+    val sourceRootsTitle: String,
+    val pagesTitle: String,
+    val parametersTitle: String,
+    val parameterLabel: String,
+    val descriptionLabel: String,
+    val propertiesTitle: String,
+    val propertyLabel: String,
+    val returnsTitle: String,
+    val receiverTitle: String,
+    val throwsTitle: String,
+    val exceptionLabel: String,
+    val seeAlsoTitle: String,
+    val referenceLabel: String,
+    val generatedFilesIntro: (String, String) -> String,
+    val moduleIntro: (String) -> String,
+    val generatedFromKDoc: (String) -> String
 )
+
+private fun localeLabels(locale: String): ApiDocLabels = when (locale) {
+    "zh" -> ApiDocLabels(
+        apiDocsTitle = "API 文档",
+        apiDocsIntro = "这些页面由 Kotlin KDoc 注释生成，可直接复制到 VitePress 文档工作区。",
+        modulesTitle = "模块",
+        generatedFilesTitle = "生成的 VitePress 文件",
+        apiSidebarText = "API",
+        apiSuffix = "API",
+        sourceRootsTitle = "源码根目录",
+        pagesTitle = "页面",
+        parametersTitle = "参数",
+        parameterLabel = "参数",
+        descriptionLabel = "说明",
+        propertiesTitle = "属性",
+        propertyLabel = "属性",
+        returnsTitle = "返回值",
+        receiverTitle = "接收者",
+        throwsTitle = "异常",
+        exceptionLabel = "异常",
+        seeAlsoTitle = "另请参阅",
+        referenceLabel = "引用",
+        generatedFilesIntro = { apiRoot, sidebar ->
+            "复制 `build/docs/$apiRoot` 到 VitePress 内容目录，然后复制 `build/docs/.vitepress/theme` 和 `build/docs/.vitepress/$sidebar` 到 VitePress 配置目录。"
+        },
+        moduleIntro = { module -> "由模块 `$module` 生成。" },
+        generatedFromKDoc = { sourcePath -> "由 `${sourcePath}` 中的 Kotlin KDoc 生成。" }
+    )
+    else -> ApiDocLabels(
+        apiDocsTitle = "API Docs",
+        apiDocsIntro = "These pages are generated from Kotlin KDoc comments and are ready to copy into a VitePress docs workspace.",
+        modulesTitle = "Modules",
+        generatedFilesTitle = "Generated VitePress Files",
+        apiSidebarText = "API",
+        apiSuffix = "API",
+        sourceRootsTitle = "Source Roots",
+        pagesTitle = "Pages",
+        parametersTitle = "Parameters",
+        parameterLabel = "Parameter",
+        descriptionLabel = "Description",
+        propertiesTitle = "Properties",
+        propertyLabel = "Property",
+        returnsTitle = "Returns",
+        receiverTitle = "Receiver",
+        throwsTitle = "Throws",
+        exceptionLabel = "Exception",
+        seeAlsoTitle = "See Also",
+        referenceLabel = "Reference",
+        generatedFilesIntro = { apiRoot, sidebar ->
+            "Copy `build/docs/$apiRoot` into your VitePress content tree, then copy `build/docs/.vitepress/theme` and `build/docs/.vitepress/$sidebar` into your VitePress configuration."
+        },
+        moduleIntro = { module -> "Generated from module `$module`." },
+        generatedFromKDoc = { sourcePath -> "Generated from Kotlin KDoc in `$sourcePath`." }
+    )
+}
 
 private fun String.slugify(): String =
     lowercase(Locale.ROOT).replace(Regex("[^a-z0-9]+"), "-").trim('-')

@@ -3,9 +3,14 @@
 package top.katton.api
 
 /**
+ * %en
  * Register a configurable full-screen invert effect.
  *
- * @param amount 0.0 keeps the original image, 1.0 fully inverts it.
+ * %zh
+ * 注册一个可配置的全屏反色效果。
+ * @param amount
+ * %en 0.0 keeps the original image, 1.0 fully inverts it.
+ * %zh 0.0 保持原图，1.0 完全反色。
  */
 fun registerClientInvertPostEffect(
     id: String = "katton:preset/invert",
@@ -14,9 +19,14 @@ fun registerClientInvertPostEffect(
 ): Boolean = registerClientPostEffectPreset(id, activate, invertPostEffectShader(amount))
 
 /**
+ * %en
  * Register a configurable grayscale effect.
  *
- * @param amount 0.0 keeps color, 1.0 is fully grayscale.
+ * %zh
+ * 注册一个可配置的灰度效果。
+ * @param amount
+ * %en 0.0 keeps color, 1.0 is fully grayscale.
+ * %zh 0.0 保留颜色，1.0 完全转为灰度。
  */
 fun registerClientGrayscalePostEffect(
     id: String = "katton:preset/grayscale",
@@ -25,9 +35,14 @@ fun registerClientGrayscalePostEffect(
 ): Boolean = registerClientPostEffectPreset(id, activate, grayscalePostEffectShader(amount))
 
 /**
+ * %en
  * Register a configurable sepia effect.
  *
- * @param amount 0.0 keeps the original image, 1.0 is fully sepia.
+ * %zh
+ * 注册一个可配置的棕褐色效果。
+ * @param amount
+ * %en 0.0 keeps the original image, 1.0 is fully sepia.
+ * %zh 0.0 保持原图，1.0 完全应用棕褐色调。
  */
 fun registerClientSepiaPostEffect(
     id: String = "katton:preset/sepia",
@@ -36,10 +51,17 @@ fun registerClientSepiaPostEffect(
 ): Boolean = registerClientPostEffectPreset(id, activate, sepiaPostEffectShader(amount))
 
 /**
+ * %en
  * Register a tint effect that maps screen luminance toward [color].
  *
- * @param color RGB or ARGB integer. Alpha is ignored.
- * @param amount 0.0 keeps original color, 1.0 fully applies the tint.
+ * %zh
+ * 注册一个将屏幕亮度映射到 [color] 的染色效果。
+ * @param color
+ * %en RGB or ARGB integer. Alpha is ignored.
+ * %zh RGB 或 ARGB 整数；Alpha 通道会被忽略。
+ * @param amount
+ * %en 0.0 keeps original color, 1.0 fully applies the tint.
+ * %zh 0.0 保留原色，1.0 完全应用染色。
  */
 fun registerClientTintPostEffect(
     id: String = "katton:preset/tint",
@@ -49,12 +71,23 @@ fun registerClientTintPostEffect(
 ): Boolean = registerClientPostEffectPreset(id, activate, tintPostEffectShader(color, amount))
 
 /**
+ * %en
  * Register a basic color adjustment effect.
  *
- * @param brightness -1.0 darkens, 0.0 unchanged, 1.0 brightens.
- * @param contrast 1.0 unchanged, lower flattens, higher increases contrast.
- * @param saturation 1.0 unchanged, 0.0 grayscale, higher oversaturates.
- * @param gamma 1.0 unchanged. Higher values lift shadows.
+ * %zh
+ * 注册一个基础颜色调整效果。
+ * @param brightness
+ * %en -1.0 darkens, 0.0 unchanged, 1.0 brightens.
+ * %zh -1.0 变暗，0.0 不变，1.0 变亮。
+ * @param contrast
+ * %en 1.0 unchanged, lower flattens, higher increases contrast.
+ * %zh 1.0 不变，较低值降低对比度，较高值增强对比度。
+ * @param saturation
+ * %en 1.0 unchanged, 0.0 grayscale, higher oversaturates.
+ * %zh 1.0 不变，0.0 转为灰度，较高值提高饱和度。
+ * @param gamma
+ * %en 1.0 unchanged. Higher values lift shadows.
+ * %zh 1.0 不变，较高值会提亮暗部。
  */
 fun registerClientColorAdjustPostEffect(
     id: String = "katton:preset/color_adjust",
@@ -70,12 +103,23 @@ fun registerClientColorAdjustPostEffect(
 )
 
 /**
+ * %en
  * Register a vignette effect.
  *
- * @param amount strength of the edge color.
- * @param radius distance from screen center before the vignette starts.
- * @param softness width of the falloff.
- * @param color RGB or ARGB integer. Alpha is ignored.
+ * %zh
+ * 注册一个暗角效果。
+ * @param amount
+ * %en strength of the edge color.
+ * %zh 边缘颜色强度。
+ * @param radius
+ * %en distance from screen center before the vignette starts.
+ * %zh 从屏幕中心到暗角开始位置的距离。
+ * @param softness
+ * %en width of the falloff.
+ * %zh 衰减宽度。
+ * @param color
+ * %en RGB or ARGB integer. Alpha is ignored.
+ * %zh RGB 或 ARGB 整数；Alpha 通道会被忽略。
  */
 fun registerClientVignettePostEffect(
     id: String = "katton:preset/vignette",
@@ -87,10 +131,17 @@ fun registerClientVignettePostEffect(
 ): Boolean = registerClientPostEffectPreset(id, activate, vignettePostEffectShader(amount, radius, softness, color))
 
 /**
+ * %en
  * Register a chromatic aberration effect.
  *
- * @param offsetPixels red/blue channel offset in screen pixels.
- * @param amount blend amount between original and shifted color.
+ * %zh
+ * 注册一个色差效果。
+ * @param offsetPixels
+ * %en red/blue channel offset in screen pixels.
+ * %zh 红色和蓝色通道的屏幕像素偏移量。
+ * @param amount
+ * %en blend amount between original and shifted color.
+ * %zh 原始颜色与偏移颜色之间的混合比例。
  */
 fun registerClientChromaticAberrationPostEffect(
     id: String = "katton:preset/chromatic_aberration",
@@ -104,9 +155,14 @@ fun registerClientChromaticAberrationPostEffect(
 )
 
 /**
+ * %en
  * Register a pixelation effect.
  *
- * @param pixelSize block size in screen pixels.
+ * %zh
+ * 注册一个像素化效果。
+ * @param pixelSize
+ * %en block size in screen pixels.
+ * %zh 像素块的屏幕像素大小。
  */
 fun registerClientPixelatePostEffect(
     id: String = "katton:preset/pixelate",
@@ -115,10 +171,17 @@ fun registerClientPixelatePostEffect(
 ): Boolean = registerClientPostEffectPreset(id, activate, pixelatePostEffectShader(pixelSize))
 
 /**
+ * %en
  * Register a posterize effect.
  *
- * @param levels number of color steps per channel.
- * @param amount 0.0 keeps original color, 1.0 fully posterizes.
+ * %zh
+ * 注册一个色阶压缩效果。
+ * @param levels
+ * %en number of color steps per channel.
+ * %zh 每个颜色通道的色阶数量。
+ * @param amount
+ * %en 0.0 keeps original color, 1.0 fully posterizes.
+ * %zh 0.0 保留原色，1.0 完全应用色阶压缩。
  */
 fun registerClientPosterizePostEffect(
     id: String = "katton:preset/posterize",
@@ -128,10 +191,17 @@ fun registerClientPosterizePostEffect(
 ): Boolean = registerClientPostEffectPreset(id, activate, posterizePostEffectShader(levels, amount))
 
 /**
+ * %en
  * Register a static scanline effect.
  *
- * @param amount scanline darkness.
- * @param lines approximate number of scanlines across the screen height.
+ * %zh
+ * 注册一个静态扫描线效果。
+ * @param amount
+ * %en scanline darkness.
+ * %zh 扫描线暗度。
+ * @param lines
+ * %en approximate number of scanlines across the screen height.
+ * %zh 屏幕高度方向上的近似扫描线数量。
  */
 fun registerClientScanlinePostEffect(
     id: String = "katton:preset/scanline",
@@ -141,10 +211,17 @@ fun registerClientScanlinePostEffect(
 ): Boolean = registerClientPostEffectPreset(id, activate, scanlinePostEffectShader(amount, lines))
 
 /**
+ * %en
  * Register a blur effect backed by Minecraft's built-in box blur shader.
  *
- * @param radius blur radius in pixels.
- * @param passes number of horizontal/vertical blur rounds.
+ * %zh
+ * 注册一个基于 Minecraft 内置 box blur shader 的模糊效果。
+ * @param radius
+ * %en blur radius in pixels.
+ * %zh 模糊半径，单位为像素。
+ * @param passes
+ * %en number of horizontal/vertical blur rounds.
+ * %zh 水平和垂直模糊轮数。
  */
 fun registerClientBlurPostEffect(
     id: String = "katton:preset/blur",

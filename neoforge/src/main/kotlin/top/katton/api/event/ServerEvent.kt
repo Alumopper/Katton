@@ -18,10 +18,15 @@ import top.katton.util.DelegateEvent
 import top.katton.util.createUnit
 
 /**
+ * %en
  * Server lifecycle events for NeoForge platform.
  *
  * This object provides events related to server lifecycle including
  * server start/stop, datapack sync, level load/unload, and tick events.
+ *
+ * %zh
+ * NeoForge 平台的服务端生命周期事件。
+ * 此对象提供与服务端生命周期相关的事件，包括服务端启动/停止、数据包同步、维度加载/卸载和 tick 事件。
  */
 @Suppress("unused")
 @EventBusSubscriber(
@@ -118,101 +123,174 @@ object ServerEvent {
     }
 
     /**
+     * %en
      * Event triggered when the server is starting (before worlds are loaded).
+     *
+     * %zh
+     * 当服务端开始启动、维度加载前触发。
      */
     val onServerStarting = createUnit<ServerArg>()
 
     /**
+     * %en
      * Event triggered when the server has started (after worlds are loaded).
+     *
+     * %zh
+     * 当服务端启动完成、维度加载后触发。
      */
     val onServerStarted = createUnit<ServerArg>()
 
     /**
+     * %en
      * Event triggered when the server has stopped.
+     *
+     * %zh
+     * 当服务端停止时触发。
      */
     val onServerStopped = createUnit<ServerArg>()
 
     /**
+     * %en
      * Event triggered when the server is stopping.
+     *
+     * %zh
+     * 当服务端正在停止时触发。
      */
     val onServerStopping = createUnit<ServerArg>()
 
     /**
+     * %en
      * Event triggered when datapack contents are being synced to players.
+     *
+     * %zh
+     * 当向玩家同步数据包内容时触发。
      */
     @JvmField
     val onSyncDatapackContents = createUnit<SyncDatapackContentsArg>()
 
     /**
+     * %en
      * Event triggered when a datapack reload is starting.
      * Note: NeoForge doesn't have a direct equivalent; this is a placeholder.
+     *
+     * %zh
+     * 当数据包重载开始时触发。
+     * 这是为了 NeoForge API 兼容性保留的占位事件。
      */
     @JvmField
     val onStartDatapackReload = createUnit<StartDatapackReloadArg>()
 
     /**
+     * %en
      * Event triggered when a datapack reload has completed.
      * Note: NeoForge doesn't have a direct equivalent; this is a placeholder.
+     *
+     * %zh
+     * 当数据包重载完成时触发。
+     * 这是为了 NeoForge API 兼容性保留的占位事件。
      */
     @JvmField
     val onEndDatapackReload = createUnit<EndDatapackReloadArg>()
 
     /**
+     * %en
      * Event triggered before the server saves data.
      * Note: NeoForge doesn't have a direct equivalent; this is a placeholder.
+     *
+     * %zh
+     * 在服务端保存数据之前触发。
+     * 这是为了 NeoForge API 兼容性保留的占位事件。
      */
     @JvmField
     val onBeforeSave = createUnit<ServerSaveArg>()
 
     /**
+     * %en
      * Event triggered after the server has saved data.
      * Note: NeoForge doesn't have a direct equivalent; this is a placeholder.
+     *
+     * %zh
+     * 在服务端保存数据之后触发。
+     * 这是为了 NeoForge API 兼容性保留的占位事件。
      */
     @JvmField
     val onAfterSave = createUnit<ServerSaveArg>()
 
     /**
+     * %en
      * Event triggered at the start of each server tick.
+     *
+     * %zh
+     * 每个服务端 tick 开始时触发。
      */
     val onStartServerTick = createUnit<ServerTickArg>()
 
     /**
+     * %en
      * Event triggered at the end of each server tick.
+     *
+     * %zh
+     * 每个服务端 tick 结束时触发。
      */
     val onEndServerTick = createUnit<ServerTickArg>()
 
     /**
+     * %en
      * Event triggered at the start of each world/level tick.
+     *
+     * %zh
+     * 每个维度/世界 tick 开始时触发。
      */
     val onStartWorldTick = createUnit<WorldTickArg>()
 
     /**
+     * %en
      * Event triggered at the end of each world/level tick.
+     *
+     * %zh
+     * 每个维度/世界 tick 结束时触发。
      */
     val onEndWorldTick = createUnit<WorldTickArg>()
 
     /**
+     * %en
      * Event triggered when a level is loaded.
+     *
+     * %zh
+     * 当维度加载时触发。
      */
     @JvmField
     val onLevelLoad = createUnit<ServerLevelArg>()
 
     /**
+     * %en
      * Event triggered when a level is unloaded.
+     *
+     * %zh
+     * 当维度卸载时触发。
      */
     @JvmField
     val onLevelUnload = createUnit<ServerLevelArg>()
 
     /**
+     * %en
      * Event triggered when a level is saved.
+     *
+     * %zh
+     * 当维度保存时触发。
      */
     @JvmField
     val onLevelSave = createUnit<ServerLevelArg>()
 
     /**
+     * %en
      * Wrapper class for server level arguments.
      *
-     * @property level The server level
+     * %zh
+     * 服务端维度参数封装。
+     * @property level
+     * %en The server level
+     * %zh 服务端维度。
      */
     @JvmInline
     value class ServerLevelArg(val level: ServerLevel)

@@ -13,9 +13,15 @@ import top.katton.paper.PaperNmsBridge
 import top.katton.util.createReturnIfNot
 
 /**
+ * %en
  * Item interaction events for Paper (Bukkit) platform.
  *
  * This object provides events related to item usage on blocks and in air.
+ *
+ * %zh
+ * Paper (Bukkit) 平台的物品交互事件。
+ *
+ * 此对象提供与物品在方块上使用以及空中使用相关的事件。
  */
 @Suppress("unused")
 object ItemEvent {

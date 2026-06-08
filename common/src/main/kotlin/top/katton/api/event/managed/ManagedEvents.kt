@@ -4,8 +4,8 @@ import top.katton.pack.ScriptPackScope
 import top.katton.util.ScriptExecutionContext
 
 /**
- * Managed event listener handle — returned to scripts when registering a native listener.
- * Can be used to manually unregister the listener before reload.
+ * Managed event listener handle returned to scripts when registering a native listener.
+ * 注册原生事件监听器后返回给脚本的托管监听器句柄。
  */
 data class ManagedEventHandle(
     val id: Long,
@@ -13,11 +13,11 @@ data class ManagedEventHandle(
 )
 
 /**
- * Platform-provided implementation of managed event listener registry.
- * Each platform (Paper, Fabric, NeoForge) sets [provider] during initialization.
+ * Platform bridge for managed native event listeners.
+ * Paper, Fabric, and NeoForge can provide their own implementation through [provider].
  *
- * Managed listeners are automatically cleaned up on reload (GLOBAL scope persists,
- * WORLD/SERVER_CACHE scope is cleared, all listeners cleared on full reload).
+ * 事件会按脚本所有者和作用域记录。WORLD/SERVER_CACHE 作用域会在重载或清理时自动移除，
+ * GLOBAL 作用域需要显式注销或在全局清理时移除。
  */
 interface ManagedListenerProvider {
     fun register(
@@ -35,35 +35,35 @@ interface ManagedListenerProvider {
 }
 
 /**
- * Platform sets this during initialization (e.g., PaperManagedEvents.initialize()).
- * Must be set before any script calls [registerEvent].
+ * Active managed-listener provider installed by the current platform.
+ * Paper currently initializes this from `PaperManagedEvents.initialize()`.
  */
 @Volatile
 @JvmField
 var provider: ManagedListenerProvider? = null
 
-// ═══════════════════════════════════════════════════════════════
+// ---------------------------------------------------------------------------
 //  Script-facing API
-// ═══════════════════════════════════════════════════════════════
+// ---------------------------------------------------------------------------
 
 /**
- * Register a managed native event listener.
+ * Register a native platform event listener from script code.
  *
- * The listener is automatically cleaned up on `/katton reload` for WORLD/SERVER_CACHE scopes.
- * GLOBAL scope listeners persist across reloads until manually [unregisterEvent]ed.
+ * Listeners in WORLD/SERVER_CACHE scope are cleaned up during `/katton reload`.
+ * GLOBAL listeners stay active until [unregisterEvent] or a full managed cleanup removes them.
  *
- * @param T The native event class (e.g., org.bukkit.event.player.PlayerMoveEvent)
- * @param priority Event priority (0=LOWEST, 1=LOW, 2=NORMAL, 3=HIGH, 4=HIGHEST, 5=MONITOR)
- * @param ignoreCancelled If true, the handler is not called for cancelled events
- * @param handler The callback receiving the typed event
- * @return A handle that can be used with [unregisterEvent] to manually remove the listener
+ * @param T Native event type, for example `org.bukkit.event.player.PlayerMoveEvent`.
+ * @param priority Event priority. Paper uses 0=LOWEST, 1=LOW, 2=NORMAL, 3=HIGH, 4=HIGHEST, 5=MONITOR.
+ * @param ignoreCancelled When `true`, cancelled events are ignored when the platform supports that behavior.
+ * @param handler Callback invoked with the native event instance.
+ * @return Handle that can be passed to [unregisterEvent].
  */
 inline fun <reified T : Any> registerEvent(
     priority: Int = 2, // EventPriority.NORMAL
     ignoreCancelled: Boolean = false,
     noinline handler: (T) -> Unit
 ): ManagedEventHandle {
-    val p = provider ?: error("ManagedEvents.provider not initialized — ensure platform calls ManagedListenerProvider.initialize()")
+    val p = provider ?: error("ManagedEvents.provider not initialized - ensure platform calls ManagedListenerProvider.initialize()")
     val owner = ScriptExecutionContext.currentScriptOwner() ?: "unknown"
     val scope = ScriptExecutionContext.currentScriptScope()
     @Suppress("UNCHECKED_CAST")
@@ -71,27 +71,27 @@ inline fun <reified T : Any> registerEvent(
 }
 
 /**
- * Manually unregister a managed listener created by [registerEvent].
+ * Unregister a listener previously created by [registerEvent].
  */
 fun unregisterEvent(handle: ManagedEventHandle) {
     provider?.unregister(handle)
 }
 
-// ═══════════════════════════════════════════════════════════════
+// ---------------------------------------------------------------------------
 //  Lifecycle integration (called by Katton.kt)
-// ═══════════════════════════════════════════════════════════════
+// ---------------------------------------------------------------------------
 
 /**
- * Unregister all managed listeners registered under [scope].
- * Called by [top.katton.Katton.clearWorldAndServerEvents].
+ * Clear all managed listeners registered under [scope].
+ * Called from [top.katton.Katton.clearWorldAndServerEvents].
  */
 fun clearManagedByScope(scope: ScriptPackScope) {
     provider?.clearByScope(scope)
 }
 
 /**
- * Unregister ALL managed listeners.
- * Called on full reload or server shutdown.
+ * Clear every managed listener from the active provider.
+ * Used during full shutdown or global cleanup.
  */
 fun clearAllManaged() {
     provider?.clearAll()

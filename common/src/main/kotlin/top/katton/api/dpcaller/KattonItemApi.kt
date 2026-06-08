@@ -1,4 +1,4 @@
-@file:Suppress("unused")
+﻿@file:Suppress("unused")
 
 package top.katton.api.dpcaller
 
@@ -20,6 +20,7 @@ import top.katton.api.requireServer
 import java.util.*
 
 /**
+ * %en
  * Item management API for ItemStack operations.
  *
  * This module provides functions for working with items including:
@@ -27,10 +28,22 @@ import java.util.*
  * - Container slot modification
  * - Entity equipment modification
  * - Loot function application
+ *
+ * %zh
+ * 面向 ItemStack 操作的物品管理 API。
+ * 本模块提供一组处理物品的函数，包括：
+ * - 访问 ItemStack 的 NBT 数据
+ * - 修改容器槽位
+ * - 修改实体装备
+ * - 应用战利品函数
  */
 
 /**
+ * %en
  * Extension property to get/set NBT data on an ItemStack.
+ *
+ * %zh
+ * 用于读取和写入 ItemStack NBT 数据的扩展属性。
  */
 var ItemStack.nbt: CompoundTag
     get() = components[DataComponents.CUSTOM_DATA]?.copyTag() ?: CompoundTag()
@@ -42,11 +55,20 @@ var ItemStack.nbt: CompoundTag
     }
 
 /**
+ * %en
  * Applies a LootItemFunction modifier to a block container slot.
  *
- * @param pos Block position of the container
- * @param slot Slot index to modify
- * @param modifier LootItemFunction to apply
+ * %zh
+ * 将 LootItemFunction 修饰器应用到方块容器的指定槽位。
+ * @param pos
+ * %en Block position of the container
+ * %zh 容器所在的方块位置。
+ * @param slot
+ * %en Slot index to modify
+ * %zh 要修改的槽位索引。
+ * @param modifier
+ * %en LootItemFunction to apply
+ * %zh 要应用的 LootItemFunction。
  */
 fun modifyBlockItem(pos: BlockPos, slot: Int, modifier: LootItemFunction) {
     val container = requireServer().overworld().getBlockEntity(pos)?.let { it as? Container } ?: run {
@@ -63,11 +85,20 @@ fun modifyBlockItem(pos: BlockPos, slot: Int, modifier: LootItemFunction) {
 }
 
 /**
+ * %en
  * Applies a LootItemFunction to an entity equipment slot.
  *
- * @param entity Target entity
- * @param slot Equipment slot index
- * @param modifier LootItemFunction to apply
+ * %zh
+ * 将 LootItemFunction 应用到实体的装备槽位。
+ * @param entity
+ * %en Target entity
+ * %zh 目标实体。
+ * @param slot
+ * %en Equipment slot index
+ * %zh 装备槽位索引。
+ * @param modifier
+ * %en LootItemFunction to apply
+ * %zh 要应用的 LootItemFunction。
  */
 fun modifyEntityItem(entity: Entity, slot: Int, modifier: LootItemFunction) {
     val slotAccess = entity.getSlot(slot) ?: run {
@@ -82,11 +113,20 @@ fun modifyEntityItem(entity: Entity, slot: Int, modifier: LootItemFunction) {
 }
 
 /**
+ * %en
  * Sets an item into a container block slot.
  *
- * @param pos Block position
- * @param slot Slot index
- * @param itemStack ItemStack to set
+ * %zh
+ * 将物品放入容器方块的指定槽位。
+ * @param pos
+ * %en Block position
+ * %zh 方块位置。
+ * @param slot
+ * %en Slot index
+ * %zh 槽位索引。
+ * @param itemStack
+ * %en ItemStack to set
+ * %zh 要设置的 ItemStack。
  */
 fun setBlockItem(pos: BlockPos, slot: Int, itemStack: ItemStack) {
     val container = requireServer().overworld().getBlockEntity(pos)?.let { it as? Container } ?: run {
@@ -101,11 +141,20 @@ fun setBlockItem(pos: BlockPos, slot: Int, itemStack: ItemStack) {
 }
 
 /**
+ * %en
  * Sets an item into an entity slot.
  *
- * @param entity Target entity
- * @param slot Slot index
- * @param itemStack ItemStack to set
+ * %zh
+ * 将物品放入实体的指定槽位。
+ * @param entity
+ * %en Target entity
+ * %zh 目标实体。
+ * @param slot
+ * %en Slot index
+ * %zh 槽位索引。
+ * @param itemStack
+ * %en ItemStack to set
+ * %zh 要设置的 ItemStack。
  */
 fun setEntityItem(entity: Entity, slot: Int, itemStack: ItemStack) {
     val slotAccess = entity.getSlot(slot) ?: run {
@@ -118,11 +167,20 @@ fun setEntityItem(entity: Entity, slot: Int, itemStack: ItemStack) {
 }
 
 /**
+ * %en
  * Gets an item from a container block slot.
  *
- * @param pos Block position
- * @param slot Slot index
- * @return ItemStack or null if invalid
+ * %zh
+ * 从容器方块的指定槽位获取物品。
+ * @param pos
+ * %en Block position
+ * %zh 方块位置。
+ * @param slot
+ * %en Slot index
+ * %zh 槽位索引。
+ * @return
+ * %en or null if invalid
+ * %zh 无效时返回 null。
  */
 fun getBlockItem(pos: BlockPos, slot: Int): ItemStack? {
     val container = requireServer().overworld().getBlockEntity(pos)?.let { it as? Container } ?: run {
@@ -138,11 +196,20 @@ fun getBlockItem(pos: BlockPos, slot: Int): ItemStack? {
 }
 
 /**
+ * %en
  * Gets an item from an entity slot.
  *
- * @param entity Target entity
- * @param slot Slot index
- * @return ItemStack or null if slot missing
+ * %zh
+ * 从实体的指定槽位获取物品。
+ * @param entity
+ * %en Target entity
+ * %zh 目标实体。
+ * @param slot
+ * %en Slot index
+ * %zh 槽位索引。
+ * @return
+ * %en or null if slot missing
+ * %zh 槽位不存在时返回 null。
  */
 fun getEntityItem(entity: Entity, slot: Int): ItemStack? {
     val slotAccess = entity.getSlot(slot) ?: run {
@@ -153,11 +220,20 @@ fun getEntityItem(entity: Entity, slot: Int): ItemStack? {
 }
 
 /**
+ * %en
  * Applies a LootItemFunction to an ItemStack and returns the modified stack.
  *
- * @param itemStack Item to modify
- * @param modifier Function to apply
- * @return Modified ItemStack (size-limited)
+ * %zh
+ * 将 LootItemFunction 应用于 ItemStack，并返回修改后的堆栈。
+ * @param itemStack
+ * %en Item to modify
+ * %zh 要修改的物品。
+ * @param modifier
+ * %en Function to apply
+ * %zh 要应用的函数。
+ * @return
+ * %en ItemStack (size-limited)
+ * %zh 返回受大小限制的 ItemStack。
  */
 fun applyModifier(itemStack: ItemStack, modifier: LootItemFunction): ItemStack {
     val params = LootParams.Builder(requireServer().overworld())
@@ -170,4 +246,3 @@ fun applyModifier(itemStack: ItemStack, modifier: LootItemFunction): ItemStack {
     modifiedItemStack.limitSize(modifiedItemStack.maxStackSize)
     return modifiedItemStack
 }
-

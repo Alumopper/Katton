@@ -79,9 +79,14 @@ enum class ClientItemRenderEasing(private val sampler: (Float) -> Float) {
     });
 
     /**
-     * Clamp only the input progress. The sampled value is intentionally raw so
-     * overshooting curves such as back, elastic, or bounce keep their shape.
-     */
+ * %en
+ * Clamp only the input progress. The sampled value is intentionally raw so
+ * overshooting curves such as back, elastic, or bounce keep their shape.
+ *
+ * %zh
+ * 只限制输入进度。采样结果会保留原始值，
+ * 因此 back、elastic、bounce 等会越界的曲线仍能保持原本形状。
+ */
     fun apply(progress: Float): Float = sampler(progress.coerceIn(0.0f, 1.0f))
 }
 
@@ -182,10 +187,16 @@ interface ClientItemRenderKeyframe {
 }
 
 /**
+ * %en
  * A transform keyframe on an animation track. [time] is usually 0.0 to 1.0.
  *
  * Translation values are block offsets, rotation values are degrees, and scale
  * values are multipliers.
+ *
+ * %zh
+ * 动画轨道上的变换关键帧。[time] 通常取 0.0 到 1.0。
+ *
+ * 平移值表示方块偏移，旋转值表示角度，缩放值表示倍率。
  */
 data class ClientItemRenderAnimationKeyframe(
     override val time: Float,
@@ -194,8 +205,13 @@ data class ClientItemRenderAnimationKeyframe(
 ) : ClientItemRenderKeyframe
 
 /**
+ * %en
  * A client-local function keyframe. Function callbacks are not serialized over
  * the network; server-spawned markers can only transmit transform keyframes.
+ *
+ * %zh
+ * 仅在客户端本地执行的函数关键帧。函数回调不会通过网络序列化，
+ * 因此服务端生成的标记只能传输变换关键帧。
  */
 data class ClientItemRenderFunctionKeyframe(
     override val time: Float,
@@ -203,7 +219,11 @@ data class ClientItemRenderFunctionKeyframe(
 ) : ClientItemRenderKeyframe
 
 /**
+ * %en
  * One animation track inside a [ClientItemRenderAnimationSet].
+ *
+ * %zh
+ * [ClientItemRenderAnimationSet] 内的一条动画轨道。
  */
 data class ClientItemRenderAnimation(
     val target: ClientItemRenderAnimationTarget,
@@ -212,8 +232,13 @@ data class ClientItemRenderAnimation(
 )
 
 /**
+ * %en
  * A playable animation set. All tracks in this set share the same duration,
  * delay, and loop behavior. Multiple sets can be played together and stacked.
+ *
+ * %zh
+ * 可播放的动画集。此集合中的所有轨道共享相同的持续时间、
+ * 延迟和循环行为。多个动画集可以同时播放并叠加。
  */
 data class ClientItemRenderAnimationSet(
     val animations: List<ClientItemRenderAnimation>,

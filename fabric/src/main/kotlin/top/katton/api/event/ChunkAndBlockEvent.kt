@@ -8,10 +8,15 @@ import top.katton.util.createCancellableUnit
 import top.katton.util.createUnit
 
 /**
+ * %en
  * Chunk, block entity, and block events for Fabric platform.
  *
  * This object provides events related to chunk loading/unloading,
  * block entity lifecycle, block breaking, and explosions.
+ *
+ * %zh
+ * Fabric 平台的区块、方块实体和方块事件。
+ * 此对象提供与区块加载/卸载、方块实体生命周期、方块破坏以及爆炸相关的事件。
  */
 @Suppress("unused")
 object ChunkAndBlockEvent {
@@ -53,64 +58,107 @@ object ChunkAndBlockEvent {
     // === Chunk Events ===
 
     /**
-     * Event triggered when a chunk is loaded.
-     */
+ * %en
+ * Event triggered when a chunk is loaded.
+ *
+ * %zh
+ * 在区块加载时触发。
+ */
     val onChunkLoad = createUnit<ChunkLoadArg>()
 
     /**
-     * Event triggered when a chunk is unloaded.
-     */
+ * %en
+ * Event triggered when a chunk is unloaded.
+ *
+ * %zh
+ * 在区块卸载时触发。
+ */
     val onChunkUnload = createUnit<ChunkUnloadArg>()
 
     /**
-     * Event triggered when a chunk's full status changes.
-     */
+ * %en
+ * Event triggered when a chunk's full status changes.
+ *
+ * %zh
+ * 当区块的完整状态发生变化时触发。
+ */
     val onChunkLevelTypeChange = createUnit<ChunkStatusChangeArg>()
 
     // === Block Entity Events ===
 
     /**
-     * Event triggered when a block entity is loaded.
-     */
+ * %en
+ * Event triggered when a block entity is loaded.
+ *
+ * %zh
+ * 当方块实体加载时触发。
+ */
     val onBlockEntityLoad = createUnit<BlockEntityLoadArg>()
 
     /**
-     * Event triggered when a block entity is unloaded.
-     */
+ * %en
+ * Event triggered when a block entity is unloaded.
+ *
+ * %zh
+ * 当方块实体卸载时触发。
+ */
     val onBlockEntityUnload = createUnit<BlockEntityLoadArg>()
 
     // === Block Break Events ===
 
     /**
-     * Event triggered before a player breaks a block.
-     *
-     * @return true to allow the break, false to cancel it.
-     */
+ * %en
+ * Event triggered before a player breaks a block.
+ *
+ * %zh
+ * 当玩家破坏方块之前触发。
+ * @return
+ * %en to allow the break, false to cancel it.
+ * %zh 返回值为允许破坏，false 表示取消。
+ */
     val onBeforeBlockBreak = createAll<BlockBreakArg>()
 
     /**
-     * Event triggered after a player breaks a block.
-     */
+ * %en
+ * Event triggered after a player breaks a block.
+ *
+ * %zh
+ * 当玩家破坏方块之后触发。
+ */
     val onAfterBlockBreak = createUnit<BlockBreakArg>()
 
     /**
-     * Event triggered when a block break is canceled.
-     */
+ * %en
+ * Event triggered when a block break is canceled.
+ *
+ * %zh
+ * 当方块破坏被取消时触发。
+ */
     val onCanceledBlockBreak = createUnit<BlockBreakArg>()
 
     // === Explosion Events ===
 
     /**
-     * Event triggered when an explosion starts.
-     * Can be cancelled to prevent the explosion.
-     */
+ * %en
+ * Event triggered when an explosion starts.
+ * Can be cancelled to prevent the explosion.
+ *
+ * %zh
+ * 当爆炸开始时触发。
+ * 可取消以阻止该爆炸。
+ */
     @JvmField
     val onExplosionStart = createCancellableUnit<ExplosionStartArg>()
 
     /**
-     * Event triggered when an explosion detonates.
-     * Use this to modify affected blocks/entities.
-     */
+ * %en
+ * Event triggered when an explosion detonates.
+ * Use this to modify affected blocks/entities.
+ *
+ * %zh
+ * 当爆炸引爆时触发。
+ * 可用于修改受影响的方块/实体。
+ */
     @JvmField
     val onExplosionDetonate = createUnit<ExplosionDetonateArg>()
 }

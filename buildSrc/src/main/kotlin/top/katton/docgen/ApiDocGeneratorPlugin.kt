@@ -28,6 +28,8 @@ class ApiDocGeneratorPlugin : Plugin<Project> {
             task.group = JavaBasePlugin.DOCUMENTATION_GROUP
             task.description = "Generate VitePress-ready API docs from Kotlin KDoc comments."
             task.outputDir.set(extension.outputDir)
+            task.locales.set(extension.locales)
+            task.defaultLocale.set(extension.defaultLocale)
             task.moduleSpecs.set(project.provider {
                 extension.modules.map { module ->
                     ApiModuleSnapshot(
@@ -48,6 +50,10 @@ abstract class ApiDocsExtension @Inject constructor(
     layout: ProjectLayout
 ) {
     val outputDir: DirectoryProperty = objects.directoryProperty().convention(layout.buildDirectory.dir("docs"))
+
+    val locales: ListProperty<String> = objects.listProperty(String::class.java).convention(listOf("en", "zh"))
+
+    val defaultLocale: Property<String> = objects.property(String::class.java).convention("en")
 
     val modules: NamedDomainObjectContainer<ApiDocModuleSpec> =
         objects.domainObjectContainer(ApiDocModuleSpec::class.java) { name ->
@@ -74,13 +80,19 @@ abstract class GenerateApiDocsTask : org.gradle.api.DefaultTask() {
     @get:org.gradle.api.tasks.OutputDirectory
     abstract val outputDir: DirectoryProperty
 
+    @get:org.gradle.api.tasks.Input
+    abstract val locales: ListProperty<String>
+
+    @get:org.gradle.api.tasks.Input
+    abstract val defaultLocale: Property<String>
+
     @get:org.gradle.api.tasks.Internal
     abstract val moduleSpecs: ListProperty<ApiModuleSnapshot>
 
     @org.gradle.api.tasks.TaskAction
     fun generate() {
         val generator = ApiDocGenerator(project.projectDir, logger)
-        generator.generate(outputDir.get().asFile, moduleSpecs.get())
+        generator.generate(outputDir.get().asFile, moduleSpecs.get(), locales.get(), defaultLocale.get())
     }
 }
 

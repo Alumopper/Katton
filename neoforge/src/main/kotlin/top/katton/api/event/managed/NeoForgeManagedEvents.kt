@@ -9,6 +9,7 @@ import top.katton.pack.ScriptPackScope
 import top.katton.util.ScriptExecutionContext
 
 /**
+ * %en
  * NeoForge implementation of [ManagedListenerProvider].
  *
  * Registers native NeoForge event listeners via [IEventBus.addListener],
@@ -16,6 +17,11 @@ import top.katton.util.ScriptExecutionContext
  * unregistration via [ManagedEventHandle].
  *
  * Initialized once in [KattonNeoForge] constructor via [initialize].
+ *
+ * %zh
+ * NeoForge 版 [ManagedListenerProvider] 的实现。
+ * 通过 [IEventBus.addListener] 注册原生 NeoForge 事件监听器，按作用域跟踪以便在重载时自动清理，并支持通过 [ManagedEventHandle] 手动注销。
+ * 在 [KattonNeoForge] 构造期间通过 [initialize] 初始化一次。
  */
 object NeoForgeManagedEvents {
     private val LOGGER = LoggerFactory.getLogger(NeoForgeManagedEvents::class.java)
@@ -24,8 +30,13 @@ object NeoForgeManagedEvents {
     private val scopeRegistrations = mutableMapOf<ScriptPackScope, MutableSet<Long>>()
 
     /**
+     * %en
      * Must be called once during mod construction.
      * Installs the NeoForge-specific [provider] on [ManagedEvents].
+     *
+     * %zh
+     * 必须在模组构造期间调用一次。
+     * 在 [ManagedEvents] 上安装 NeoForge 专用的 [provider]。
      */
     @JvmStatic
     fun initialize() {
@@ -45,7 +56,7 @@ object NeoForgeManagedEvents {
                 val eventType = eventClass as Class<out Event>
 
                 val listener = object {
-                    // Dummy object — IEventBus tracks by identity for unregister()
+                    // Dummy object - IEventBus tracks by identity for unregister()
                 }
 
                 NeoForge.EVENT_BUS.addListener(

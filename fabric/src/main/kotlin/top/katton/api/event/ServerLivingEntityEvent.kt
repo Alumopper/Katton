@@ -6,10 +6,15 @@ import top.katton.util.createCancellableUnit
 import top.katton.util.createUnit
 
 /**
+ * %en
  * Server-side living entity events for Fabric platform.
  *
  * This object provides events related to living entity lifecycle including
  * damage, death, and mob conversion events.
+ *
+ * %zh
+ * Fabric 平台的服务端生物实体事件。
+ * 此对象提供与生物实体生命周期相关的事件，包括伤害、死亡以及生物转换事件。
  */
 @Suppress("unused")
 object ServerLivingEntityEvent {
@@ -37,46 +42,79 @@ object ServerLivingEntityEvent {
     }
 
     /**
-     * Event triggered when a living entity is hurt.
-     * Can be cancelled to prevent the damage.
-     */
+ * %en
+ * Event triggered when a living entity is hurt.
+ * Can be cancelled to prevent the damage.
+ *
+ * %zh
+ * 当生物实体受到伤害时触发。
+ * 可取消以阻止伤害处理。
+ */
     @JvmField
     val onLivingHurt = createCancellableUnit<LivingHurtArg>()
 
     /**
-     * Event triggered to allow or deny damage to a living entity.
-     *
-     * @return true to allow the damage, false to cancel it.
-     */
+ * %en
+ * Event triggered to allow or deny damage to a living entity.
+ *
+ * %zh
+ * 当需要决定是否允许生物实体受到伤害时触发。
+ * @return
+ * %en to allow the damage, false to cancel it.
+ * %zh 返回值允许伤害，false 表示取消。
+ */
     val onAllowDamage = createAll<AllowDamageArg>()
 
     /**
-     * Event triggered after a living entity takes damage.
-     */
+ * %en
+ * Event triggered after a living entity takes damage.
+ *
+ * %zh
+ * 当生物实体受到伤害之后触发。
+ */
     val onAfterDamage = createUnit<AfterDamageArg>()
 
     /**
-     * Event triggered to allow or deny death of a living entity.
-     *
-     * @return true to allow the death, false to cancel it.
-     */
+ * %en
+ * Event triggered to allow or deny death of a living entity.
+ *
+ * %zh
+ * 当需要决定是否允许生物实体死亡时触发。
+ * @return
+ * %en to allow the death, false to cancel it.
+ * %zh 返回值允许死亡，false 表示取消。
+ */
     val onAllowDeath = createAll<AllowDeathArg>()
 
     /**
-     * Event triggered after a living entity dies.
-     */
+ * %en
+ * Event triggered after a living entity dies.
+ *
+ * %zh
+ * 当生物实体死亡之后触发。
+ */
     val onAfterDeath = createUnit<AfterDeathArg>()
 
     /**
-     * Event triggered when a living entity falls.
-     * Can be cancelled to prevent fall damage processing.
-     */
+ * %en
+ * Event triggered when a living entity falls.
+ * Can be cancelled to prevent fall damage processing.
+ *
+ * %zh
+ * 当生物实体摔落时触发。
+ * 可取消以阻止后续处理。
+ */
     @JvmField
     val onLivingFall = createCancellableUnit<LivingFallArg>()
 
     /**
-     * Event triggered when a mob is converted to another type
-     * (e.g., zombie villager curing, piglin zombification).
-     */
+ * %en
+ * Event triggered when a mob is converted to another type
+ * (e.g., zombie villager curing, piglin zombification).
+ *
+ * %zh
+ * 当生物转换为其他类型时触发。
+ * （例如僵尸村民治愈、疣猪兽僵尸化）。
+ */
     val onMobConversion = createUnit<MobConversionArg>()
 }

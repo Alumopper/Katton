@@ -10,10 +10,16 @@ import top.katton.paper.PaperNmsBridge
 import top.katton.util.createUnit
 
 /**
+ * %en
  * Item component events for Paper (Bukkit) platform.
  *
  * This object provides events related to item enchantment preparation
  * and execution.
+ *
+ * %zh
+ * Paper (Bukkit) 平台的物品附魔事件。
+ *
+ * 此对象提供与物品附魔预处理和执行相关的事件。
  */
 @Suppress("unused")
 object ItemComponentEvent {

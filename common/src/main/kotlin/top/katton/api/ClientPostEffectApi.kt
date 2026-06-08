@@ -6,11 +6,18 @@ import net.minecraft.resources.Identifier
 import top.katton.client.ClientPostEffectManager
 
 /**
+ * %en
  * Register a runtime client post effect from Minecraft 26.1 post-effect JSON.
  *
  * The JSON is the same format used by resource packs at
  * `assets/<namespace>/post_effect/<path>.json`. Custom shader ids referenced
  * from that JSON can be supplied through [fragmentShaders] and [vertexShaders].
+ *
+ * %zh
+ * 注册一个运行时客户端 post effect，读取 Minecraft 26.1 的 post-effect JSON。
+ *
+ * 该 JSON 与资源包中的 `assets/<namespace>/post_effect/<path>.json` 格式一致。
+ * JSON 中引用的自定义 shader id 可以通过 [fragmentShaders] 和 [vertexShaders] 提供。
  */
 fun registerClientPostEffect(
     id: Identifier,
@@ -20,12 +27,18 @@ fun registerClientPostEffect(
 ): Boolean = ClientPostEffectManager.register(id, postEffectJson, fragmentShaders, vertexShaders)
 
 /**
+ * %en
  * Register a runtime client post effect by reading
  * `assets/<namespace>/post_effect/<path>.json` from the active resource packs.
  *
  * Shader and texture resources referenced by the JSON are also checked. Missing
  * resources are logged as warnings and the post effect JSON must exist for this
  * function to return true.
+ *
+ * %zh
+ * 从当前启用的资源包中读取 `assets/<namespace>/post_effect/<path>.json` 并注册一个运行时客户端 post effect。
+ *
+ * JSON 中引用的 shader 和纹理资源也会一并检查。缺失资源会记录为警告；只有 post effect JSON 本身存在时，这个函数才会返回 true。
  */
 fun registerClientPostEffect(id: Identifier): Boolean =
     ClientPostEffectManager.registerFromResourcePack(id)
@@ -57,11 +70,18 @@ fun registerClientPostEffectFromResourcePack(id: String): Boolean =
     registerClientPostEffect(id)
 
 /**
+ * %en
  * Build and register a simple one-pass full-screen effect.
  *
  * [fragmentShaderSource] should define a post-processing fragment shader that
  * samples `InSampler` and writes `fragColor`. The generated chain renders
  * `minecraft:main -> swap -> minecraft:main`.
+ *
+ * %zh
+ * 构建并注册一个简单的单通道全屏效果。
+ *
+ * [fragmentShaderSource] 应该定义一个后处理 fragment shader，负责采样 `InSampler` 并写入 `fragColor`。
+ * 生成的渲染链为 `minecraft:main -> swap -> minecraft:main`。
  */
 fun registerSimpleClientPostEffect(
     id: String,

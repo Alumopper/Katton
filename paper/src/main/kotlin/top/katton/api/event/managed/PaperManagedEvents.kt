@@ -10,6 +10,7 @@ import top.katton.pack.ScriptPackScope
 import top.katton.util.ScriptExecutionContext
 
 /**
+ * %en
  * Paper (Bukkit) implementation of [ManagedListenerProvider].
  *
  * Registers native Bukkit event listeners via [org.bukkit.plugin.PluginManager.registerEvent],
@@ -17,6 +18,14 @@ import top.katton.util.ScriptExecutionContext
  * unregistration via [ManagedEventHandle].
  *
  * Initialized once in [KattonPaperPlugin.onEnable] via [initialize].
+ *
+ * %zh
+ * [ManagedListenerProvider] 的 Paper (Bukkit) 实现。
+ *
+ * 通过 [org.bukkit.plugin.PluginManager.registerEvent] 注册原生 Bukkit 事件监听器，
+ * 按作用域跟踪它们以便在重载时自动清理，并支持通过 [ManagedEventHandle] 手动注销。
+ *
+ * 该对象通过 [initialize] 在 [KattonPaperPlugin.onEnable] 中完成一次初始化。
  */
 object PaperManagedEvents {
     private val LOGGER = LoggerFactory.getLogger(PaperManagedEvents::class.java)
@@ -26,8 +35,13 @@ object PaperManagedEvents {
     private var pluginRef: JavaPlugin? = null
 
     /**
+     * %en
      * Must be called once during plugin initialization.
      * Installs the Paper-specific [provider] on [ManagedEvents].
+     *
+     * %zh
+     * 必须在插件初始化期间调用一次。
+     * 将 Paper 专用的 [provider] 安装到 [ManagedEvents] 上。
      */
     @JvmStatic
     fun initialize(plugin: JavaPlugin) {
@@ -100,8 +114,13 @@ object PaperManagedEvents {
     }
 
     /**
+     * %en
      * Unregister all native listeners registered through this API.
      * Called on full server shutdown.
+     *
+     * %zh
+     * 注销通过此 API 注册的所有原生监听器。
+     * 在服务器完全关闭时调用。
      */
     @JvmStatic
     fun shutdown() {

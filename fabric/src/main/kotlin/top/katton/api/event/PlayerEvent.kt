@@ -12,10 +12,15 @@ import top.katton.util.createReturnIfNot
 import top.katton.util.createUnit
 
 /**
+ * %en
  * Player interaction events for Fabric platform.
  *
  * This object provides events related to player interactions including
  * attacking blocks/entities, using items, and interacting with blocks/entities.
+ *
+ * %zh
+ * Fabric 平台的玩家交互事件。
+ * 此对象提供与玩家交互相关的事件，包括攻击方块/实体、使用物品，以及与方块/实体交互。
  */
 @Suppress("unused")
 object PlayerEvent {
@@ -50,58 +55,97 @@ object PlayerEvent {
         }
     }
 
-    /**
-     * Event triggered when a player uses an item on a block.
-     *
-     * @return InteractionResult.PASS to allow default behavior, or other result to override.
-     */
+/**
+ * %en
+ * Event triggered when a player uses an item on a block.
+ *
+ * %zh
+ * 当玩家对方块使用物品时触发。
+ * @return
+ * %en to allow default behavior, or other result to override.
+ * %zh 返回值允许默认行为，或使用其他结果覆盖。
+ */
     val onUseItemOn = createFirstNotNullOfOrNull<UseItemOnArg, InteractionResult>()
 
-    /**
-     * Event triggered when a player interacts with a block without holding an item.
-     *
-     * @return InteractionResult.PASS to allow default behavior, or other result to override.
-     */
+/**
+ * %en
+ * Event triggered when a player interacts with a block without holding an item.
+ *
+ * %zh
+ * 当玩家空手与方块交互时触发。
+ * @return
+ * %en to allow default behavior, or other result to override.
+ * %zh 返回值允许默认行为，或使用其他结果覆盖。
+ */
     val onUseWithoutItem = createFirstNotNullOfOrNull<UseWithoutItemOnArg, InteractionResult>()
 
-    /**
-     * Event triggered when a player attacks (left-clicks) a block.
-     *
-     * @return InteractionResult.PASS to allow default behavior, or other result to cancel/override.
-     */
+/**
+ * %en
+ * Event triggered when a player attacks (left-clicks) a block.
+ *
+ * %zh
+ * 当玩家攻击（左键）方块时触发。
+ * @return
+ * %en to allow default behavior, or other result to cancel/override.
+ * %zh 返回值允许默认行为，或使用其他结果取消/覆盖。
+ */
     val onAttackBlock = createReturnIfNot<PlayerAttackBlockArg, InteractionResult>(InteractionResult.PASS)
 
-    /**
-     * Event triggered when a player attacks (left-clicks) an entity.
-     *
-     * @return InteractionResult.PASS to allow default behavior, or other result to cancel/override.
-     */
+/**
+ * %en
+ * Event triggered when a player attacks (left-clicks) an entity.
+ *
+ * %zh
+ * 当玩家攻击（左键）实体时触发。
+ * @return
+ * %en to allow default behavior, or other result to cancel/override.
+ * %zh 返回值允许默认行为，或使用其他结果取消/覆盖。
+ */
     val onAttackEntity = createReturnIfNot<PlayerAttackEntityArg, InteractionResult>(InteractionResult.PASS)
 
-    /**
-     * Event triggered when a player interacts (right-clicks) with a block.
-     *
-     * @return InteractionResult.PASS to allow default behavior, or other result to override.
-     */
+/**
+ * %en
+ * Event triggered when a player interacts (right-clicks) with a block.
+ *
+ * %zh
+ * 当玩家与方块交互（右键）时触发。
+ * @return
+ * %en to allow default behavior, or other result to override.
+ * %zh 返回值允许默认行为，或使用其他结果覆盖。
+ */
     val onBlockInteract = createReturnIfNot<PlayerUseBlockArg, InteractionResult>(InteractionResult.PASS)
 
-    /**
-     * Event triggered when a player interacts (right-clicks) with an entity.
-     *
-     * @return InteractionResult.PASS to allow default behavior, or other result to override.
-     */
+/**
+ * %en
+ * Event triggered when a player interacts (right-clicks) with an entity.
+ *
+ * %zh
+ * 当玩家与实体交互（右键）时触发。
+ * @return
+ * %en to allow default behavior, or other result to override.
+ * %zh 返回值允许默认行为，或使用其他结果覆盖。
+ */
     val onEntityInteract = createReturnIfNot<PlayerUseEntityArg, InteractionResult>(InteractionResult.PASS)
 
-    /**
-     * Event triggered when a player uses (right-clicks) an item.
-     *
-     * @return InteractionResult.PASS to allow default behavior, or other result to override.
-     */
+/**
+ * %en
+ * Event triggered when a player uses (right-clicks) an item.
+ *
+ * %zh
+ * 当玩家使用物品（右键）时触发。
+ * @return
+ * %en to allow default behavior, or other result to override.
+ * %zh 返回值允许默认行为，或使用其他结果覆盖。
+ */
     val onItemInteract = createReturnIfNot<PlayerUseItemArg, InteractionResult>(InteractionResult.PASS)
 
-    /**
-     * Event triggered when a player's item is destroyed (e.g., tool breaking).
-     */
+/**
+ * %en
+ * Event triggered when a player's item is destroyed (e.g., tool breaking).
+ *
+ * %zh
+ * 当玩家的物品损坏（例如工具破坏）时触发。
+ */
     @JvmField
     val onDestroyItem = createUnit<PlayerDestroyItemArg>()
 }

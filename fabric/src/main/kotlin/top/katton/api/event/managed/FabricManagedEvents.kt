@@ -8,6 +8,7 @@ import java.lang.reflect.InvocationTargetException
 import java.lang.reflect.Proxy
 
 /**
+ * %en
  * Fabric implementation of [ManagedListenerProvider].
  *
  * Fabric's event system ([Event]) does not support individual callback unregistration.
@@ -15,6 +16,15 @@ import java.lang.reflect.Proxy
  * with an `active` flag. On reload, all WORLD/SERVER_CACHE-scoped wrappers are deactivated.
  *
  * Initialized once in [KattonFabric.onInitialize] via [initialize].
+ *
+ * %zh
+ * [ManagedListenerProvider] 的 Fabric 实现。
+ *
+ * Fabric 的事件系统 ([Event]) 不支持单个回调的注销。
+ * 为了绕开这一点，每个 managed listener 都会用带有 `active` 标记的动态代理包装用户回调。
+ * 在重载时，所有 WORLD/SERVER_CACHE 作用域的包装器都会被停用。
+ *
+ * 该对象通过 [initialize] 在 [KattonFabric.onInitialize] 中完成一次初始化。
  */
 object FabricManagedEvents {
     internal val LOGGER = LoggerFactory.getLogger(FabricManagedEvents::class.java)
@@ -97,34 +107,14 @@ object FabricManagedEvents {
     }
 }
 
-// ═══════════════════════════════════════════════════════════════
-//  Fabric-specific script API
-// ═══════════════════════════════════════════════════════════════
+// Fabric-specific script API
 
-/**
- * Register a managed Fabric-native event listener.
- *
- * Fabric events are callback-based and don't support individual unregistration.
- * Managed listeners use a dynamic proxy wrapper with an `active` flag —
- * on reload, all WORLD/SERVER_CACHE-scoped wrappers are deactivated.
- *
- * Usage:
- * ```kotlin
- * registerFabricEvent(ServerTickEvents.START_SERVER_TICK, ServerTickEvents.StartTick { server ->
- *     // handler
- * })
- * ```
- *
- * @param event The Fabric event object to register on
- * @param callback The functional interface callback
- * @return A handle for manual unregistration
- */
 fun <T : Any> registerFabricEvent(
     event: Event<T>,
     callback: T
 ): ManagedEventHandle {
     val provider = provider
-        ?: error("ManagedEvents.provider not initialized — call FabricManagedEvents.initialize() first")
+        ?: error("ManagedEvents.provider not initialized - call FabricManagedEvents.initialize() first")
 
     val scope = ScriptExecutionContext.currentScriptScope()
     val owner = ScriptExecutionContext.currentScriptOwner() ?: "unknown"
@@ -158,9 +148,6 @@ fun <T : Any> registerFabricEvent(
     return handle
 }
 
-/**
- * Manually unregister a managed Fabric listener created by [registerFabricEvent].
- */
 fun unregisterFabricEvent(handle: ManagedEventHandle) {
     provider?.unregister(handle)
 }

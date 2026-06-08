@@ -1,6 +1,5 @@
 package top.katton.api.event
 
-import net.minecraft.server.level.ServerPlayer
 import net.minecraft.server.level.ServerLevel
 import net.minecraft.world.level.ChunkPos
 import net.minecraft.world.entity.player.Player
@@ -26,10 +25,15 @@ import top.katton.util.createUnit
 import top.katton.util.setCancel
 
 /**
+ * %en
  * Chunk, block, and explosion events for NeoForge platform.
  *
  * This object provides events related to chunk loading/unloading,
  * block breaking/placing, and explosions.
+ *
+ * %zh
+ * NeoForge 平台的区块、方块和爆炸事件。
+ * 此对象提供与区块加载/卸载、方块破坏/放置以及爆炸相关的事件。
  */
 @Suppress("unused")
 @EventBusSubscriber(
@@ -140,92 +144,166 @@ object ChunkAndBlockEvent {
     }
 
     /**
+     * %en
      * Event triggered when a chunk is loaded.
+     *
+     * %zh
+     * 当区块加载时触发。
      */
     val onChunkLoad = createUnit<ChunkLoadArg>()
 
     /**
+     * %en
      * Event triggered when a chunk is unloaded.
+     *
+     * %zh
+     * 当区块卸载时触发。
      */
     val onChunkUnload = createUnit<ChunkUnloadArg>()
 
     /**
+     * %en
      * Event triggered when chunk data is loaded from disk.
+     *
+     * %zh
+     * 当区块数据从磁盘加载时触发。
      */
     val onChunkDataLoad = createUnit<NeoChunkDataLoadArg>()
 
     /**
+     * %en
      * Event triggered when chunk data is saved to disk.
+     *
+     * %zh
+     * 当区块数据保存到磁盘时触发。
      */
     val onChunkDataSave = createUnit<NeoChunkDataSaveArg>()
 
     /**
+     * %en
      * Event triggered when a player starts watching a chunk.
+     *
+     * %zh
+     * 当玩家开始监视某个区块时触发。
      */
     val onChunkWatch = createUnit<NeoChunkWatchArg>()
 
     /**
+     * %en
      * Event triggered when a chunk is sent to a player.
+     *
+     * %zh
+     * 当区块被发送给玩家时触发。
      */
     val onChunkSent = createUnit<NeoChunkWatchArg>()
 
     /**
+     * %en
      * Event triggered when a player stops watching a chunk.
+     *
+     * %zh
+     * 当玩家停止监视某个区块时触发。
      */
     val onChunkUnWatch = createUnit<NeoChunkUnWatchArg>()
 
     /**
+     * %en
      * Event triggered when a chunk's level type changes.
      * Note: This is a placeholder for NeoForge compatibility.
+     *
+     * %zh
+     * 当区块的维度类型发生变化时触发。
+     * 这是为了 NeoForge API 兼容性保留的占位事件。
      */
     @JvmField
     val onChunkLevelTypeChange = createUnit<ChunkStatusChangeArg>()
 
     /**
+     * %en
      * Event triggered when a block entity is loaded.
      * Note: This is a placeholder for NeoForge compatibility.
+     *
+     * %zh
+     * 当方块实体加载时触发。
+     * 这是为了 NeoForge API 兼容性保留的占位事件。
      */
     @JvmField
     val onBlockEntityLoad = createUnit<BlockEntityLoadArg>()
 
     /**
+     * %en
      * Event triggered when a block entity is unloaded.
      * Note: This is a placeholder for NeoForge compatibility.
+     *
+     * %zh
+     * 当方块实体卸载时触发。
+     * 这是为了 NeoForge API 兼容性保留的占位事件。
      */
     @JvmField
     val onBlockEntityUnload = createUnit<BlockEntityLoadArg>()
 
     /**
+     * %en
      * Event triggered when a player breaks a block.
      * Can be cancelled to prevent the break.
+     *
+     * %zh
+     * 当玩家破坏方块时触发。
+     * 可取消以阻止破坏。
      */
     val onBlockBreak = createCancellableUnit<BlockBreakArg>()
 
     /**
+     * %en
      * Event triggered when a player places a block.
      * Can be cancelled to prevent the placement.
+     *
+     * %zh
+     * 当玩家放置方块时触发。
+     * 可取消以阻止放置。
      */
     val onBlockPlace = createCancellableUnit<BlockPlaceArg>()
 
     /**
+     * %en
      * Event triggered when an explosion starts.
      * Can be cancelled to prevent the explosion.
+     *
+     * %zh
+     * 当爆炸开始时触发。
+     * 可取消以阻止爆炸。
      */
     val onExplosionStart = createCancellableUnit<ExplosionStartArg>()
 
     /**
+     * %en
      * Event triggered when an explosion detonates.
      * Use this to modify affected blocks/entities.
+     *
+     * %zh
+     * 当爆炸引爆时触发。
+     * 可用于修改受影响的方块或实体。
      */
     val onExplosionDetonate = createUnit<ExplosionDetonateArg>()
 
     /**
+     * %en
      * Argument class for NeoForge chunk data load events.
      *
-     * @property level The server level
-     * @property chunk The chunk being loaded
-     * @property data The serializable chunk data
-     * @property type The chunk type
+     * %zh
+     * NeoForge 区块数据加载事件的参数类。
+     * @property level
+     * %en The server level
+     * %zh 服务端维度。
+     * @property chunk
+     * %en The chunk being loaded
+     * %zh 正在加载的区块。
+     * @property data
+     * %en The serializable chunk data
+     * %zh 可序列化的区块数据。
+     * @property type
+     * %en The chunk type
+     * %zh 区块类型。
      */
     data class NeoChunkDataLoadArg(
         val level: ServerLevel,
@@ -235,11 +313,20 @@ object ChunkAndBlockEvent {
     )
 
     /**
+     * %en
      * Argument class for NeoForge chunk data save events.
      *
-     * @property level The server level
-     * @property chunk The chunk being saved
-     * @property data The serializable chunk data
+     * %zh
+     * NeoForge 区块数据保存事件的参数类。
+     * @property level
+     * %en The server level
+     * %zh 服务端维度。
+     * @property chunk
+     * %en The chunk being saved
+     * %zh 正在保存的区块。
+     * @property data
+     * %en The serializable chunk data
+     * %zh 可序列化的区块数据。
      */
     data class NeoChunkDataSaveArg(
         val level: ServerLevel,
@@ -248,11 +335,20 @@ object ChunkAndBlockEvent {
     )
 
     /**
+     * %en
      * Argument class for NeoForge chunk watch events.
      *
-     * @property player The player watching the chunk
-     * @property level The server level
-     * @property chunk The level chunk being watched
+     * %zh
+     * NeoForge 区块监视事件的参数类。
+     * @property player
+     * %en The player watching the chunk
+     * %zh 正在监视该区块的玩家。
+     * @property level
+     * %en The server level
+     * %zh 服务端维度。
+     * @property chunk
+     * %en The level chunk being watched
+     * %zh 正在被监视的区块。
      */
     data class NeoChunkWatchArg(
         val player: ServerPlayer,
@@ -261,11 +357,20 @@ object ChunkAndBlockEvent {
     )
 
     /**
+     * %en
      * Argument class for NeoForge chunk unwatch events.
      *
-     * @property player The player stopping watching the chunk
-     * @property level The server level
-     * @property pos The chunk position
+     * %zh
+     * NeoForge 区块取消监视事件的参数类。
+     * @property player
+     * %en The player stopping watching the chunk
+     * %zh 停止监视该区块的玩家。
+     * @property level
+     * %en The server level
+     * %zh 服务端维度。
+     * @property pos
+     * %en The chunk position
+     * %zh 区块坐标。
      */
     data class NeoChunkUnWatchArg(
         val player: ServerPlayer,

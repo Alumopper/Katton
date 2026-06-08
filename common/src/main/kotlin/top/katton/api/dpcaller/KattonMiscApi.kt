@@ -1,4 +1,4 @@
-@file:Suppress("unused")
+﻿@file:Suppress("unused")
 
 package top.katton.api.dpcaller
 
@@ -30,6 +30,7 @@ import java.util.*
 import java.util.function.Consumer
 
 /**
+ * %en
  * Miscellaneous utility API for common operations.
  *
  * This module provides various utility functions including:
@@ -37,33 +38,62 @@ import java.util.function.Consumer
  * - Particle spawning
  * - Waypoint management
  * - Entity teleportation
+ *
+ * %zh
+ * 常用操作的杂项工具 API。
+ * 本模块提供多种工具函数，包括：
+ * - 玩家消息发送
+ * - 粒子生成
+ * - 路标管理
+ * - 实体传送
  */
 
 /**
+ * %en
  * Send a system message to a player.
  *
- * @param player target ServerPlayer
- * @param message plain string message
+ * %zh
+ * 向玩家发送系统消息。
+ * @param player
+ * %en target ServerPlayer
+ * %zh 目标 ServerPlayer。
+ * @param message
+ * %en plain string message
+ * %zh 普通字符串消息。
  */
 fun tell(player: ServerPlayer, message: String) {
     player.sendSystemMessage(Component.literal(message))
 }
 
 /**
+ * %en
  * Send a system message to a player.
  *
- * @param player target ServerPlayer
- * @param message message component
+ * %zh
+ * 向玩家发送系统消息。
+ * @param player
+ * %en target ServerPlayer
+ * %zh 目标 ServerPlayer。
+ * @param message
+ * %en message component
+ * %zh 消息组件。
  */
 fun tell(player: ServerPlayer, message: Component) {
     player.sendSystemMessage(message)
 }
 
 /**
+ * %en
  * Send a system message to a player.
  *
- * @param player target ServerPlayer
- * @param message message object, converted to string
+ * %zh
+ * 向玩家发送系统消息。
+ * @param player
+ * %en target ServerPlayer
+ * %zh 目标 ServerPlayer。
+ * @param message
+ * %en message object, converted to string
+ * %zh 消息对象，会转换为字符串。
  */
 fun tell(player: ServerPlayer, message: Any) {
     if (message is Component) {
@@ -74,10 +104,17 @@ fun tell(player: ServerPlayer, message: Any) {
 }
 
 /**
+ * %en
  * Send a system message to multiple players.
  *
- * @param players target ServerPlayer collection
- * @param message plain string message
+ * %zh
+ * 向多个玩家发送系统消息。
+ * @param players
+ * %en target ServerPlayer collection
+ * %zh 目标 ServerPlayer 集合。
+ * @param message
+ * %en plain string message
+ * %zh 普通字符串消息。
  */
 fun tell(players: Collection<ServerPlayer>, message: String) {
     players.forEach { tell(it, message) }
@@ -85,10 +122,17 @@ fun tell(players: Collection<ServerPlayer>, message: String) {
 
 
 /**
+ * %en
  * Send a system message to multiple players.
  *
- * @param players target ServerPlayer collection
- * @param message message component
+ * %zh
+ * 向多个玩家发送系统消息。
+ * @param players
+ * %en target ServerPlayer collection
+ * %zh 目标 ServerPlayer 集合。
+ * @param message
+ * %en message component
+ * %zh 消息组件。
  */
 fun tell(players: Collection<ServerPlayer>, message: Component) {
     players.forEach { tell(it, message) }
@@ -96,10 +140,17 @@ fun tell(players: Collection<ServerPlayer>, message: Component) {
 
 
 /**
+ * %en
  * Send a system message to multiple players.
  *
- * @param players target ServerPlayer collection
- * @param message message object, converted to string
+ * %zh
+ * 向多个玩家发送系统消息。
+ * @param players
+ * %en target ServerPlayer collection
+ * %zh 目标 ServerPlayer 集合。
+ * @param message
+ * %en message object, converted to string
+ * %zh 消息对象，会转换为字符串。
  */
 fun tell(players: Collection<ServerPlayer>, message: Any) {
     if (message is Component) {
@@ -111,9 +162,14 @@ fun tell(players: Collection<ServerPlayer>, message: Any) {
 
 
 /**
+ * %en
  * Send a system message to all players.
  *
- * @param message message object, converted to string
+ * %zh
+ * 向所有玩家发送系统消息。
+ * @param message
+ * %en message object, converted to string
+ * %zh 消息对象，会转换为字符串。
  */
 fun tell(message: Any) {
     if (message is Component) {
@@ -125,16 +181,35 @@ fun tell(message: Any) {
 
 
 /**
+ * %en
  * Send particles to a collection of players.
  *
- * @param level server level
- * @param players players to send to
- * @param particle particle options
- * @param pos center position
- * @param delta spread vector (default zero)
- * @param speed particle speed
- * @param count number of particles
- * @param forced whether to force send (ignores client settings)
+ * %zh
+ * 向一组玩家发送粒子。
+ * @param level
+ * %en server level
+ * %zh 服务端关卡。
+ * @param players
+ * %en players to send to
+ * %zh 要发送给的玩家。
+ * @param particle
+ * %en particle options
+ * %zh 粒子选项。
+ * @param pos
+ * %en center position
+ * %zh 中心位置。
+ * @param delta
+ * %en spread vector (default zero)
+ * %zh 扩散向量（默认零）。
+ * @param speed
+ * %en particle speed
+ * %zh 粒子速度。
+ * @param count
+ * %en particle count
+ * %zh 粒子数量。
+ * @param forced
+ * %en whether to force sending and ignore client settings
+ * %zh 是否强制发送，忽略客户端设置。
  */
 fun particle(level: ServerLevel, players: Collection<ServerPlayer>, particle: ParticleOptions, pos: Vec3, delta: Vec3 = Vec3.ZERO, speed: Double = 1.0, count: Int = 0, forced: Boolean = false) {
     for (player in players) {
@@ -153,10 +228,17 @@ fun particle(level: ServerLevel, players: Collection<ServerPlayer>, particle: Pa
 
 
 /**
+ * %en
  * Teleport a collection of entities to another entity's position.
  *
- * @param collection entities to teleport
- * @param entity destination entity whose position to use
+ * %zh
+ * 将一组实体传送到另一个实体的位置。
+ * @param collection
+ * %en entities to teleport
+ * %zh 要传送的实体。
+ * @param entity
+ * %en entity used as the destination position
+ * %zh 作为目标位置来源的实体。
  */
 fun teleportToEntity(collection: MutableCollection<out Entity>, entity: Entity) {
     for (entity2 in collection) {
@@ -172,12 +254,23 @@ fun teleportToEntity(collection: MutableCollection<out Entity>, entity: Entity) 
 
 
 /**
- * Teleport a collection of entities to a given position and optionally set rotation.
+ * %en
+ * Teleport a collection of entities to a position with optional rotation.
  *
- * @param collection entities to teleport
- * @param serverLevel destination level
- * @param pos destination position
- * @param rot optional rotation vector; if null, keeps entity rotation
+ * %zh
+ * 将一组实体传送到指定位置，并可选设置旋转。
+ * @param collection
+ * %en entities to teleport
+ * %zh 要传送的实体。
+ * @param level
+ * %en destination level
+ * %zh 目标关卡。
+ * @param pos
+ * %en destination position
+ * %zh 目标位置。
+ * @param rot
+ * %en optional rotation vector; if null, keep the entity's current rotation
+ * %zh 可选旋转向量；为 null 时保持实体当前旋转。
  */
 fun teleportToPos(
     collection: MutableCollection<out Entity>,
@@ -197,14 +290,29 @@ fun teleportToPos(
 
 
 /**
- * Teleport a collection of entities to a position and make them look at an entity.
+ * %en
+ * Teleport a collection of entities to a position and make them face another entity.
  *
- * @param collection entities to teleport
- * @param serverLevel destination level
- * @param pos destination position
- * @param lookAt entity to look at after teleport
- * @param anchor anchor used for target orientation
- * @param lookAtAnchor anchor used for lookAt orientation
+ * %zh
+ * 将一组实体传送到某个位置，并让它们朝向另一个实体。
+ * @param collection
+ * %en entities to teleport
+ * %zh 要传送的实体。
+ * @param level
+ * %en destination level
+ * %zh 目标关卡。
+ * @param pos
+ * %en destination position
+ * %zh 目标位置。
+ * @param lookAt
+ * %en entity to look at after teleporting
+ * %zh 传送后要朝向的实体。
+ * @param anchor
+ * %en anchor used on the teleported entity
+ * %zh 用于目标朝向的锚点。
+ * @param lookAtAnchor
+ * %en anchor used on the entity being looked at
+ * %zh 用于被看向目标的锚点。
  */
 fun teleportToPos(
     collection: MutableCollection<out Entity>,
@@ -221,13 +329,26 @@ fun teleportToPos(
 
 
 /**
- * Teleport a collection of entities to a position and make them look at a position.
+ * %en
+ * Teleport a collection of entities to a position and make them face another position.
  *
- * @param collection entities to teleport
- * @param serverLevel destination level
- * @param pos destination position
- * @param lookAt position to look at
- * @param anchor anchor used for target orientation
+ * %zh
+ * 将一组实体传送到某个位置，并让它们朝向另一个位置。
+ * @param collection
+ * %en entities to teleport
+ * %zh 要传送的实体。
+ * @param level
+ * %en destination level
+ * %zh 目标关卡。
+ * @param pos
+ * %en destination position
+ * %zh 目标位置。
+ * @param lookAt
+ * %en position to look at
+ * %zh 要看向的位置。
+ * @param anchor
+ * %en anchor used on the teleported entity
+ * %zh 用于目标朝向的锚点。
  */
 fun teleportToPos(
     collection: MutableCollection<out Entity>,
@@ -243,14 +364,29 @@ fun teleportToPos(
 
 
 /**
+ * %en
  * Internal teleport helper performing checks and applying lookAt behavior.
  *
- * @param entity entity to teleport
- * @param serverLevel destination level
- * @param pos destination position
- * @param rot rotation vector to apply
- * @param lookAt optional LookAt behavior
- * @param anchor optional anchor for LookAt
+ * %zh
+ * 内部传送辅助方法，负责检查并应用 lookAt 行为。
+ * @param entity
+ * %en entity to teleport
+ * %zh 要传送的实体。
+ * @param level
+ * %en destination level
+ * %zh 目标关卡。
+ * @param pos
+ * %en destination position
+ * %zh 目标位置。
+ * @param rot
+ * %en rotation vector to apply
+ * %zh 要应用的旋转向量。
+ * @param lookAt
+ * %en optional LookAt behavior
+ * %zh 可选 LookAt 行为。
+ * @param anchor
+ * %en optional anchor for LookAt
+ * %zh LookAt 使用的可选锚点。
  */
 private fun performTeleport(
     entity: Entity,
@@ -284,11 +420,20 @@ private fun performTeleport(
 
 
 /**
+ * %en
  * Set waypoint style for a waypoint transmitter.
  *
- * @param serverLevel server level
- * @param waypointTransmitter waypoint transmitter to modify
- * @param resourceKey waypoint style asset key
+ * %zh
+ * 为路标发射器设置路标样式。
+ * @param serverLevel
+ * %en server level
+ * %zh 服务端关卡。
+ * @param waypointTransmitter
+ * %en waypoint transmitter to modify
+ * %zh 要修改的路标发射器。
+ * @param resourceKey
+ * %en waypoint style asset key
+ * %zh 路标样式资源键。
  */
 fun setWaypointStyle(serverLevel: ServerLevel, waypointTransmitter: WaypointTransmitter, resourceKey: ResourceKey<WaypointStyleAsset>) {
     mutateIcon(
@@ -299,11 +444,20 @@ fun setWaypointStyle(serverLevel: ServerLevel, waypointTransmitter: WaypointTran
 
 
 /**
+ * %en
  * Set waypoint color using ChatFormatting.
  *
- * @param serverLevel server level
- * @param waypointTransmitter waypoint transmitter
- * @param chatFormatting formatting to convert to color
+ * %zh
+ * 使用 ChatFormatting 设置路标颜色。
+ * @param serverLevel
+ * %en server level
+ * %zh 服务端关卡。
+ * @param waypointTransmitter
+ * %en waypoint transmitter
+ * %zh 路标发射器。
+ * @param chatFormatting
+ * %en formatting to convert to color
+ * %zh 要转换为颜色的格式化值。
  */
 fun setWaypointColor(serverLevel: ServerLevel, waypointTransmitter: WaypointTransmitter, chatFormatting: ChatFormatting){
     mutateIcon(
@@ -314,11 +468,20 @@ fun setWaypointColor(serverLevel: ServerLevel, waypointTransmitter: WaypointTran
 
 
 /**
+ * %en
  * Set waypoint color using an integer color value.
  *
- * @param serverLevel server level
- * @param waypointTransmitter waypoint transmitter
- * @param integer integer color value
+ * %zh
+ * 使用整数颜色值设置路标颜色。
+ * @param serverLevel
+ * %en server level
+ * %zh 服务端关卡。
+ * @param waypointTransmitter
+ * %en waypoint transmitter
+ * %zh 路标发射器。
+ * @param integer
+ * %en integer color value
+ * %zh 整数颜色值。
  */
 fun setWaypointColor(serverLevel: ServerLevel, waypointTransmitter: WaypointTransmitter, integer: Int){
     mutateIcon(
@@ -329,10 +492,17 @@ fun setWaypointColor(serverLevel: ServerLevel, waypointTransmitter: WaypointTran
 
 
 /**
+ * %en
  * Reset waypoint color to default (unset).
  *
- * @param serverLevel server level
- * @param waypointTransmitter waypoint transmitter
+ * %zh
+ * 将路标颜色重置为默认值（未设置）。
+ * @param serverLevel
+ * %en server level
+ * %zh 服务端关卡。
+ * @param waypointTransmitter
+ * %en waypoint transmitter
+ * %zh 路标发射器。
  */
 fun resetWaypointColor(serverLevel: ServerLevel, waypointTransmitter: WaypointTransmitter) {
     mutateIcon(
@@ -343,11 +513,20 @@ fun resetWaypointColor(serverLevel: ServerLevel, waypointTransmitter: WaypointTr
 
 
 /**
+ * %en
  * Internal helper to mutate a waypoint icon: untrack, apply consumer, then re-track.
  *
- * @param serverLevel server level
- * @param waypointTransmitter transmitter to mutate
- * @param consumer consumer that updates the icon
+ * %zh
+ * 用于修改路标图标的内部辅助函数：先取消跟踪，应用更新函数，再重新跟踪。
+ * @param serverLevel
+ * %en server level
+ * %zh 服务端关卡。
+ * @param waypointTransmitter
+ * %en transmitter to mutate
+ * %zh 要修改的发射器。
+ * @param consumer
+ * %en consumer that updates the icon
+ * %zh 更新图标的函数。
  */
 private fun mutateIcon(serverLevel: ServerLevel, waypointTransmitter: WaypointTransmitter, consumer: Consumer<Waypoint.Icon>) {
     serverLevel.waypointManager.untrackWaypoint(waypointTransmitter)
@@ -356,13 +535,26 @@ private fun mutateIcon(serverLevel: ServerLevel, waypointTransmitter: WaypointTr
 }
 
 /**
+ * %en
  * Send a team chat message to a list of players with filtering and formatting.
  *
- * @param entity source entity (sender)
- * @param playerTeam team being messaged
- * @param list recipients
- * @param playerChatMessage message content
- * @param commandSourceStack command source used for formatting and filtering
+ * %zh
+ * 向一组玩家发送带过滤和格式化的团队聊天消息。
+ * @param entity
+ * %en source entity (sender)
+ * %zh 来源实体（发送者）。
+ * @param playerTeam
+ * %en team being messaged
+ * %zh 接收消息的团队。
+ * @param list
+ * %en recipients
+ * %zh 接收者列表。
+ * @param playerChatMessage
+ * %en message content
+ * %zh 消息内容。
+ * @param commandSourceStack
+ * %en command source used for formatting and filtering
+ * %zh 用于格式化和过滤的命令源。
  */
 fun teamMsg(
     entity: Entity,
@@ -391,6 +583,3 @@ fun teamMsg(
         commandSourceStack.sendSystemMessage(PlayerList.CHAT_FILTERED_FULL)
     }
 }
-
-
-

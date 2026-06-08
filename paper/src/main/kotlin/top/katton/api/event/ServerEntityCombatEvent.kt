@@ -12,10 +12,16 @@ import top.katton.util.createAll
 import top.katton.util.createUnit
 
 /**
+ * %en
  * Server entity combat events for Paper (Bukkit) platform.
  *
  * This object provides events related to entity combat including
  * kill, shield blocking, and critical hit events.
+ *
+ * %zh
+ * Paper (Bukkit) 平台的服务端实体战斗事件。
+ *
+ * 此对象提供与实体战斗相关的事件，包括击杀、盾牌格挡和暴击。
  */
 @Suppress("unused")
 object ServerEntityCombatEvent {

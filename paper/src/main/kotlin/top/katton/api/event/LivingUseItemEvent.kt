@@ -11,10 +11,16 @@ import top.katton.util.createCancellableUnit
 import top.katton.util.createUnit
 
 /**
+ * %en
  * Living entity item use events for Paper (Bukkit) platform.
  *
  * This object provides events related to living entities starting,
  * stopping, and finishing item usage.
+ *
+ * %zh
+ * Paper (Bukkit) 平台的生物实体物品使用事件。
+ *
+ * 此对象提供与生物实体开始、停止和完成使用物品相关的事件。
  */
 @Suppress("unused")
 object LivingUseItemEvent {

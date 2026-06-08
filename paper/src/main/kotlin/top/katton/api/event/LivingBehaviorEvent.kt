@@ -19,10 +19,16 @@ import top.katton.paper.PaperNmsBridge
 import top.katton.util.*
 
 /**
+ * %en
  * Living behavior events for Paper (Bukkit) platform.
  *
  * This object provides events related to mob behaviors including taming,
  * breeding, sleeping, elytra flight, and bed interaction.
+ *
+ * %zh
+ * Paper (Bukkit) 平台的生物行为事件。
+ *
+ * 此对象提供与生物行为相关的事件，包括驯服、繁殖、睡眠、鞘翅飞行以及床交互。
  */
 @Suppress("unused")
 object LivingBehaviorEvent {

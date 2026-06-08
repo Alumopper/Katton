@@ -14,10 +14,15 @@ import top.katton.util.createCancellableUnit
 import top.katton.util.createUnit
 
 /**
+ * %en
  * Server living entity events for Paper (Bukkit) platform.
  *
  * This object provides events related to living entity damage, death,
  * fall damage, and mob conversion.
+ *
+ * %zh
+ * Paper (Bukkit) 平台的服务端生物实体事件。
+ * 此对象提供与生物实体伤害、死亡、摔落伤害以及生物转换相关的事件。
  */
 @Suppress("unused")
 object ServerLivingEntityEvent {

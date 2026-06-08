@@ -18,10 +18,16 @@ import top.katton.util.createReturnIfNot
 import top.katton.util.createUnit
 
 /**
+ * %en
  * Player interaction events for Paper (Bukkit) platform.
  *
  * This object provides events related to player interaction including
  * item use, block interaction, entity interaction, and attacking.
+ *
+ * %zh
+ * Paper (Bukkit) 平台的玩家交互事件。
+ *
+ * 此对象提供与玩家交互相关的事件，包括物品使用、方块交互、实体交互和攻击。
  */
 @Suppress("unused")
 object PlayerEvent {
