@@ -55,7 +55,7 @@ object ScriptPackResourceManager {
     @Synchronized
     fun activateForClient(packs: List<ScriptPack>): Boolean {
         val entries = packs.mapIndexedNotNull { index, pack -> createEntry(index, pack) }
-        return updateActiveEntries(entries, "activate")
+        return updateActiveEntries(entries)
     }
 
     @Synchronized
@@ -73,7 +73,7 @@ object ScriptPackResourceManager {
         if (activeEntries.none { it.scope == ScriptPackScope.SERVER_CACHE }) {
             return
         }
-        updateActiveEntries(activeEntries.filterNot { it.scope == ScriptPackScope.SERVER_CACHE }, "clear server cache")
+        updateActiveEntriesAndReload(activeEntries.filterNot { it.scope == ScriptPackScope.SERVER_CACHE }, "clear server cache")
     }
 
     @Synchronized
@@ -81,10 +81,18 @@ object ScriptPackResourceManager {
         if (activeEntries.isEmpty()) {
             return
         }
-        updateActiveEntries(emptyList(), "clear all")
+        updateActiveEntriesAndReload(emptyList(), "clear all")
     }
 
-    private fun updateActiveEntries(entries: List<ResourceEntry>, reason: String): Boolean {
+    private fun updateActiveEntriesAndReload(entries: List<ResourceEntry>, reason: String): Boolean {
+        if (!updateActiveEntries(entries)) {
+            return false
+        }
+        reloadClientResources(reason)
+        return true
+    }
+
+    private fun updateActiveEntries(entries: List<ResourceEntry>): Boolean {
         val nextSignature = signatureOf(entries)
         if (nextSignature == activeSignature) {
             return false
@@ -92,7 +100,6 @@ object ScriptPackResourceManager {
 
         activeEntries = entries
         activeSignature = nextSignature
-        reloadClientResources(reason)
         return true
     }
 

@@ -9,6 +9,7 @@ import top.katton.engine.ScriptReloadManager
 import top.katton.network.ScriptPackBundlePacket
 import top.katton.network.ScriptPackHashListPacket
 import top.katton.network.ScriptPackRequestPacket
+import top.katton.util.ReflectUtil
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
@@ -374,13 +375,29 @@ object ServerPackCacheManager {
 
     private fun resolveCurrentServerIdentity(bucketOverride: String? = null): RemoteServerIdentity? {
         val mc = Minecraft.getInstance()
-        //TODO: in this stage currentServer seems to be still null. address always falls back to "singleplayer"
-        val address = mc.currentServer?.ip?.trim()?.lowercase()
-            ?: "singleplayer"
-        if (address.isBlank()) {
+        val address = normalizeAddress(mc.currentServer?.ip)
+            ?: resolveConnectionAddress(mc)
+            ?: return null
+        return RemoteServerIdentity(bucketOverride ?: sha256(address), address)
+    }
+
+    private fun normalizeAddress(address: String?): String? {
+        val normalized = address
+            ?.trim()
+            ?.lowercase()
+            ?.takeIf { it.isNotBlank() }
+            ?: return null
+        if (normalized == "singleplayer" || normalized == "local") {
             return null
         }
-        return RemoteServerIdentity(bucketOverride ?: sha256(address), address)
+        return normalized
+    }
+
+    private fun resolveConnectionAddress(mc: Minecraft): String? {
+        val connection = mc.connection?.connection ?: return null
+        return runCatching {
+            ReflectUtil.invoke(connection, "getRemoteAddress").getOrNull()?.toString()
+        }.getOrNull()?.let(::normalizeAddress)
     }
 
     private fun encodeSyncId(syncId: String): String {

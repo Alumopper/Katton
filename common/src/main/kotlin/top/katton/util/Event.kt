@@ -14,6 +14,10 @@ import top.katton.util.Extension.returnIfNot
 private typealias EventInvoker<Arg, R> = (Array<EventHandler<Arg, R>>) -> (Arg) -> R
 
 private val LOGGER = LoggerFactory.getLogger("top.katton.util.Event")
+private val NO_HANDLER_RESULT: Result<Nothing> = Result.failure("No handler")
+
+@Suppress("UNCHECKED_CAST")
+private fun <R> noHandlerResult(): Result<R> = NO_HANDLER_RESULT as Result<R>
 
 fun <B> unit(): EventInvoker<B, Unit> = { events ->
     { arg: B -> events.forEach { e -> e(arg) } }
@@ -123,6 +127,8 @@ interface Event<Arg, R> {
 
     fun clearByScope(scope: ScriptPackScope)
 
+    fun hasHandlers(): Boolean
+
     operator fun invoke(arg: Arg): Result<R>
 
     operator fun plusAssign(h: (Arg) -> R)
@@ -162,6 +168,8 @@ class DelegateEvent<Arg, R>(val invoker: EventInvoker<Arg, R>): Event<Arg, R> {
         entries = es.filter { it.scope != scope }.toTypedArray()
     }
 
+    override fun hasHandlers(): Boolean = entries.isNotEmpty()
+
     @Volatile
     var entries: Array<EventHandler<Arg, R>> = emptyArray()
 
@@ -179,7 +187,7 @@ class DelegateEvent<Arg, R>(val invoker: EventInvoker<Arg, R>): Event<Arg, R> {
 
     override operator fun invoke(arg: Arg): Result<R> {
         val es = entries
-        if (es.isEmpty()) return Result.failure("No handler")
+        if (es.isEmpty()) return noHandlerResult()
         return try {
             Result.success(invoker(es).invoke(arg))
         } catch (t: Throwable) {
@@ -205,6 +213,8 @@ class CancellableDelegateEvent<Arg: CancellableEventArg, R>(val invoker: EventIn
         entries = es.filter { it.scope != scope }.toTypedArray()
     }
 
+    override fun hasHandlers(): Boolean = entries.isNotEmpty()
+
     @Volatile
     private var entries: Array<EventHandler<Arg, R>> = emptyArray()
 
@@ -224,7 +234,7 @@ class CancellableDelegateEvent<Arg: CancellableEventArg, R>(val invoker: EventIn
         reset()
         arg.event = this
         val es = entries
-        if (es.isEmpty()) return Result.failure("No handler")
+        if (es.isEmpty()) return noHandlerResult()
         return try {
             Result.success(invoker(es).invoke(arg))
         } catch (t: Throwable) {

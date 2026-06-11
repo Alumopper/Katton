@@ -20,6 +20,7 @@ import top.katton.api.ClientItemRenderAnimationTarget
 import top.katton.api.ClientItemRenderFunctionKeyframe
 import top.katton.api.ClientItemRenderMarker
 import top.katton.network.ClientItemRenderMarkerPacket
+import java.util.IdentityHashMap
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.floor
@@ -36,7 +37,11 @@ object ClientItemRenderMarkerManager {
         var ageTicks: Int = 0,
         val renderState: ItemStackRenderState = ItemStackRenderState(),
         val playingAnimationIds: MutableSet<String> = LinkedHashSet(marker.playingAnimationID),
-        val animationStates: MutableMap<String, AnimationSetState> = HashMap()
+        val animationStates: MutableMap<String, AnimationSetState> = HashMap(),
+        val functionKeyframeCache: MutableMap<ClientItemRenderAnimationSet, List<ClientItemRenderFunctionKeyframe>> =
+            IdentityHashMap(),
+        val animationKeyframeCache: MutableMap<ClientItemRenderAnimation, List<ClientItemRenderAnimationKeyframe>> =
+            IdentityHashMap()
     )
 
     private data class AnimationSetState(
@@ -189,7 +194,7 @@ object ClientItemRenderMarkerManager {
     private fun tickAnimationEvents(entry: Entry, previousAge: Float, currentAge: Float) {
         val marker = entry.marker
         val playingEntries = getPlayingAnimationEntries(entry)
-        val validPlayingIds = playingEntries.mapTo(HashSet()) { it.key }
+        val validPlayingIds = playingEntries.mapTo(HashSet()) { it.first }
         entry.playingAnimationIds.retainAll(validPlayingIds)
         entry.animationStates.keys.retainAll(validPlayingIds)
 
@@ -197,6 +202,7 @@ object ClientItemRenderMarkerManager {
             val state = entry.animationStates.getOrPut(id) { AnimationSetState() }
             tickAnimationSetEvents(
                 marker = marker,
+                entry = entry,
                 animationSet = animationSet,
                 state = state,
                 previousAge = previousAge - state.startAgeTicks,
@@ -205,14 +211,15 @@ object ClientItemRenderMarkerManager {
         }
     }
 
-    private fun getPlayingAnimationEntries(entry: Entry): List<Map.Entry<String, ClientItemRenderAnimationSet>> {
+    private fun getPlayingAnimationEntries(entry: Entry): List<Pair<String, ClientItemRenderAnimationSet>> {
         return entry.playingAnimationIds.mapNotNull { id ->
-            entry.marker.animations.entries.firstOrNull { it.key == id }
+            entry.marker.animations[id]?.let { id to it }
         }
     }
 
     private fun tickAnimationSetEvents(
         marker: ClientItemRenderMarker,
+        entry: Entry,
         animationSet: ClientItemRenderAnimationSet,
         state: AnimationSetState,
         previousAge: Float,
@@ -231,7 +238,7 @@ object ClientItemRenderMarkerManager {
         }
 
         val eventPreviousLocalAge = if (wasStarted) previousLocalAge else -0.0001f
-        triggerFunctionKeyframes(marker, animationSet, eventPreviousLocalAge, currentLocalAge)
+        triggerFunctionKeyframes(marker, entry, animationSet, eventPreviousLocalAge, currentLocalAge)
 
         val duration = animationSet.durationTicks.toFloat()
         if (!animationSet.loop && !state.ended && previousLocalAge < duration && currentLocalAge >= duration) {
@@ -242,15 +249,18 @@ object ClientItemRenderMarkerManager {
 
     private fun triggerFunctionKeyframes(
         marker: ClientItemRenderMarker,
+        entry: Entry,
         animationSet: ClientItemRenderAnimationSet,
         previousLocalAge: Float,
         currentLocalAge: Float
     ) {
         val duration = animationSet.durationTicks.toFloat()
-        val keyframes = animationSet.animations
-            .flatMap { it.keyframes }
-            .filterIsInstance<ClientItemRenderFunctionKeyframe>()
-            .sortedBy { normalizeKeyframeTime(it.time) }
+        val keyframes = entry.functionKeyframeCache.getOrPut(animationSet) {
+            animationSet.animations
+                .flatMap { it.keyframes }
+                .filterIsInstance<ClientItemRenderFunctionKeyframe>()
+                .sortedBy { normalizeKeyframeTime(it.time) }
+        }
         if (keyframes.isEmpty()) return
 
         if (!animationSet.loop) {
@@ -303,7 +313,7 @@ object ClientItemRenderMarkerManager {
             val state = entry.animationStates.getOrPut(animationSetId) { AnimationSetState() }
             val progress = sampleAnimationSetProgress(animationSet, ageTicks - state.startAgeTicks) ?: continue
             for (animation in animationSet.animations) {
-                val sampled = sampleAnimation(animation, progress) ?: continue
+                val sampled = sampleAnimation(entry, animation, progress) ?: continue
                 when (animation.target) {
                     ClientItemRenderAnimationTarget.TRANSLATE -> translation = translation.add(sampled)
                     ClientItemRenderAnimationTarget.ROTATE -> rotation = rotation.add(sampled)
@@ -332,8 +342,12 @@ object ClientItemRenderMarkerManager {
         }
     }
 
-    private fun sampleAnimation(animation: ClientItemRenderAnimation, progress: Float): Vec3? {
-        val frames = animation.keyframes.filterIsInstance<ClientItemRenderAnimationKeyframe>().sortedBy { it.time }
+    private fun sampleAnimation(entry: Entry, animation: ClientItemRenderAnimation, progress: Float): Vec3? {
+        val frames = entry.animationKeyframeCache.getOrPut(animation) {
+            animation.keyframes
+                .filterIsInstance<ClientItemRenderAnimationKeyframe>()
+                .sortedBy { it.time }
+        }
         if (frames.isEmpty()) return null
         return normalizeAnimationValue(animation, sampleKeyframes(animation, frames, progress), frames)
     }

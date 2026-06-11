@@ -7,6 +7,7 @@ import net.neoforged.neoforge.common.NeoForge
 import org.slf4j.LoggerFactory
 import top.katton.pack.ScriptPackScope
 import top.katton.util.ScriptExecutionContext
+import java.util.function.Consumer
 
 /**
  * %en
@@ -53,17 +54,9 @@ object NeoForgeManagedEvents {
                 val id = nextId++
 
                 @Suppress("UNCHECKED_CAST")
-                val eventType = eventClass as Class<out Event>
+                val eventType = eventClass as Class<Event>
 
-                val listener = object {
-                    // Dummy object - IEventBus tracks by identity for unregister()
-                }
-
-                NeoForge.EVENT_BUS.addListener(
-                    EventPriority.entries.toTypedArray().getOrElse(priority) { EventPriority.NORMAL },
-                    ignoreCancelled,
-                    eventType
-                ) { event ->
+                val listener = Consumer<Event> { event ->
                     try {
                         ScriptExecutionContext.withScope(scope) {
                             ScriptExecutionContext.withOwner(owner) {
@@ -74,6 +67,13 @@ object NeoForgeManagedEvents {
                         LOGGER.warn("Managed NeoForge event handler failed for {}", owner, t)
                     }
                 }
+
+                NeoForge.EVENT_BUS.addListener(
+                    EventPriority.entries.toTypedArray().getOrElse(priority) { EventPriority.NORMAL },
+                    ignoreCancelled,
+                    eventType,
+                    listener
+                )
 
                 val registration = ManagedRegistration(id, eventClass, listener, scope)
                 registrations[id] = registration

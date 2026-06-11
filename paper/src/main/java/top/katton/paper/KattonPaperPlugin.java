@@ -91,6 +91,7 @@ public class KattonPaperPlugin extends JavaPlugin implements Listener {
         }
 
         Katton.setGameDirectory(getDataFolder().getParentFile().toPath());
+        PaperManagedEvents.initialize(this);
         Katton.paperInitialize();
 
         //command registration
@@ -106,9 +107,6 @@ public class KattonPaperPlugin extends JavaPlugin implements Listener {
 
         // Register event listeners for server lifecycle
         getServer().getPluginManager().registerEvents(this, this);
-
-        // Initialize managed event listener system (before event bridges)
-        PaperManagedEvents.initialize(this);
 
         // Initialize Paper event bridges
         initEventBridges();

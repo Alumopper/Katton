@@ -207,6 +207,7 @@ object ScriptPackManager {
         val javaFiles = collectFiles(packDirectory, ".java", excludeAssets = true)
         val assetFiles = collectPackContentFiles(packDirectory, "assets")
         val dataFiles = collectPackContentFiles(packDirectory, "data")
+        val codeHash = computeScriptHash(manifestJson, scriptFiles, javaFiles)
         val hash = computeScriptHash(manifestJson, scriptFiles, javaFiles, assetFiles, dataFiles)
         val enabled = forceEnabled ?: readEnabledState(packDirectory, ScriptPackKind.DIRECTORY) ?: manifest.enabledByDefault
         val syncId = syncIdOverride ?: makeSyncId(scope, manifest.id)
@@ -228,6 +229,7 @@ object ScriptPackManager {
             manifest = manifest,
             enabled = enabled,
             hash = hash,
+            codeHash = codeHash,
             scripts = scriptFiles,
             contentFiles = contentFiles,
             compiledJar = null
@@ -265,6 +267,7 @@ object ScriptPackManager {
             absolutePath = jarPath,
             bytes = jarBytes
         )
+        val hash = computeJarHash(manifestJson, contentFile)
 
         return ScriptPack(
             syncId = syncId,
@@ -274,7 +277,8 @@ object ScriptPackManager {
             manifestJson = manifestJson,
             manifest = manifest,
             enabled = enabled,
-            hash = computeJarHash(manifestJson, contentFile),
+            hash = hash,
+            codeHash = hash,
             scripts = emptyList(),
             contentFiles = listOf(contentFile),
             compiledJar = jarPath

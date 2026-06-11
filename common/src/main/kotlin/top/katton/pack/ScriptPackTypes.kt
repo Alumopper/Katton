@@ -31,7 +31,16 @@ data class ScriptPack(
     val manifestJson: String,
     val manifest: ScriptPackManifest,
     val enabled: Boolean,
+    /**
+     * Full content hash used for pack sync and resource/data reload decisions.
+     */
     val hash: String,
+    /**
+     * Code-only hash used by the script compilation cache.
+     *
+     * Asset and data changes must not invalidate compiled Kotlin/Java scripts.
+     */
+    val codeHash: String,
     val scripts: List<ScriptPackScriptFile>,
     val contentFiles: List<ScriptPackContentFile>,
     val compiledJar: Path?

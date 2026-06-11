@@ -35,10 +35,6 @@ object ScriptReloadManager {
         Thread(r, "Katton-ClientReload").also { it.isDaemon = true }
     }
 
-    private val serverReloadExecutor: ExecutorService = Executors.newSingleThreadExecutor { r ->
-        Thread(r, "Katton-ServerReload").also { it.isDaemon = true }
-    }
-
     private val clientReloadRunning = AtomicBoolean(false)
     private val serverReloadRunning = AtomicBoolean(false)
 
@@ -98,18 +94,17 @@ object ScriptReloadManager {
             addAll(ServerPackCacheManager.collectExecutablePacks())
         }
         tracker.step("katton.reload.client.merge_server_cache_packs")
-        val resourcePacksChanged = ScriptPackResourceManager.activateForClient(
-            mutableListOf<ScriptPack>().apply {
-                addAll(ScriptPackManager.collectExecutableGlobalPacks())
-                addAll(mergedPacks)
-            }
-        )
+        val resourcePacks = mutableListOf<ScriptPack>().apply {
+            addAll(ScriptPackManager.collectExecutableGlobalPacks())
+            addAll(mergedPacks)
+        }
         tracker.step("katton.reload.common.compile_execute_scripts")
         val scriptsOk = ScriptEngine.compileAndExecuteAll(mergedPacks, ScriptEnvironment.CLIENT, tracker::update)
         if (!scriptsOk) {
             tracker.finish("katton.reload.client.failed")
             return false
         }
+        val resourcePacksChanged = ScriptPackResourceManager.activateForClient(resourcePacks)
         if (resourcePacksChanged && ScriptPackResourceManager.hasActiveResources()) {
             ScriptPackResourceManager.reloadActiveResources()
         }
@@ -259,12 +254,11 @@ object ScriptReloadManager {
     }
 
     /**
-     * Async variant of [reloadScripts]: runs compilation and execution on a
-     * background thread so the server main loop is not blocked.
+     * Async entry point for [reloadScripts].
      *
-     * Fast setup (registries, handlers) and post-compilation steps
-     * (datapacks, entity rebinding) still run on the server thread via
-     * [MinecraftServer.execute].
+     * The request returns immediately, but the actual reload is scheduled on
+     * the server thread because script entrypoints can mutate Minecraft
+     * registries, command trees, events, and datapacks.
      *
      * @param server the server instance
      * @param onComplete callback invoked on the server thread after reload finishes
@@ -278,9 +272,9 @@ object ScriptReloadManager {
         val future = CompletableFuture<Void>()
         serverReloadFuture = future
 
-        // Run ALL reload work on background thread — the calling thread
-        // (server command thread) returns immediately without blocking.
-        serverReloadExecutor.execute reloadTask@{
+        // Run all reload work on the server thread; registry and event
+        // mutations are not safe from a background worker.
+        server.execute reloadTask@{
             val tracker = ReloadProgressTracker(24)
             tracker.begin("katton.reload.server.begin")
 

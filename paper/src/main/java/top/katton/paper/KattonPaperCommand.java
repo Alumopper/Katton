@@ -82,6 +82,6 @@ public class KattonPaperCommand implements BasicCommand {
 
     @Override
     public boolean canUse(@NonNull CommandSender sender) {
-        return sender.isOp();
+        return true;
     }
 }

@@ -25,9 +25,9 @@ public class KattonFabric implements ModInitializer {
     public void onInitialize() {
         //Entrance point for common initialization
         setGameDirectory(FabricLoader.getInstance().getGameDir());
+        FabricManagedEvents.initialize();
         mainInitialize();
         eventInitialize();
-        FabricManagedEvents.initialize();
 
         // Install Fabric-specific attribute registration hooks
         EntityAttributeHooks.setGlobalRegistrar(FabricEntityAttributeHooks::registerAttributes);

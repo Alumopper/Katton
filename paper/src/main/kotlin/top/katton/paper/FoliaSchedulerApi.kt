@@ -1,4 +1,4 @@
-@file:Suppress("unused", "CAST_NEVER_SUCCEEDS")
+@file:Suppress("unused")
 
 package top.katton.paper
 
@@ -10,18 +10,19 @@ import net.minecraft.world.entity.Entity
 import org.bukkit.Bukkit
 import org.bukkit.Location
 import org.bukkit.craftbukkit.CraftWorld
-import org.bukkit.craftbukkit.entity.CraftEntity
-import org.bukkit.craftbukkit.entity.CraftPlayer
+import top.katton.util.ReflectUtil
 
 private val plugin by lazy { KattonPaperPlugin.getInstance() }
 
 // ── Bukkit entity helper ──────────────────────────────────────────
 
 /** Get the Bukkit Entity from an NMS Entity (safe cast for Paper). */
-private fun Entity.toBukkit(): org.bukkit.entity.Entity? = this as? CraftEntity
+private fun Entity.toBukkit(): org.bukkit.entity.Entity? {
+    return ReflectUtil.invoke(this, "getBukkitEntity").getOrNull() as? org.bukkit.entity.Entity
+}
 
 /** Get the Bukkit Player from an NMS ServerPlayer. */
-fun ServerPlayer.toBukkit(): org.bukkit.entity.Player? = this as? CraftPlayer
+fun ServerPlayer.toBukkit(): org.bukkit.entity.Player? = (this as Entity).toBukkit() as? org.bukkit.entity.Player
 
 /** Get the Bukkit World from an NMS ServerLevel. */
 private fun ServerLevel.toBukkitWorld(): org.bukkit.World? {

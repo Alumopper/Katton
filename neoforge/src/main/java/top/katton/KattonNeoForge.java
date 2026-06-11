@@ -55,8 +55,8 @@ public class KattonNeoForge {
 
         ServerNetworking.setPlaySender(PacketDistributor::sendToPlayer);
         Katton.setGameDirectory(FMLPaths.GAMEDIR.get());
-        Katton.mainInitialize();
         NeoForgeManagedEvents.initialize();
+        Katton.mainInitialize();
 
         registerGameEventBridges();
 

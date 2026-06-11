@@ -48,6 +48,8 @@ import kotlin.script.experimental.jvmhost.loadScriptFromJar
  * ScriptEngine compiles source packs together and executes jar packs separately.
  */
 object ScriptEngine {
+    private const val MAX_SOURCE_COMPILE_CACHE_ENTRIES = 3
+    private const val MAX_JAR_LOAD_CACHE_ENTRIES = 16
 
     private data class CompiledScriptArtifact(
         val compiledScript: CompiledScript,
@@ -59,7 +61,8 @@ object ScriptEngine {
         val binaryPacks: List<ScriptPack>,
         val scriptPaths: List<String>,
         val classpathJars: List<Path>,
-        val cacheKey: String
+        val cacheKey: String,
+        val classScopes: Map<String, ScriptPackScope>
     )
 
     @Suppress("ArrayInDataClass")
@@ -129,6 +132,18 @@ object ScriptEngine {
                     .forEach { Files.deleteIfExists(it) }
             }
         }
+    }
+
+    private fun <V> trimCache(cache: ConcurrentHashMap<String, V>, currentKey: String, maxEntries: Int) {
+        val overflow = cache.size - maxEntries
+        if (overflow <= 0) {
+            return
+        }
+        cache.keys
+            .asSequence()
+            .filter { it != currentKey }
+            .take(overflow)
+            .forEach(cache::remove)
     }
 
     /**
@@ -216,6 +231,7 @@ object ScriptEngine {
                         artifact = artifact,
                         environment = environment,
                         scope = packs.first().scope,
+                        classScopes = sourcePlan.classScopes,
                         label = "source packs (${sourcePlan.sourcePacks.size})"
                     )
                     ok = logExecutionResult("source packs", environment, executionResult) && ok
@@ -236,7 +252,7 @@ object ScriptEngine {
                     val executionResult = executeCombined(
                         artifact = artifact,
                         environment = environment,
-                        scope = packs.first().scope,
+                        scope = pack.scope,
                         label = "jar pack ${pack.manifest.name}"
                     )
                     ok = logExecutionResult(pack.manifest.name, environment, executionResult) && ok
@@ -300,6 +316,7 @@ object ScriptEngine {
             .flatMap { pack -> pack.scripts.sortedBy { it.relativePath }.map { it.absolutePath.toAbsolutePath().normalize().toString() } }
 
         val cacheKey = buildSourceCacheKey(sourcePacks, binaryPacks)
+        val classScopes = buildScriptClassScopeMap(sourcePacks)
 
         // Compile .java files from enabled directory packs (independent of script collection)
         val classpathFromJava = compileJavaFromPacks(packs, progressReporter)
@@ -310,8 +327,21 @@ object ScriptEngine {
             binaryPacks = binaryPacks,
             scriptPaths = scriptPaths,
             classpathJars = classpathJars,
-            cacheKey = cacheKey
+            cacheKey = cacheKey,
+            classScopes = classScopes
         )
+    }
+
+    private fun buildScriptClassScopeMap(sourcePacks: List<ScriptPack>): Map<String, ScriptPackScope> {
+        val classScopes = LinkedHashMap<String, ScriptPackScope>()
+        sourcePacks.forEach { pack ->
+            pack.scripts.forEach { script ->
+                val content = runCatching { String(script.bytes, StandardCharsets.UTF_8) }.getOrNull() ?: return@forEach
+                val fqcn = KattonConfigManager.deriveFqcn(content, script.relativePath.substringAfterLast('/'))
+                classScopes[fqcn] = pack.scope
+            }
+        }
+        return classScopes
     }
 
     /**
@@ -403,6 +433,7 @@ object ScriptEngine {
                 plan.cacheKey
             )
             sourceCompileCache[plan.cacheKey] = artifact
+            trimCache(sourceCompileCache, plan.cacheKey, MAX_SOURCE_COMPILE_CACHE_ENTRIES)
             cleanStaleScriptCaches(plan.cacheKey)
 
             // Persist compiled classes to disk for inspection only.
@@ -424,7 +455,7 @@ object ScriptEngine {
     }
 
     private fun loadJarPack(pack: ScriptPack): CompiledScriptArtifact? {
-        val cacheKey = "${pack.syncId}:${pack.hash}"
+        val cacheKey = "${pack.syncId}:${pack.codeHash}"
         if (jarLoadCache.containsKey(cacheKey)) {
             LOGGER.info("Reusing jar load cache for {}", pack.manifest.name)
             return jarLoadCache[cacheKey]?.getOrNull()
@@ -434,6 +465,7 @@ object ScriptEngine {
         if (jarPath == null || !Files.isRegularFile(jarPath)) {
             LOGGER.warn("Skipping jar pack {} because compiled jar is missing", pack.manifest.name)
             jarLoadCache[cacheKey] = Optional.empty()
+            trimCache(jarLoadCache, cacheKey, MAX_JAR_LOAD_CACHE_ENTRIES)
             return null
         }
 
@@ -451,6 +483,7 @@ object ScriptEngine {
             LOGGER.info("Loaded executable compiled script jar for pack {}", pack.manifest.name)
         }
         jarLoadCache[cacheKey] = Optional.ofNullable(artifact)
+        trimCache(jarLoadCache, cacheKey, MAX_JAR_LOAD_CACHE_ENTRIES)
         return artifact
     }
 
@@ -532,6 +565,7 @@ object ScriptEngine {
         artifact: CompiledScriptArtifact,
         environment: ScriptEnvironment,
         scope: ScriptPackScope,
+        classScopes: Map<String, ScriptPackScope> = emptyMap(),
         label: String
     ): ResultWithDiagnostics<EvaluationResult> {
         val script = artifact.compiledScript
@@ -540,7 +574,7 @@ object ScriptEngine {
         val savedCcl = Thread.currentThread().contextClassLoader
         Thread.currentThread().contextClassLoader = pluginLoader
         try {
-            return executeCombinedWithClassLoader(script, artifact, environment, scope, label)
+            return executeCombinedWithClassLoader(script, artifact, environment, scope, classScopes, label)
         } finally {
             Thread.currentThread().contextClassLoader = savedCcl
         }
@@ -551,6 +585,7 @@ object ScriptEngine {
         artifact: CompiledScriptArtifact,
         environment: ScriptEnvironment,
         scope: ScriptPackScope,
+        classScopes: Map<String, ScriptPackScope>,
         label: String
     ): ResultWithDiagnostics<EvaluationResult> {
         val rootClass = when (val res = script.getClass(evaluationConfig)) {
@@ -575,6 +610,7 @@ object ScriptEngine {
 
         for ((fqcn, entrypoints) in entrypointsByClass) {
             runCatching {
+                val entryScope = classScopes[fqcn] ?: scope
                 val clazz = Class.forName(fqcn, false, loader)
                 if (entrypoints.isNotEmpty()) {
                     LOGGER.info(
@@ -593,8 +629,8 @@ object ScriptEngine {
                         continue
                     }
 
-                    ScriptExecutionContext.withScope(scope) {
-                        ScriptExecutionContext.withOwner("${scope.serializedName}:$fqcn") {
+                    ScriptExecutionContext.withScope(entryScope) {
+                        ScriptExecutionContext.withOwner("${entryScope.serializedName}:$fqcn") {
                             invokeEntrypoint(clazz, entrypoint, methodType, environment)
                         }
                     }
@@ -748,17 +784,17 @@ object ScriptEngine {
     private fun buildSourceCacheKey(sourcePacks: List<ScriptPack>, binaryPacks: List<ScriptPack>): String {
         // Both source pack content and binary jar hashes affect the combined compilation result.
         val digest = MessageDigest.getInstance("SHA-256")
-        digest.update("katton-source-pack-cache-v1".toByteArray(StandardCharsets.UTF_8))
+        digest.update("katton-source-pack-cache-v2".toByteArray(StandardCharsets.UTF_8))
         sourcePacks.forEach { pack ->
             digest.update(pack.syncId.toByteArray(StandardCharsets.UTF_8))
             digest.update(0)
-            digest.update(pack.hash.toByteArray(StandardCharsets.UTF_8))
+            digest.update(pack.codeHash.toByteArray(StandardCharsets.UTF_8))
             digest.update(0)
         }
         binaryPacks.forEach { pack ->
             digest.update(pack.syncId.toByteArray(StandardCharsets.UTF_8))
             digest.update(0)
-            digest.update(pack.hash.toByteArray(StandardCharsets.UTF_8))
+            digest.update(pack.codeHash.toByteArray(StandardCharsets.UTF_8))
             digest.update(0)
         }
         return digest.digest().joinToString("") { "%02x".format(it) }
