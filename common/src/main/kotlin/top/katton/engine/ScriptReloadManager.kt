@@ -1,5 +1,6 @@
 package top.katton.engine
 
+import net.minecraft.client.Minecraft
 import net.minecraft.server.MinecraftServer
 import net.minecraft.world.level.storage.LevelResource
 import top.katton.Katton
@@ -24,6 +25,7 @@ import org.slf4j.LoggerFactory
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.concurrent.CompletableFuture
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
@@ -53,28 +55,34 @@ object ScriptReloadManager {
         if (!Katton.hasClient) {
             return true
         }
-
+        //simple progress bar
+        //seems straightforward and brutal, but it works well enough for now.
+        //it's making the code a bit messy, but... just consider it as an alternative comment (?
         val tracker = ReloadProgressTracker(17)
         tracker.begin("katton.reload.client.begin")
 
-        val preserveIntegratedServerState = Katton.server != null && !Katton.server!!.isDedicatedServer
-        if (!preserveIntegratedServerState) {
-            Event.clearHandlersByScope(ScriptPackScope.WORLD)
-            tracker.step("katton.reload.client.clear_world_handlers")
-            InjectionManager.beginReload()
-            tracker.step("katton.reload.common.reset_injections")
-        } else {
-            tracker.step("katton.reload.client.preserve_server_handlers")
+        // Clear all WORLD-scoped handlers and managed listeners, unless we're preserving the integrated server state.
+        runOnClientThreadAndWait {
+            val preserveIntegratedServerState = Katton.server != null && !Katton.server!!.isDedicatedServer
+            if (!preserveIntegratedServerState) {
+                Event.clearHandlersByScope(ScriptPackScope.WORLD)
+                tracker.step("katton.reload.client.clear_world_handlers")
+                InjectionManager.beginReload()
+                tracker.step("katton.reload.common.reset_injections")
+            } else {
+                tracker.step("katton.reload.client.preserve_server_handlers")
+            }
+            clearClientRenderers()
+            tracker.step("katton.reload.client.clear_renderers")
+            clearClientPostEffects()
+            tracker.step("katton.reload.client.clear_post_effects")
+            clearItemModifications()
+            tracker.step("katton.reload.common.clear_item_modifications")
+            KattonRegistry.ENTITY_RENDERERS.beginReload()
+            tracker.step("katton.reload.common.reset_entity_renderers")
         }
-        clearClientRenderers()
-        tracker.step("katton.reload.client.clear_renderers")
-        clearClientPostEffects()
-        tracker.step("katton.reload.client.clear_post_effects")
-        clearItemModifications()
-        tracker.step("katton.reload.common.clear_item_modifications")
-        KattonRegistry.ENTITY_RENDERERS.beginReload()
-        tracker.step("katton.reload.common.reset_entity_renderers")
 
+        //set world and game directories for script packs
         ScriptPackManager.setGameDirectory(Katton.gameDirectory)
         tracker.step("katton.reload.common.set_game_directory")
         if (Katton.server != null) {
@@ -84,9 +92,10 @@ object ScriptReloadManager {
             ScriptPackManager.clearWorldDirectory()
         }
         tracker.step("katton.reload.common.set_world_directory")
+
+        //scan and collect world script packs and resources
         ScriptPackManager.refreshWorldPacks()
         tracker.step("katton.reload.common.scan_world_packs")
-
         val worldOnlyPacks = ScriptPackManager.collectExecutableWorldPacks()
         tracker.step("katton.reload.common.collect_world_packs")
         val mergedPacks = mutableListOf<ScriptPack>().apply {
@@ -98,6 +107,8 @@ object ScriptReloadManager {
             addAll(ScriptPackManager.collectExecutableGlobalPacks())
             addAll(mergedPacks)
         }
+
+        //compile and execute all scripts, then activate any resource packs
         tracker.step("katton.reload.common.compile_execute_scripts")
         val scriptsOk = ScriptEngine.compileAndExecuteAll(mergedPacks, ScriptEnvironment.CLIENT, tracker::update)
         if (!scriptsOk) {
@@ -112,13 +123,36 @@ object ScriptReloadManager {
         return true
     }
 
+    /**
+     * Reload client scripts asynchronously without a completion callback.
+     */
     @JvmStatic
     fun reloadClientScriptsAsync(): Boolean {
+        return reloadClientScriptsAsync(null)
+    }
+
+    /**
+     * Reload client scripts asynchronously
+     *
+     * @param onComplete callback invoked on the client thread after reload finishes
+     */
+    fun reloadClientScriptsAsync(onComplete: ((Boolean) -> Unit)?): Boolean {
         if (!clientReloadRunning.compareAndSet(false, true)) {
+            val future = clientReloadFuture
+            if (onComplete != null) {
+                if (future != null) {
+                    future.whenComplete { _, error -> onComplete(error == null) }
+                } else {
+                    onComplete(false)
+                }
+            }
             return true
         }
         val future = CompletableFuture<Void>()
         clientReloadFuture = future
+        if (onComplete != null) {
+            future.whenComplete { _, error -> onComplete(error == null) }
+        }
         clientReloadExecutor.execute {
             try {
                 if (reloadClientScripts()) {
@@ -137,6 +171,38 @@ object ScriptReloadManager {
             }
         }
         return true
+    }
+
+    /**
+     * Run a task on the Minecraft client thread and block current thread until it completes.
+     */
+    private fun runOnClientThreadAndWait(action: () -> Unit) {
+        val minecraft = runCatching { Minecraft.getInstance() }.getOrNull()
+        if (minecraft == null || minecraft.isSameThread) {
+            action()
+            return
+        }
+
+        val latch = CountDownLatch(1)
+        var failure: Throwable? = null
+        minecraft.execute {
+            try {
+                action()
+            } catch (t: Throwable) {
+                failure = t
+            } finally {
+                latch.countDown()
+            }
+        }
+
+        try {
+            latch.await()
+        } catch (interrupted: InterruptedException) {
+            Thread.currentThread().interrupt()
+            throw RuntimeException("Interrupted while waiting for client main-thread reload setup", interrupted)
+        }
+
+        failure?.let { throw it }
     }
 
     @JvmStatic

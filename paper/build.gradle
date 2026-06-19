@@ -30,7 +30,7 @@ loom {
 }
 
 dependencies {
-    paperweight.paperDevBundle("26.1.2.build.+")
+    paperweight.paperDevBundle("26.1.2.build.71-stable")
 
     // Paper API — provided by server at runtime
     compileOnly "io.papermc.paper:paper-api:${project.paper_api_version}"

@@ -143,16 +143,39 @@ object ServerPackCacheManager {
         expectedHashes = packet.entries.associate { it.syncId to it.hash }
 
         if (packet.entries.isEmpty()) {
-            // No packs on server — clear stale cache and reload (sync on
-            // Render thread via the enqueueWork that calls this method).
+            // No packs on server: clear stale cache with an async client reload.
             activePacks = emptyList()
-            ScriptReloadManager.reloadClientScripts()
+            syncState = RemoteSyncState.EXECUTING
+            ScriptReloadManager.reloadClientScriptsAsync { completeClientReload(null) }
             return
         }
 
-        // The server sends the full bundle snapshot right after the hash list
-        // (see sendInitialScriptPackSync). handleBundle will follow shortly
-        // and perform the actual reload on this same Render thread.
+        // The server sends the full bundle snapshot right after the hash list.
+        // handleBundle will follow shortly and start the actual async reload.
+    }
+
+    @Synchronized
+    fun handleHashListWithCompletion(
+        packet: ScriptPackHashListPacket,
+        requestSender: (ScriptPackRequestPacket) -> Unit,
+        completeWhenDeferred: () -> Unit
+    ): Boolean {
+        val bucket = resolveCurrentServerBucket() ?: run {
+            LOGGER.warn("Cannot resolve current server bucket, skipping script pack hash sync")
+            return true
+        }
+
+        activeServerBucket = bucket
+        expectedHashes = packet.entries.associate { it.syncId to it.hash }
+
+        if (packet.entries.isEmpty()) {
+            activePacks = emptyList()
+            syncState = RemoteSyncState.EXECUTING
+            ScriptReloadManager.reloadClientScriptsAsync { completeClientReload(completeWhenDeferred) }
+            return false
+        }
+
+        return true
     }
 
     @Synchronized
@@ -229,8 +252,7 @@ object ServerPackCacheManager {
                 return true
             }
             ScriptPackUi.openRemoteScriptTrustScreen(identity.address, resolved) { trusted ->
-                finishTrustDecision(identity, trusted)
-                completeWhenDeferred()
+                finishTrustDecision(identity, trusted, completeWhenDeferred)
             }
             return false
         }
@@ -238,17 +260,17 @@ object ServerPackCacheManager {
         activePacks = resolved
         pendingPacks = emptyList()
         syncState = RemoteSyncState.TRUSTED
-        executeTrustedPacks()
-        return true
+        return executeTrustedPacks(completeWhenDeferred)
     }
 
     @Synchronized
-    private fun finishTrustDecision(identity: RemoteServerIdentity, trusted: Boolean) {
+    private fun finishTrustDecision(identity: RemoteServerIdentity, trusted: Boolean, completeWhenDeferred: (() -> Unit)? = null) {
         if (!trusted) {
             LOGGER.warn("User rejected remote Katton scripts from {}", identity.address)
             activePacks = emptyList()
             pendingPacks = emptyList()
             syncState = RemoteSyncState.REJECTED
+            completeWhenDeferred?.invoke()
             return
         }
 
@@ -257,18 +279,21 @@ object ServerPackCacheManager {
         activePacks = pendingPacks
         pendingPacks = emptyList()
         syncState = RemoteSyncState.TRUSTED
-        executeTrustedPacks()
+        executeTrustedPacks(completeWhenDeferred)
     }
 
-    private fun executeTrustedPacks() {
-        // All packs resolved — reload synchronously on the Render thread
-        // (this method is called from enqueueWork). After this returns,
-        // scripts are compiled, entrypoints executed, and items registered.
-        // completeMainThreadSync then releases the Netty thread, and the
-        // registry check finds items already in place.
+    private fun executeTrustedPacks(completeWhenDeferred: (() -> Unit)? = null): Boolean {
+        // Keep configuration networking waiting when requested, but move the
+        // heavy client scan/compile phase onto the client reload worker.
         syncState = RemoteSyncState.EXECUTING
-        ScriptReloadManager.reloadClientScripts()
+        ScriptReloadManager.reloadClientScriptsAsync { completeClientReload(completeWhenDeferred) }
+        return completeWhenDeferred == null
+    }
+
+    @Synchronized
+    private fun completeClientReload(completeWhenDeferred: (() -> Unit)?) {
         syncState = RemoteSyncState.IDLE
+        completeWhenDeferred?.invoke()
     }
 
     private fun rejectRemoteScripts(reason: String, disconnect: Boolean) {
@@ -305,13 +330,12 @@ object ServerPackCacheManager {
     /**
      * Called by the registry-check mixin on the Netty thread.
      *
-     * No-op: the actual reload already happened synchronously on the Render
-     * thread inside {@link #handleBundle} (or {@link #handleHashList} for
-     * empty packs), so by the time this runs items are already registered.
+     * No-op: the actual reload is coordinated by handleBundle/handleHashList
+     * and configuration networking waits for its completion when necessary.
      */
     @Synchronized
     fun executePendingScriptsBeforeRegistryCheck() {
-        // Reload already done on Render thread via handleBundle/handleHashList.
+        // Reload is coordinated by handleBundle/handleHashList.
     }
 
     private fun loadCachedPack(cachedRoot: Path, syncId: String): ScriptPack? {
