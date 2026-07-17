@@ -216,7 +216,7 @@ object PaperNmsBridge {
 
     @JvmStatic
     fun getResourceManager(server: MinecraftServer): ResourceManager {
-        return server.resources.resourceManager()
+        return server.resourceManager
     }
 
     @JvmStatic

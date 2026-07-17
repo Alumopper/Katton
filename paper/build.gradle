@@ -17,7 +17,9 @@ group = project.maven_group
 version = project.mod_version
 ext.useLeanMavenPublication = true
 
-def commonMainSourceSet = project(':common').sourceSets.main
+def commonProject = project(":common:${stonecutter.current.project}")
+def commonMainSourceSet = commonProject.sourceSets.main
+def platformName = project.parent?.name ?: project.name
 
 repositories {
     mavenCentral()
@@ -30,13 +32,13 @@ loom {
 }
 
 dependencies {
-    paperweight.paperDevBundle("26.1.2.build.71-stable")
+    paperweight.paperDevBundle(project.property('paper_dev_bundle'))
 
     // Paper API — provided by server at runtime
-    compileOnly "io.papermc.paper:paper-api:${project.paper_api_version}"
+    compileOnly "io.papermc.paper:paper-api:${project.property('paper_api_version')}"
 
     // Katton common module
-    api project(':common')
+    implementation commonMainSourceSet.output
     implementation 'org.jetbrains.kotlin:kotlin-compiler-embeddable'
     implementation 'org.jetbrains.kotlin:kotlin-daemon-embeddable'
     implementation 'org.jetbrains.kotlin:kotlin-reflect'
@@ -77,11 +79,12 @@ tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
 }
 
 shadowJar {
-    archiveFileName = "${project.name}-katton-${project.version}.jar"
+    archiveFileName = "${platformName}-katton-${project.version}-${stonecutter.current.project}.jar"
     destinationDirectory = rootProject.layout.buildDirectory
     archiveClassifier = ''
     exclude 'META-INF/versions/**'
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    from(commonMainSourceSet.output)
     manifest {
         attributes 'paper-plugin-version': project.version
     }
@@ -95,8 +98,11 @@ tasks.named('jar') {
 
 // Process plugin.yml to expand version
 processResources {
+    inputs.property 'apiVersion', project.property('paper_plugin_api_version')
+
     filesMatching('paper-plugin.yml') {
-        expand 'version': project.version
+        expand 'version': project.version,
+            'apiVersion': inputs.properties.apiVersion
     }
 }
 
@@ -104,7 +110,7 @@ processResources {
 def mavenJar = tasks.register('mavenJar', Jar) {
     group = 'build'
     description = 'Assembles the plain library jar used for Maven publication.'
-    archiveBaseName = project.name
+    archiveBaseName = platformName
     archiveVersion = project.version.toString()
     destinationDirectory = layout.buildDirectory.dir('maven-libs').get().asFile
     from(sourceSets.main.output)
@@ -113,7 +119,7 @@ def mavenJar = tasks.register('mavenJar', Jar) {
 def mavenSourcesJar = tasks.register('mavenSourcesJar', Jar) {
     group = 'build'
     description = 'Assembles the plain sources jar used for Maven publication.'
-    archiveBaseName = project.name
+    archiveBaseName = platformName
     archiveVersion = project.version.toString()
     archiveClassifier = 'sources'
     destinationDirectory = layout.buildDirectory.dir('maven-libs').get().asFile

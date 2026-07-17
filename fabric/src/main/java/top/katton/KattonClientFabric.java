@@ -49,7 +49,7 @@ public class KattonClientFabric implements ClientModInitializer {
 		ClientPlayConnectionEvents.JOIN.register((_, _, client) -> {
 			if (!hasJoinedSinceDisconnect) {
 				hasJoinedSinceDisconnect = true;
-				if (client.isSingleplayer()) {
+				if (client.hasSingleplayerServer()) {
 					ScriptReloadManager.reloadClientScriptsAsync();
 				}
 			}

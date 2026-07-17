@@ -1,0 +1,21 @@
+plugins {
+    id "dev.kikugie.stonecutter"
+}
+
+stonecutter.active rootProject.file("stonecutter.active")
+
+stonecutter.parameters {
+    properties rootProject.file("stonecutter.properties.toml")
+
+    def target = current.project
+    def minecraft = current.version
+
+    constants {
+        put("mc_26_1_2", target == "26.1.2")
+        put("mc_26_2", target == "26.2")
+    }
+
+    dependencies {
+        put("minecraft", minecraft)
+    }
+}

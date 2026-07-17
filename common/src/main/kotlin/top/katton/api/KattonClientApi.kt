@@ -35,6 +35,14 @@ import net.minecraft.network.chat.Component
 import net.minecraft.resources.Identifier
 import net.minecraft.sounds.SoundEvent
 import net.minecraft.world.phys.Vec3
+import top.katton.compat.clearClientTitles
+import top.katton.compat.clientToastManager
+import top.katton.compat.currentScreen
+import top.katton.compat.setClientNowPlaying
+import top.katton.compat.setClientOverlay
+import top.katton.compat.setClientSubtitle
+import top.katton.compat.setClientTitle
+import top.katton.compat.setClientTitleTimes
 
 private val mc = Minecraft.getInstance()
 private val player get() = mc.player
@@ -292,7 +300,7 @@ fun clientActionBar(message: Any): Boolean {
  * %zh 如果显示成功则返回 true，否则返回 false。
  */
 fun clientOverlay(message: Any?, tinted: Boolean = false) =
-    gui.setOverlayMessage(asComponent(message), tinted)
+    setClientOverlay(gui, asComponent(message), tinted)
 
 /**
  * %en
@@ -305,7 +313,7 @@ fun clientOverlay(message: Any?, tinted: Boolean = false) =
  * %zh 如果清除成功则返回 true，否则返回 false。
  */
 fun clearClientOverlay() =
-    gui.setOverlayMessage(Component.empty(), false)
+    setClientOverlay(gui, Component.empty(), false)
 
 /**
  * %en
@@ -320,7 +328,7 @@ fun clearClientOverlay() =
  * %en if displayed successfully, false otherwise
  * %zh 如果显示成功则返回 true，否则返回 false。
  */
-fun clientNowPlaying(message: Any?) = gui.setNowPlaying(asComponent(message))
+fun clientNowPlaying(message: Any?) = setClientNowPlaying(gui, asComponent(message))
 
 /**
  * %en
@@ -386,7 +394,7 @@ fun playClientSound(soundId: Identifier, volume: Float = 1.0f, pitch: Float = 1.
  * %en if displayed successfully, false otherwise
  * %zh 如果显示成功则返回 true，否则返回 false。
  */
-fun clientTitle(message: Any?) = gui.setTitle(asComponent(message))
+fun clientTitle(message: Any?) = setClientTitle(gui, asComponent(message))
 
 /**
  * %en
@@ -401,7 +409,7 @@ fun clientTitle(message: Any?) = gui.setTitle(asComponent(message))
  * %en if displayed successfully, false otherwise
  * %zh 如果显示成功则返回 true，否则返回 false。
  */
-fun clientSubtitle(message: Any?) = gui.setSubtitle(asComponent(message))
+fun clientSubtitle(message: Any?) = setClientSubtitle(gui, asComponent(message))
 
 /**
  * %en
@@ -422,7 +430,7 @@ fun clientSubtitle(message: Any?) = gui.setSubtitle(asComponent(message))
  * %en if timing was set successfully, false otherwise
  * %zh 如果时间设置成功则返回 true，否则返回 false。
  */
-fun clientTitleTimes(fadeInTicks: Int = 10, stayTicks: Int = 70, fadeOutTicks: Int = 20) = gui.setTimes(fadeInTicks, stayTicks, fadeOutTicks)
+fun clientTitleTimes(fadeInTicks: Int = 10, stayTicks: Int = 70, fadeOutTicks: Int = 20) = setClientTitleTimes(gui, fadeInTicks, stayTicks, fadeOutTicks)
 
 /**
  * %en
@@ -434,22 +442,22 @@ fun clientTitleTimes(fadeInTicks: Int = 10, stayTicks: Int = 70, fadeOutTicks: I
  * %en if cleared successfully, false otherwise
  * %zh 如果清除成功则返回 true，否则返回 false。
  */
-fun clearClientTitle() = gui.clearTitles()
+fun clearClientTitle() = clearClientTitles(gui)
 
 fun clientToast(toast: Toast) {
-    Minecraft.getInstance().toastManager.addToast(toast)
+    clientToastManager(Minecraft.getInstance()).addToast(toast)
 }
 
 fun clientAddSystemToast(id: SystemToast.SystemToastId, title: Any?, description: Any?){
-    SystemToast.add(mc.toastManager, id, asComponent(title), asComponentNullable(description))
+    SystemToast.add(clientToastManager(mc), id, asComponent(title), asComponentNullable(description))
 }
 
 fun clientAddOrUpdateSystemToast(id: SystemToast.SystemToastId, title: Any?, description: Any?){
-    SystemToast.addOrUpdate(mc.toastManager, id, asComponent(title), asComponentNullable(description))
+    SystemToast.addOrUpdate(clientToastManager(mc), id, asComponent(title), asComponentNullable(description))
 }
 
 fun clientHideSystemToast(id: SystemToast.SystemToastId){
-    SystemToast.forceHide(mc.toastManager, id)
+    SystemToast.forceHide(clientToastManager(mc), id)
 }
 
 fun clientAddTutorialToast(font: Font = mc.font, icon: TutorialToast.Icons, title: Any?, description: Any?, processable: Boolean = false, timeToDisplayMs: Int = 0): TutorialToast {
@@ -494,7 +502,7 @@ fun clientSetTitle(title: String) = mc.window.setTitle(title)
  * %en screen class name, or null if no screen is open
  * %zh 屏幕类名；如果没有打开屏幕则返回 null。
  */
-fun clientScreenName(): String? = mc.screen?.javaClass?.simpleName
+fun clientScreenName(): String? = currentScreen(mc)?.javaClass?.simpleName
 
 /**
  * %en
@@ -506,7 +514,7 @@ fun clientScreenName(): String? = mc.screen?.javaClass?.simpleName
  * %en if a menu screen is open, false if in-game
  * %zh 如果打开了菜单屏幕则返回 true；如果在游戏内则返回 false。
  */
-fun isClientInMenu(): Boolean = mc.screen != null
+fun isClientInMenu(): Boolean = currentScreen(mc) != null
 
 /**
  * %en
@@ -518,4 +526,4 @@ fun isClientInMenu(): Boolean = mc.screen != null
  * %en if chat is open, false otherwise
  * %zh 如果聊天屏幕已打开则返回 true，否则返回 false。
  */
-fun isClientChatOpen(): Boolean = mc.screen is ChatScreen
+fun isClientChatOpen(): Boolean = currentScreen(mc) is ChatScreen

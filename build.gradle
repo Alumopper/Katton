@@ -15,6 +15,55 @@ base {
 	archivesName = project.archives_base_name
 }
 
+def stonecutterControllerPaths = [':common', ':fabric', ':neoforge', ':paper'] as Set
+def isStonecutterControllerProject = { Project candidate ->
+    stonecutterControllerPaths.contains(candidate.path)
+}
+def isStonecutterVersionProject = { Project candidate ->
+    stonecutterControllerPaths.contains(candidate.parent?.path)
+}
+def isStonecutterManagedProject = { Project candidate ->
+    isStonecutterControllerProject(candidate) || isStonecutterVersionProject(candidate)
+}
+def activeStonecutterVersionProvider = providers
+    .fileContents(layout.projectDirectory.file('stonecutter.active'))
+    .asText
+    .map { it.trim() }
+    .orElse('26.2')
+
+def manifoldIdeDefinitionsFile = layout.projectDirectory.file('common/src/manifold/java/build.properties')
+def syncManifoldIdeDefinitions = tasks.register('syncManifoldIdeDefinitions') {
+    group = 'ide'
+    description = 'Synchronize Manifold IDE preprocessor symbols with stonecutter.active.'
+    inputs.file(layout.projectDirectory.file('stonecutter.active'))
+    outputs.file(manifoldIdeDefinitionsFile)
+
+    doLast {
+        def activeVersion = layout.projectDirectory.file('stonecutter.active').asFile.getText('UTF-8').trim()
+        if (!(activeVersion in ['26.1.2', '26.2'])) {
+            throw new GradleException("Unsupported active Minecraft version: ${activeVersion}")
+        }
+
+        def definitionsFile = manifoldIdeDefinitionsFile.asFile
+        definitionsFile.parentFile.mkdirs()
+        def definitions = "# Generated from stonecutter.active. Do not edit.\nMC_VERSION=${activeVersion}\n"
+        if (!definitionsFile.exists() || definitionsFile.getText('UTF-8') != definitions) {
+            definitionsFile.setText(definitions, 'UTF-8')
+        }
+    }
+}
+
+gradle.projectsEvaluated {
+    allprojects { candidate ->
+        candidate.tasks.matching { it.name == 'ideaSyncTask' }.configureEach {
+            dependsOn syncManifoldIdeDefinitions
+        }
+        candidate.tasks.matching { it.name.startsWith('stonecutterSwitchTo') }.configureEach {
+            finalizedBy syncManifoldIdeDefinitions
+        }
+    }
+}
+
 def isSnapshotVersion = provider { project.version.toString().endsWith('-SNAPSHOT') }
 def nexusBaseUrl = providers.gradleProperty('nexusBaseUrl').orElse('https://nexus.mcfpp.top')
 def nexusReleasesRepository = providers.gradleProperty('nexusReleasesRepository').orElse('maven-releases')
@@ -32,8 +81,13 @@ dependencies {
 
 // Root build will configure Architectury Loom for subprojects that apply it
 subprojects {
-    apply plugin: 'org.jetbrains.kotlin.jvm'
-    apply plugin: 'maven-publish'
+    if (!isStonecutterManagedProject(project)) {
+        apply plugin: 'org.jetbrains.kotlin.jvm'
+    }
+
+    if (!isStonecutterManagedProject(project)) {
+        apply plugin: 'maven-publish'
+    }
 
     repositories {
         mavenCentral()
@@ -51,37 +105,39 @@ subprojects {
         options.jFlags('-Duser.language=en', '-Duser.country=US', '-Dfile.encoding=UTF-8')
     }
 
-    publishing {
-        repositories {
-            mavenLocal()
-            maven {
-                name = 'privateNexus'
-                url = uri(nexusRepositoryUrl.get())
-                allowInsecureProtocol = false
-                credentials {
-                    username = providers.gradleProperty('nexusUsername')
-                        .orElse(providers.environmentVariable('NEXUS_USERNAME'))
-                        .orNull
-                    password = providers.gradleProperty('nexusPassword')
-                        .orElse(providers.environmentVariable('NEXUS_PASSWORD'))
-                        .orNull
+    plugins.withId('maven-publish') {
+        publishing {
+            repositories {
+                mavenLocal()
+                maven {
+                    name = 'privateNexus'
+                    url = uri(nexusRepositoryUrl.get())
+                    allowInsecureProtocol = false
+                    credentials {
+                        username = providers.gradleProperty('nexusUsername')
+                            .orElse(providers.environmentVariable('NEXUS_USERNAME'))
+                            .orNull
+                        password = providers.gradleProperty('nexusPassword')
+                            .orElse(providers.environmentVariable('NEXUS_PASSWORD'))
+                            .orNull
+                    }
                 }
             }
         }
-    }
 
-    afterEvaluate {
-        publishing {
-            publications {
-                mavenJava(MavenPublication) {
-                    def publicationComponent = project.findProperty('useLeanMavenPublication') ? null : components.findByName('java')
-                    if (publicationComponent != null) {
-                        from publicationComponent
-                    }
-
-                    artifactId = "${rootProject.findProperty('archives_base_name')}-${project.name}"
-                }
+        afterEvaluate {
+            def publication = publishing.publications.findByName('mavenJava')
+            if (publication == null) {
+                publication = publishing.publications.create('mavenJava', MavenPublication)
             }
+
+            def publicationComponent = project.findProperty('useLeanMavenPublication') ? null : components.findByName('java')
+            if (publicationComponent != null && publication.artifacts.empty) {
+                publication.from publicationComponent
+            }
+
+            def moduleName = stonecutterControllerPaths.contains(project.parent?.path) ? project.parent.name : project.name
+            publication.artifactId = "${rootProject.findProperty('archives_base_name')}-${moduleName}"
         }
     }
 }
@@ -209,12 +265,14 @@ tasks.register('cleanDatapacks') {
 
 tasks.register('buildKattonJars') {
     group = 'build'
-    description = 'Build Fabric, NeoForge, and Paper deployment jars into the root build directory.'
-    dependsOn ':fabric:jar', ':neoforge:jar', ':paper:shadowJar'
+    description = 'Build Fabric, NeoForge, and Paper deployment jars for the active Stonecutter target.'
+    def activeTarget = activeStonecutterVersionProvider.get()
+    dependsOn ":fabric:${activeTarget}:jar", ":neoforge:${activeTarget}:jar", ":paper:${activeTarget}:shadowJar"
 }
 
 tasks.register('publishAllToPrivateNexus') {
     group = 'publishing'
     description = "Publish all subprojects to ${nexusRepositoryUrl.get()}."
-    dependsOn(subprojects.findAll {it.name != "sign-plugin"}.collect { ":${it.name}:publishAllPublicationsToPrivateNexusRepository" })
+    def activeTarget = activeStonecutterVersionProvider.get()
+    dependsOn(['common', 'fabric', 'neoforge', 'paper'].collect { ":${it}:${activeTarget}:publishAllPublicationsToPrivateNexusRepository" })
 }

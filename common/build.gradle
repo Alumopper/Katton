@@ -5,15 +5,50 @@ apply plugin: 'net.fabricmc.fabric-loom'
 group = project.maven_group
 version = project.mod_version
 
+def targetMinecraftVersion = stonecutter.current.version
+def platformName = project.parent?.name ?: project.name
+def manifoldVersion = '2026.1.8'
+
+if (!(targetMinecraftVersion in ['26.1.2', '26.2'])) {
+    throw new GradleException("Unsupported Minecraft version for Manifold preprocessing: ${targetMinecraftVersion}")
+}
+
+base {
+    archivesName = platformName
+}
+
 repositories {
     mavenCentral()
 }
 
+sourceSets {
+    manifold {
+        java {
+            srcDir 'src/manifold/java'
+            exclude 'build.properties'
+        }
+    }
+}
+
+configurations {
+    manifoldCompileOnly.extendsFrom compileOnly
+    manifoldAnnotationProcessor.extendsFrom annotationProcessor
+}
+
+def mainCompileClasspath = sourceSets.main.compileClasspath
+sourceSets.manifold.compileClasspath += mainCompileClasspath
+// Kotlin consumes the preprocessed class output instead of parsing Java files containing #if.
+sourceSets.main.compileClasspath += sourceSets.manifold.output
+sourceSets.main.runtimeClasspath += sourceSets.manifold.output
+
 loom {
-    accessWidenerPath = file("src/main/resources/katton.accesswidener")
+    accessWidenerPath = project.parent.file("src/main/resources/katton.accesswidener")
 }
 
 dependencies {
+    manifoldCompileOnly "systems.manifold:manifold-preprocessor:${manifoldVersion}"
+    manifoldAnnotationProcessor "systems.manifold:manifold-preprocessor:${manifoldVersion}"
+
     compileOnly 'org.jetbrains.kotlin:kotlin-compiler-embeddable'
     compileOnly 'org.jetbrains.kotlin:kotlin-daemon-embeddable'
     compileOnly 'org.jetbrains.kotlin:kotlin-reflect'
@@ -33,16 +68,46 @@ dependencies {
     compileOnly "org.ow2.asm:asm-commons:9.9.1"
 
     // To change the versions see the gradle.properties file
-    minecraft "com.mojang:minecraft:${project.minecraft_version}"
+    minecraft "com.mojang:minecraft:${targetMinecraftVersion}"
     
     // Fabric API for common module
-    compileOnly "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
+    compileOnly "net.fabricmc.fabric-api:fabric-api:${project.property('fabric_api_version')}"
 }
 
 
 java {
     withJavadocJar()
     withSourcesJar()
+}
+
+tasks.named('compileManifoldJava', JavaCompile) {
+    options.annotationProcessorPath = configurations.manifoldAnnotationProcessor
+    options.compilerArgs += [
+        '-Xplugin:Manifold',
+        "-AMC_VERSION=${targetMinecraftVersion}"
+    ]
+    options.fork = true
+    options.forkOptions.jvmArgs += '--add-exports=java.base/jdk.internal.access=ALL-UNNAMED'
+}
+
+tasks.named('compileKotlin') {
+    dependsOn tasks.named('compileManifoldJava')
+}
+
+tasks.named('compileJava') {
+    dependsOn tasks.named('compileManifoldJava')
+}
+
+tasks.named('classes') {
+    dependsOn tasks.named('manifoldClasses')
+}
+
+tasks.named('jar') {
+    from sourceSets.manifold.output
+}
+
+tasks.named('sourcesJar') {
+    from sourceSets.manifold.allSource
 }
 
 tasks.withType(Javadoc).configureEach {

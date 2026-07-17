@@ -4,12 +4,12 @@ import com.mojang.blaze3d.vertex.PoseStack
 import com.mojang.logging.LogUtils
 import com.mojang.math.Axis
 import net.minecraft.client.Minecraft
-import net.minecraft.client.renderer.LevelRenderer
 import net.minecraft.client.renderer.SubmitNodeCollector
 import net.minecraft.client.renderer.item.ItemStackRenderState
 import net.minecraft.client.renderer.state.level.CameraRenderState
 import net.minecraft.client.renderer.texture.OverlayTexture
 import net.minecraft.core.BlockPos
+import net.minecraft.world.level.BlockAndLightGetter
 import net.minecraft.world.phys.AABB
 import net.minecraft.world.phys.Vec3
 import top.katton.api.ClientItemRenderAnimation
@@ -19,6 +19,7 @@ import top.katton.api.ClientItemRenderAnimationSet
 import top.katton.api.ClientItemRenderAnimationTarget
 import top.katton.api.ClientItemRenderFunctionKeyframe
 import top.katton.api.ClientItemRenderMarker
+import top.katton.compat.ClientApiCompat
 import top.katton.network.ClientItemRenderMarkerPacket
 import java.util.IdentityHashMap
 import java.util.UUID
@@ -160,7 +161,7 @@ object ClientItemRenderMarkerManager {
             val light = if (marker.fullBright) {
                 FULL_BRIGHT_LIGHT
             } else {
-                LevelRenderer.getLightCoords(level, BlockPos.containing(marker.pos))
+                ClientApiCompat.getLightCoords(level, BlockPos.containing(marker.pos))
             }
 
             poseStack.pushPose()

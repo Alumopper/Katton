@@ -10,6 +10,9 @@ import top.katton.Katton
 import top.katton.engine.ScriptIssue
 import top.katton.engine.ScriptIssueReporter
 import top.katton.engine.ScriptReloadManager
+import top.katton.compat.currentScreen
+import top.katton.compat.setClientOverlay
+import top.katton.compat.setClientScreen
 import top.katton.pack.ScriptPackManager
 import top.katton.pack.ScriptPackScope
 import top.katton.pack.ScriptPackView
@@ -35,12 +38,12 @@ object ScriptPackUi {
     fun openScriptIssueScreen(issue: ScriptIssue) {
         val mc = Minecraft.getInstance()
         mc.execute {
-            val current = mc.screen
+            val current = currentScreen(mc)
             if (current is ScriptIssueScreen && current.issue == issue) {
                 return@execute
             }
-            mc.gui.setOverlayMessage(Component.literal(issue.title), false)
-            mc.setScreen(ScriptIssueScreen(current, issue))
+            setClientOverlay(mc.gui, Component.literal(issue.title), false)
+            setClientScreen(mc, ScriptIssueScreen(current, issue))
         }
     }
 
@@ -50,7 +53,7 @@ object ScriptPackUi {
         if (mc.level == null) {
             return
         }
-        mc.setScreen(ScriptPackManagerScreen(mc.screen))
+        setClientScreen(mc, ScriptPackManagerScreen(currentScreen(mc)))
     }
 
     @JvmStatic
@@ -88,7 +91,7 @@ object ScriptPackUi {
                 else -> trString("katton.remote.signature.signed", pack.manifest.name, signature.keyId)
             }
         }
-        mc.setScreen(RemoteScriptTrustScreen(mc.screen, serverAddress, views, signatureSummaries, callback))
+        setClientScreen(mc, RemoteScriptTrustScreen(currentScreen(mc), serverAddress, views, signatureSummaries, callback))
     }
 
     @JvmStatic
@@ -119,7 +122,7 @@ private class ScriptIssueScreen(
     }
 
     override fun onClose() {
-        minecraft.setScreen(parent)
+        setClientScreen(minecraft, parent)
     }
 
     override fun isPauseScreen(): Boolean = false
@@ -326,9 +329,9 @@ private class RemoteScriptTrustScreen(
             minecraft.connection?.connection?.disconnect(
                 tr("katton.remote.disconnect.not_trusted")
             )
-            minecraft.setScreen(parent)
+            setClientScreen(minecraft, parent)
         } else {
-            minecraft.setScreen(null)
+            setClientScreen(minecraft, null)
         }
         callback(trusted)
     }
@@ -413,7 +416,7 @@ private class ScriptPackManagerScreen(
     }
 
     override fun onClose() {
-        minecraft.setScreen(parent)
+        setClientScreen(minecraft, parent)
     }
 
     override fun isPauseScreen(): Boolean = false
@@ -607,7 +610,7 @@ private class ScriptPackManagerScreen(
                         tr("commands.katton.reload.failed.logs")
                     }
                     mc.player?.sendSystemMessage(message)
-                    mc.gui.setOverlayMessage(message, false)
+                    setClientOverlay(mc.gui, message, false)
                     reloadQueued = false
                     refreshData()
                     updateButtons()
@@ -623,7 +626,7 @@ private class ScriptPackManagerScreen(
             tr("commands.katton.reload.in_progress")
         }
         mc.player?.sendSystemMessage(message)
-        mc.gui.setOverlayMessage(message, false)
+        setClientOverlay(mc.gui, message, false)
         reloadQueued = false
         refreshData()
         updateButtons()

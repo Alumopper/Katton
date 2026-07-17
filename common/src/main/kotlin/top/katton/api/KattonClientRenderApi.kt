@@ -2,16 +2,13 @@
 
 package top.katton.api
 
-import com.mojang.blaze3d.vertex.PoseStack
 import net.minecraft.client.Camera
 import net.minecraft.client.Minecraft
 import net.minecraft.client.gui.GuiGraphicsExtractor
-import net.minecraft.client.renderer.MultiBufferSource
-import net.minecraft.client.renderer.rendertype.RenderTypes
 import net.minecraft.client.renderer.state.level.CameraRenderState
 import net.minecraft.network.chat.Component
 import net.minecraft.resources.Identifier
-import org.joml.Vector3f
+import top.katton.compat.drawLine3DCompat
 import top.katton.util.ScriptExecutionContext
 import java.util.concurrent.ConcurrentHashMap
 
@@ -549,39 +546,7 @@ fun drawLine3D(
     val cam = ctx.camera ?: return false
     val camPos = cam.pos
 
-    val a = ((argbColor ushr 24) and 0xFF)
-    val r = ((argbColor ushr 16) and 0xFF)
-    val g = ((argbColor ushr 8) and 0xFF)
-    val b = (argbColor and 0xFF)
-
-    // Direction vector used as per-vertex normal for line rendering.
-    val dx = (x2 - x1).toFloat()
-    val dy = (y2 - y1).toFloat()
-    val dz = (z2 - z1).toFloat()
-    val len = Math.sqrt((dx * dx + dy * dy + dz * dz).toDouble()).toFloat().coerceAtLeast(1e-6f)
-    val nx = dx / len
-    val ny = dy / len
-    val nz = dz / len
-
-    val poseStack = PoseStack()
-    poseStack.translate(-camPos.x, -camPos.y, -camPos.z)
-    val pose = poseStack.last()
-
-    val bufferSource: MultiBufferSource.BufferSource = mc.renderBuffers().bufferSource()
-    val vc = bufferSource.getBuffer(RenderTypes.linesTranslucent())
-    val width = lineWidth.coerceAtLeast(1f)
-
-    vc.addVertex(pose, x1.toFloat(), y1.toFloat(), z1.toFloat())
-        .setColor(r, g, b, a)
-        .setNormal(nx, ny, nz)
-        .setLineWidth(width)
-    vc.addVertex(pose, x2.toFloat(), y2.toFloat(), z2.toFloat())
-        .setColor(r, g, b, a)
-        .setNormal(nx, ny, nz)
-        .setLineWidth(width)
-
-    bufferSource.endBatch(RenderTypes.linesTranslucent())
-    return true
+    return drawLine3DCompat(camPos, x1, y1, z1, x2, y2, z2, argbColor, lineWidth)
 }
 //
 // /**

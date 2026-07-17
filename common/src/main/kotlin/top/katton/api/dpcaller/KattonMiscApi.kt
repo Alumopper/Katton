@@ -26,6 +26,7 @@ import net.minecraft.world.waypoints.WaypointStyleAsset
 import net.minecraft.world.waypoints.WaypointTransmitter
 import top.katton.api.LOGGER
 import top.katton.api.requireServer
+import top.katton.compat.TextApiCompat
 import java.util.*
 import java.util.function.Consumer
 
@@ -463,7 +464,7 @@ fun setWaypointColor(serverLevel: ServerLevel, waypointTransmitter: WaypointTran
     mutateIcon(
         serverLevel,
         waypointTransmitter
-    ) { icon: Waypoint.Icon -> icon.color = Optional.of<Int>(chatFormatting.color!!) }
+    ) { icon: Waypoint.Icon -> icon.color = Optional.of<Int>(TextApiCompat.chatFormattingColor(chatFormatting)!!) }
 }
 
 

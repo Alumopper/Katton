@@ -1,5 +1,6 @@
 plugins {
     id 'java-library'
+    id 'org.jetbrains.kotlin.jvm'
     id 'maven-publish'
     id 'net.neoforged.moddev' version '2.0.141'
     id 'idea'
@@ -9,7 +10,9 @@ version = mod_version
 group = maven_group
 ext.useLeanMavenPublication = true
 
-def commonMainSourceSet = project(':common').sourceSets.main
+def commonProject = project(":common:${stonecutter.current.project}")
+def commonMainSourceSet = commonProject.sourceSets.main
+def platformName = project.parent?.name ?: project.name
 
 repositories {
     // Add here additional repositories if required by some of the dependencies below.
@@ -27,10 +30,10 @@ java {
 
 neoForge {
     // Specify the version of NeoForge to use.
-    version = project.neo_version
+    version = project.property('neo_version')
 
     // Access Transformers for making private fields/methods public
-    accessTransformers = project.files('src/main/resources/META-INF/accesstransformer.cfg')
+    accessTransformers = project.files(project.parent.file('src/main/resources/META-INF/accesstransformer.cfg'))
 
     // Default run configurations.
     // These can be tweaked, removed, or duplicated as needed.
@@ -122,16 +125,16 @@ dependencies {
     jarJar(implementation("net.bytebuddy:byte-buddy-agent:1.17.8"))
     jarJar(implementation("org.jetbrains:annotations:26.0.2"))
 
-    api project(':common')
+    implementation commonMainSourceSet.output
 }
 
 // This block of code expands all declared replace properties in the specified resource targets.
 // A missing property will result in an error. Properties are expanded using ${} Groovy notation.
 var generateModMetadata = tasks.register("generateModMetadata", ProcessResources) {
     var replaceProperties = [
-            minecraft_version      : minecraft_version,
-            minecraft_version_range: minecraft_version_range,
-            neo_version            : neo_version,
+            minecraft_version      : project.property('minecraft_version'),
+            minecraft_version_range: project.property('minecraft_version_range'),
+            neo_version            : project.property('neo_version'),
             mod_id                 : mod_id,
             mod_name               : mod_name,
             mod_license            : mod_license,
@@ -181,7 +184,7 @@ tasks.named('javadoc', Javadoc) {
 
 tasks.named('jar', Jar) {
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
-    archiveFileName = "${project.name}-katton-${project.version}.jar"
+    archiveFileName = "${platformName}-katton-${project.version}-${stonecutter.current.project}.jar"
     destinationDirectory = rootProject.layout.buildDirectory
     from(commonMainSourceSet.output)
 }
@@ -194,7 +197,7 @@ tasks.matching { it.name == 'sourcesJar' }.configureEach {
 def mavenJar = tasks.register('mavenJar', Jar) {
     group = 'build'
     description = 'Assembles the plain library jar used for Maven publication.'
-    archiveBaseName = project.name
+    archiveBaseName = platformName
     archiveVersion = project.version.toString()
     destinationDirectory = layout.buildDirectory.dir('maven-libs').get().asFile
     from(sourceSets.main.output)
@@ -203,7 +206,7 @@ def mavenJar = tasks.register('mavenJar', Jar) {
 def mavenSourcesJar = tasks.register('mavenSourcesJar', Jar) {
     group = 'build'
     description = 'Assembles the plain sources jar used for Maven publication.'
-    archiveBaseName = project.name
+    archiveBaseName = platformName
     archiveVersion = project.version.toString()
     archiveClassifier = 'sources'
     destinationDirectory = layout.buildDirectory.dir('maven-libs').get().asFile
@@ -220,40 +223,58 @@ publishing {
         pom.withXml {
             def root = asNode()
             def dependencySections = root.children().findAll { it instanceof Node && it.name() == 'dependencies' }
-            if (dependencySections.size() <= 1) {
-                return
-            }
+            def dependenciesNode
 
-            def mergedDependencies = [:]
-            dependencySections.each { section ->
-                section.children()
-                    .findAll { it instanceof Node && it.name() == 'dependency' }
-                    .each { dependency ->
-                        def groupId = dependency.get('groupId')?.text()
-                        def artifactId = dependency.get('artifactId')?.text()
-                        def version = dependency.get('version')?.text()
-                        def scope = dependency.get('scope')?.text()
-                        def key = "${groupId}:${artifactId}"
-                        def existing = mergedDependencies[key]
+            if (dependencySections.size() > 1) {
+                def mergedDependencies = [:]
+                dependencySections.each { section ->
+                    section.children()
+                        .findAll { it instanceof Node && it.name() == 'dependency' }
+                        .each { dependency ->
+                            def groupId = dependency.get('groupId')?.text()
+                            def artifactId = dependency.get('artifactId')?.text()
+                            def version = dependency.get('version')?.text()
+                            def scope = dependency.get('scope')?.text()
+                            def key = "${groupId}:${artifactId}"
+                            def existing = mergedDependencies[key]
 
-                        if (existing == null || (existing.scope == 'runtime' && scope == 'compile')) {
-                            mergedDependencies[key] = [groupId: groupId, artifactId: artifactId, version: version, scope: scope]
+                            if (existing == null || (existing.scope == 'runtime' && scope == 'compile')) {
+                                mergedDependencies[key] = [groupId: groupId, artifactId: artifactId, version: version, scope: scope]
+                            }
                         }
+                }
+
+                dependencySections.each { root.remove(it) }
+                dependenciesNode = root.appendNode('dependencies')
+                mergedDependencies.values().each { dependency ->
+                    def dependencyNode = dependenciesNode.appendNode('dependency')
+                    dependencyNode.appendNode('groupId', dependency.groupId)
+                    dependencyNode.appendNode('artifactId', dependency.artifactId)
+                    if (dependency.version) {
+                        dependencyNode.appendNode('version', dependency.version)
                     }
+                    if (dependency.scope) {
+                        dependencyNode.appendNode('scope', dependency.scope)
+                    }
+                }
+            } else {
+                dependenciesNode = dependencySections ? dependencySections[0] : root.appendNode('dependencies')
             }
 
-            dependencySections.each { root.remove(it) }
-            def mergedSection = root.appendNode('dependencies')
-            mergedDependencies.values().each { dependency ->
-                def dependencyNode = mergedSection.appendNode('dependency')
-                dependencyNode.appendNode('groupId', dependency.groupId)
-                dependencyNode.appendNode('artifactId', dependency.artifactId)
-                if (dependency.version) {
-                    dependencyNode.appendNode('version', dependency.version)
+            def commonArtifactId = "${rootProject.findProperty('archives_base_name')}-common"
+            def hasCommonDependency = dependenciesNode.children()
+                .findAll { it instanceof Node && it.name() == 'dependency' }
+                .any { dependency ->
+                    dependency.get('groupId')?.text() == project.group.toString() &&
+                        dependency.get('artifactId')?.text() == commonArtifactId
                 }
-                if (dependency.scope) {
-                    dependencyNode.appendNode('scope', dependency.scope)
-                }
+
+            if (!hasCommonDependency) {
+                def commonDependency = dependenciesNode.appendNode('dependency')
+                commonDependency.appendNode('groupId', project.group.toString())
+                commonDependency.appendNode('artifactId', commonArtifactId)
+                commonDependency.appendNode('version', project.version.toString())
+                commonDependency.appendNode('scope', 'compile')
             }
         }
     }

@@ -1,0 +1,19 @@
+["26.1.2"]
+minecraft_version = "26.1.2"
+fabric_api_version = "0.144.0+26.1"
+fabric_minecraft_version_range = ">=26.1-alpha.6"
+neo_version = "26.1.2.30-beta"
+minecraft_version_range = "[26.1, 26.1.2]"
+paper_api_version = "26.1.2.build.+"
+paper_dev_bundle = "26.1.2.build.71-stable"
+paper_plugin_api_version = "26.1"
+
+["26.2"]
+minecraft_version = "26.2"
+fabric_api_version = "0.154.0+26.2"
+fabric_minecraft_version_range = ">=26.2 <26.3"
+neo_version = "26.2.0.7-beta"
+minecraft_version_range = "[26.2, 26.3)"
+paper_api_version = "26.2.build.41-alpha"
+paper_dev_bundle = "26.2.build.41-alpha"
+paper_plugin_api_version = "26.2"

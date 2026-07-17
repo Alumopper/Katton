@@ -76,7 +76,7 @@ public class KattonClientNeoForge {
     }
 
     private static void onLoggingIn(ClientPlayerNetworkEvent.LoggingIn event) {
-        if (Minecraft.getInstance().isSingleplayer()) {
+        if (Minecraft.getInstance().hasSingleplayerServer()) {
             ScriptReloadManager.reloadClientScriptsAsync();
         }
     }

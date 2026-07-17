@@ -2,7 +2,6 @@
 
 package top.katton.api.dpcaller
 
-import net.minecraft.advancements.criterion.NbtPredicate
 import net.minecraft.core.BlockPos
 import net.minecraft.nbt.*
 import net.minecraft.resources.Identifier
@@ -12,6 +11,7 @@ import net.minecraft.world.entity.Entity
 import net.minecraft.world.level.Level
 import net.minecraft.world.level.block.entity.BlockEntity
 import top.katton.api.requireServer
+import top.katton.compat.EntityApiCompat
 import kotlin.jvm.optionals.getOrNull
 
 /**
@@ -286,7 +286,7 @@ fun parseNbt(nbt: String): CompoundTag = TagParser.parseCompoundFully(nbt)
  * %zh 返回表示该实体数据的 CompoundTag。
  */
 fun getEntityNbt(entity: Entity): CompoundTag {
-    return NbtPredicate.getEntityTagToCompare(entity)
+    return EntityApiCompat.getEntityTagToCompare(entity)
 }
 
 

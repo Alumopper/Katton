@@ -1,7 +1,7 @@
 name: Katton
 version: '${version}'
 main: top.katton.paper.KattonPaperPlugin
-api-version: '26.1'
+api-version: '${apiVersion}'
 folia-supported: true
 description: Kotlin scripting engine with hot reload for Paper servers
 author: Katton contributors
