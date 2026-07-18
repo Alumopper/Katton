@@ -5,6 +5,7 @@ import net.neoforged.bus.api.EventPriority
 import net.neoforged.bus.api.IEventBus
 import net.neoforged.neoforge.common.NeoForge
 import org.slf4j.LoggerFactory
+import top.katton.engine.ScriptEnvironment
 import top.katton.pack.ScriptPackScope
 import top.katton.util.ScriptExecutionContext
 import java.util.function.Consumer
@@ -52,15 +53,18 @@ object NeoForgeManagedEvents {
                 handler: (Any) -> Unit
             ): ManagedEventHandle {
                 val id = nextId++
+                val environment = ScriptExecutionContext.currentScriptEnvironment()
 
                 @Suppress("UNCHECKED_CAST")
                 val eventType = eventClass as Class<Event>
 
                 val listener = Consumer<Event> { event ->
                     try {
-                        ScriptExecutionContext.withScope(scope) {
-                            ScriptExecutionContext.withOwner(owner) {
-                                handler(event)
+                        ScriptExecutionContext.withEnvironment(environment) {
+                            ScriptExecutionContext.withScope(scope) {
+                                ScriptExecutionContext.withOwner(owner) {
+                                    handler(event)
+                                }
                             }
                         }
                     } catch (t: Throwable) {
@@ -75,7 +79,7 @@ object NeoForgeManagedEvents {
                     listener
                 )
 
-                val registration = ManagedRegistration(id, eventClass, listener, scope)
+                val registration = ManagedRegistration(id, eventClass, listener, scope, environment)
                 registrations[id] = registration
                 if (scope != null) {
                     scopeRegistrations.getOrPut(scope) { mutableSetOf() }.add(id)
@@ -94,6 +98,18 @@ object NeoForgeManagedEvents {
                 val ids = scopeRegistrations.remove(scope) ?: return
                 ids.forEach { id ->
                     registrations.remove(id)?.let { NeoForge.EVENT_BUS.unregister(it.listener) }
+                }
+            }
+
+            override fun clearByScopeAndEnvironment(scope: ScriptPackScope, environment: ScriptEnvironment) {
+                val ids = scopeRegistrations[scope] ?: return
+                val matchingIds = ids.filter { id -> registrations[id]?.environment == environment }
+                matchingIds.forEach { id ->
+                    registrations.remove(id)?.let { NeoForge.EVENT_BUS.unregister(it.listener) }
+                    ids.remove(id)
+                }
+                if (ids.isEmpty()) {
+                    scopeRegistrations.remove(scope)
                 }
             }
 
@@ -116,6 +132,7 @@ object NeoForgeManagedEvents {
         val id: Long,
         val eventClass: Class<*>,
         val listener: Any,
-        val scope: ScriptPackScope?
+        val scope: ScriptPackScope?,
+        val environment: ScriptEnvironment?
     )
 }

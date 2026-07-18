@@ -4,6 +4,7 @@ package top.katton.util
 
 import net.minecraft.util.TriState
 import org.slf4j.LoggerFactory
+import top.katton.engine.ScriptEnvironment
 import top.katton.pack.ScriptPackScope
 import top.katton.util.Extension.returnIfNot
 
@@ -108,16 +109,20 @@ abstract class CancellableEventArg {
  * @property handler The actual callback function.
  * @property scope The script pack scope (e.g. GLOBAL, WORLD) this handler was registered under.
  * @property owner The script class that registered this handler.
+ * @property environment The client or server entrypoint environment that registered this handler.
  */
 data class EventHandler<Arg, R>(
     val handler: (Arg) -> R,
     val scope: ScriptPackScope? = null,
-    val owner: String? = null
+    val owner: String? = null,
+    val environment: ScriptEnvironment? = null
 ) {
     operator fun invoke(arg: Arg): R =
-        ScriptExecutionContext.withScope(scope) {
-            ScriptExecutionContext.withOwner(owner) {
-                handler(arg)
+        ScriptExecutionContext.withEnvironment(environment) {
+            ScriptExecutionContext.withScope(scope) {
+                ScriptExecutionContext.withOwner(owner) {
+                    handler(arg)
+                }
             }
         }
 }
@@ -126,6 +131,8 @@ interface Event<Arg, R> {
     fun clear()
 
     fun clearByScope(scope: ScriptPackScope)
+
+    fun clearByScopeAndEnvironment(scope: ScriptPackScope, environment: ScriptEnvironment)
 
     fun hasHandlers(): Boolean
 
@@ -149,6 +156,13 @@ interface Event<Arg, R> {
                 event.clearByScope(scope)
             }
         }
+
+        @JvmStatic
+        fun clearHandlersByScopeAndEnvironment(scope: ScriptPackScope, environment: ScriptEnvironment) {
+            for (event in registry) {
+                event.clearByScopeAndEnvironment(scope, environment)
+            }
+        }
     }
 }
 
@@ -168,6 +182,12 @@ class DelegateEvent<Arg, R>(val invoker: EventInvoker<Arg, R>): Event<Arg, R> {
         entries = es.filter { it.scope != scope }.toTypedArray()
     }
 
+    override fun clearByScopeAndEnvironment(scope: ScriptPackScope, environment: ScriptEnvironment) {
+        val es = entries
+        if (es.isEmpty()) return
+        entries = es.filter { it.scope != scope || it.environment != environment }.toTypedArray()
+    }
+
     override fun hasHandlers(): Boolean = entries.isNotEmpty()
 
     @Volatile
@@ -180,7 +200,8 @@ class DelegateEvent<Arg, R>(val invoker: EventInvoker<Arg, R>): Event<Arg, R> {
         arr[n] = EventHandler(
             handler = h,
             scope = ScriptExecutionContext.currentScriptScope(),
-            owner = ScriptExecutionContext.currentScriptOwner()
+            owner = ScriptExecutionContext.currentScriptOwner(),
+            environment = ScriptExecutionContext.currentScriptEnvironment()
         )
         entries = arr
     }
@@ -213,6 +234,12 @@ class CancellableDelegateEvent<Arg: CancellableEventArg, R>(val invoker: EventIn
         entries = es.filter { it.scope != scope }.toTypedArray()
     }
 
+    override fun clearByScopeAndEnvironment(scope: ScriptPackScope, environment: ScriptEnvironment) {
+        val es = entries
+        if (es.isEmpty()) return
+        entries = es.filter { it.scope != scope || it.environment != environment }.toTypedArray()
+    }
+
     override fun hasHandlers(): Boolean = entries.isNotEmpty()
 
     @Volatile
@@ -225,7 +252,8 @@ class CancellableDelegateEvent<Arg: CancellableEventArg, R>(val invoker: EventIn
         arr[n] = EventHandler(
             handler = h,
             scope = ScriptExecutionContext.currentScriptScope(),
-            owner = ScriptExecutionContext.currentScriptOwner()
+            owner = ScriptExecutionContext.currentScriptOwner(),
+            environment = ScriptExecutionContext.currentScriptEnvironment()
         )
         entries = arr
     }

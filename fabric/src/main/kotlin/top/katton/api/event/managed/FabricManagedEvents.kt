@@ -2,6 +2,7 @@ package top.katton.api.event.managed
 
 import net.fabricmc.fabric.api.event.Event
 import org.slf4j.LoggerFactory
+import top.katton.engine.ScriptEnvironment
 import top.katton.pack.ScriptPackScope
 import top.katton.util.ScriptExecutionContext
 import java.lang.reflect.InvocationTargetException
@@ -36,6 +37,7 @@ object FabricManagedEvents {
         val id: Long,
         val wrapper: Any,
         val scope: ScriptPackScope?,
+        val environment: ScriptEnvironment?,
         @Volatile var active: Boolean
     )
 
@@ -52,6 +54,7 @@ object FabricManagedEvents {
                 handler: (Any) -> Unit
             ): ManagedEventHandle {
                 val id = nextId++
+                val environment = ScriptExecutionContext.currentScriptEnvironment()
                 val wrapper = Proxy.newProxyInstance(
                     eventClass.classLoader,
                     arrayOf(eventClass)
@@ -59,9 +62,11 @@ object FabricManagedEvents {
                     val reg = registrations[id] ?: return@newProxyInstance null
                     if (reg.active && args != null && args.isNotEmpty()) {
                         try {
-                            ScriptExecutionContext.withScope(scope) {
-                                ScriptExecutionContext.withOwner(owner) {
-                                    handler(args[0])
+                            ScriptExecutionContext.withEnvironment(environment) {
+                                ScriptExecutionContext.withScope(scope) {
+                                    ScriptExecutionContext.withOwner(owner) {
+                                        handler(args[0])
+                                    }
                                 }
                             }
                         } catch (t: Throwable) {
@@ -70,7 +75,7 @@ object FabricManagedEvents {
                     }
                     null
                 }
-                val registration = FabricRegistration(id, wrapper, scope, active = true)
+                val registration = FabricRegistration(id, wrapper, scope, environment, active = true)
                 registrations[id] = registration
                 if (scope != null) {
                     scopeRegistrations.getOrPut(scope) { mutableSetOf() }.add(id)
@@ -88,6 +93,18 @@ object FabricManagedEvents {
                 val ids = scopeRegistrations.remove(scope) ?: return
                 ids.forEach { id ->
                     registrations.remove(id)?.active = false
+                }
+            }
+
+            override fun clearByScopeAndEnvironment(scope: ScriptPackScope, environment: ScriptEnvironment) {
+                val ids = scopeRegistrations[scope] ?: return
+                val matchingIds = ids.filter { id -> registrations[id]?.environment == environment }
+                matchingIds.forEach { id ->
+                    registrations.remove(id)?.active = false
+                    ids.remove(id)
+                }
+                if (ids.isEmpty()) {
+                    scopeRegistrations.remove(scope)
                 }
             }
 
@@ -118,6 +135,7 @@ fun <T : Any> registerFabricEvent(
 
     val scope = ScriptExecutionContext.currentScriptScope()
     val owner = ScriptExecutionContext.currentScriptOwner() ?: "unknown"
+    val environment = ScriptExecutionContext.currentScriptEnvironment()
     val iface = callback::class.java
 
     val handle = provider.register(iface, owner, scope, 2, false) { /* handled by proxy */ }
@@ -129,9 +147,11 @@ fun <T : Any> registerFabricEvent(
         val reg = FabricManagedEvents.registrations[handle.id]
         if (reg != null && reg.active) {
             try {
-                ScriptExecutionContext.withScope(scope) {
-                    ScriptExecutionContext.withOwner(owner) {
-                        method.invoke(callback, *(args ?: emptyArray()))
+                ScriptExecutionContext.withEnvironment(environment) {
+                    ScriptExecutionContext.withScope(scope) {
+                        ScriptExecutionContext.withOwner(owner) {
+                            method.invoke(callback, *(args ?: emptyArray()))
+                        }
                     }
                 }
             } catch (t: Throwable) {

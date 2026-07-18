@@ -7,7 +7,7 @@ import top.katton.Katton
 import top.katton.api.clearClientPostEffects
 import top.katton.api.clearClientRenderers
 import top.katton.api.mod.clearItemModifications
-import top.katton.api.event.managed.clearManagedByScope
+import top.katton.api.event.managed.clearManagedByScopeAndEnvironment
 import top.katton.client.ReloadProgressState
 import top.katton.client.ReloadProgressTracker
 import top.katton.client.ScriptPackResourceManager
@@ -61,17 +61,15 @@ object ScriptReloadManager {
         val tracker = ReloadProgressTracker(17)
         tracker.begin("katton.reload.client.begin")
 
-        // Clear all WORLD-scoped handlers and managed listeners, unless we're preserving the integrated server state.
+        // Client and integrated-server registrations share one JVM, so only clear the client-owned entries.
         runOnClientThreadAndWait {
-            val preserveIntegratedServerState = Katton.server != null && !Katton.server!!.isDedicatedServer
-            if (!preserveIntegratedServerState) {
-                Event.clearHandlersByScope(ScriptPackScope.WORLD)
-                tracker.step("katton.reload.client.clear_world_handlers")
-                InjectionManager.beginReload()
-                tracker.step("katton.reload.common.reset_injections")
-            } else {
-                tracker.step("katton.reload.client.preserve_server_handlers")
+            for (scope in CLIENT_RELOAD_SCOPES) {
+                Event.clearHandlersByScopeAndEnvironment(scope, ScriptEnvironment.CLIENT)
+                clearManagedByScopeAndEnvironment(scope, ScriptEnvironment.CLIENT)
+                InjectionManager.beginReload(scope, ScriptEnvironment.CLIENT)
             }
+            tracker.step("katton.reload.client.clear_world_handlers")
+            tracker.step("katton.reload.common.reset_injections")
             clearClientRenderers()
             tracker.step("katton.reload.client.clear_renderers")
             clearClientPostEffects()
@@ -286,11 +284,11 @@ object ScriptReloadManager {
         tracker.step("katton.reload.server.reset_datapack_manager")
         clearItemModifications()
         tracker.step("katton.reload.common.clear_item_modifications")
-        Event.clearHandlersByScope(ScriptPackScope.WORLD)
+        Event.clearHandlersByScopeAndEnvironment(ScriptPackScope.WORLD, ScriptEnvironment.SERVER)
         tracker.step("katton.reload.server.clear_event_handlers")
-        clearManagedByScope(ScriptPackScope.WORLD)
+        clearManagedByScopeAndEnvironment(ScriptPackScope.WORLD, ScriptEnvironment.SERVER)
         tracker.step("katton.reload.server.clear_managed_event_listeners")
-        InjectionManager.beginReload()
+        InjectionManager.beginReload(ScriptPackScope.WORLD, ScriptEnvironment.SERVER)
         tracker.step("katton.reload.common.reset_injections")
 
         val worldOnlyPacks = ScriptPackManager.collectExecutableWorldPacks()
@@ -381,11 +379,11 @@ object ScriptReloadManager {
                 tracker.step("katton.reload.server.reset_datapack_manager")
                 clearItemModifications()
                 tracker.step("katton.reload.common.clear_item_modifications")
-                Event.clearHandlersByScope(ScriptPackScope.WORLD)
+                Event.clearHandlersByScopeAndEnvironment(ScriptPackScope.WORLD, ScriptEnvironment.SERVER)
                 tracker.step("katton.reload.server.clear_event_handlers")
-                clearManagedByScope(ScriptPackScope.WORLD)
+                clearManagedByScopeAndEnvironment(ScriptPackScope.WORLD, ScriptEnvironment.SERVER)
                 tracker.step("katton.reload.server.clear_managed_event_listeners")
-                InjectionManager.beginReload()
+                InjectionManager.beginReload(ScriptPackScope.WORLD, ScriptEnvironment.SERVER)
                 tracker.step("katton.reload.common.reset_injections")
 
                 val worldOnlyPacks = ScriptPackManager.collectExecutableWorldPacks()
@@ -458,4 +456,9 @@ object ScriptReloadManager {
         } catch (_: Exception) {
         }
     }
+
+    private val CLIENT_RELOAD_SCOPES = arrayOf(
+        ScriptPackScope.WORLD,
+        ScriptPackScope.SERVER_CACHE
+    )
 }

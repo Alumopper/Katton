@@ -629,9 +629,11 @@ object ScriptEngine {
                         continue
                     }
 
-                    ScriptExecutionContext.withScope(entryScope) {
-                        ScriptExecutionContext.withOwner("${entryScope.serializedName}:$fqcn") {
-                            invokeEntrypoint(clazz, entrypoint, methodType, environment)
+                    ScriptExecutionContext.withEnvironment(environment) {
+                        ScriptExecutionContext.withScope(entryScope) {
+                            ScriptExecutionContext.withOwner("${entryScope.serializedName}:$fqcn") {
+                                invokeEntrypoint(clazz, entrypoint, methodType, environment)
+                            }
                         }
                     }
                     successCount++
@@ -909,9 +911,19 @@ object ScriptEngine {
     }
 
     private fun runOnClientMainThreadAndWait(action: () -> Unit) {
+        val owner = ScriptExecutionContext.currentScriptOwner()
+        val scope = ScriptExecutionContext.currentScriptScope()
+        val environment = ScriptExecutionContext.currentScriptEnvironment()
+        val contextualAction = {
+            ScriptExecutionContext.withEnvironment(environment) {
+                ScriptExecutionContext.withScope(scope) {
+                    ScriptExecutionContext.withOwner(owner, action)
+                }
+            }
+        }
         val minecraft = runCatching { net.minecraft.client.Minecraft.getInstance() }.getOrNull()
         if (minecraft == null || minecraft.isSameThread) {
-            action()
+            contextualAction()
             return
         }
 
@@ -919,7 +931,7 @@ object ScriptEngine {
         var failure: Throwable? = null
         minecraft.execute {
             try {
-                action()
+                contextualAction()
             } catch (t: Throwable) {
                 failure = t
             } finally {

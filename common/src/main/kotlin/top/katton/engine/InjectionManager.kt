@@ -14,6 +14,8 @@ import java.lang.reflect.Method
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
+import top.katton.pack.ScriptPackScope
+import top.katton.util.ScriptExecutionContext
 
 /**
  * Runtime method injection manager for `unsafe` APIs.
@@ -201,7 +203,9 @@ internal object InjectionManager {
         val id: String,
         val owner: String?,
         val targetKey: String,
-        val phase: Phase
+        val phase: Phase,
+        val scope: ScriptPackScope?,
+        val environment: ScriptEnvironment?
     )
 
     /** Injection phase: before or after target method execution. */
@@ -239,6 +243,24 @@ internal object InjectionManager {
     private fun targetKey(method: Method): String {
         val params = method.parameterTypes.joinToString(",") { it.name }
         return "${method.declaringClass.name}#${method.name}($params)"
+    }
+
+    private fun createHandleMeta(id: String, owner: String?, targetKey: String, phase: Phase) = HandleMeta(
+        id = id,
+        owner = owner,
+        targetKey = targetKey,
+        phase = phase,
+        scope = ScriptExecutionContext.currentScriptScope(),
+        environment = ScriptExecutionContext.currentScriptEnvironment()
+    )
+
+    private fun <R> withHandleContext(id: String, action: () -> R): R {
+        val meta = handles[id]
+        return ScriptExecutionContext.withEnvironment(meta?.environment) {
+            ScriptExecutionContext.withScope(meta?.scope) {
+                ScriptExecutionContext.withOwner(meta?.owner, action)
+            }
+        }
     }
 
     @JvmStatic
@@ -429,7 +451,7 @@ internal object InjectionManager {
         val id = UUID.randomUUID().toString()
         beforeHandlers.computeIfAbsent(key) { CopyOnWriteArrayList() }
             .add(BeforeEntry(id, owner, handler))
-        handles[id] = HandleMeta(id, owner, key, Phase.BEFORE)
+        handles[id] = createHandleMeta(id, owner, key, Phase.BEFORE)
 
         return InjectionHandle(id, owner, method.declaringClass.name, method.name, Phase.BEFORE)
     }
@@ -467,7 +489,7 @@ internal object InjectionManager {
         val id = UUID.randomUUID().toString()
         afterHandlers.computeIfAbsent(key) { CopyOnWriteArrayList() }
             .add(AfterEntry(id, owner, handler))
-        handles[id] = HandleMeta(id, owner, key, Phase.AFTER)
+        handles[id] = createHandleMeta(id, owner, key, Phase.AFTER)
 
         return InjectionHandle(id, owner, method.declaringClass.name, method.name, Phase.AFTER)
     }
@@ -499,7 +521,7 @@ internal object InjectionManager {
         val id = UUID.randomUUID().toString()
         replaceHandlers.computeIfAbsent(key) { CopyOnWriteArrayList() }
             .add(ReplaceEntry(id, owner, handler))
-        handles[id] = HandleMeta(id, owner, key, Phase.REPLACE)
+        handles[id] = createHandleMeta(id, owner, key, Phase.REPLACE)
 
         return InjectionHandle(id, owner, method.declaringClass.name, method.name, Phase.REPLACE)
     }
@@ -538,7 +560,7 @@ internal object InjectionManager {
         val id = UUID.randomUUID().toString()
         redirectHandlers.computeIfAbsent(key) { CopyOnWriteArrayList() }
             .add(RedirectEntry(id, owner, targetMethod.also { it.isAccessible = true }))
-        handles[id] = HandleMeta(id, owner, key, Phase.REDIRECT)
+        handles[id] = createHandleMeta(id, owner, key, Phase.REDIRECT)
 
         return InjectionHandle(id, owner, sourceMethod.declaringClass.name, sourceMethod.name, Phase.REDIRECT)
     }
@@ -569,7 +591,7 @@ internal object InjectionManager {
         val id = UUID.randomUUID().toString()
         constructorBeforeHandlers.computeIfAbsent(key) { CopyOnWriteArrayList() }
             .add(ConstructorBeforeEntry(id, owner, handler))
-        handles[id] = HandleMeta(id, owner, key, Phase.CONSTRUCTOR_BEFORE)
+        handles[id] = createHandleMeta(id, owner, key, Phase.CONSTRUCTOR_BEFORE)
 
         return InjectionHandle(id, owner, constructor.declaringClass.name, "<init>", Phase.CONSTRUCTOR_BEFORE)
     }
@@ -600,7 +622,7 @@ internal object InjectionManager {
         val id = UUID.randomUUID().toString()
         constructorAfterHandlers.computeIfAbsent(key) { CopyOnWriteArrayList() }
             .add(ConstructorAfterEntry(id, owner, handler))
-        handles[id] = HandleMeta(id, owner, key, Phase.CONSTRUCTOR_AFTER)
+        handles[id] = createHandleMeta(id, owner, key, Phase.CONSTRUCTOR_AFTER)
 
         return InjectionHandle(id, owner, constructor.declaringClass.name, "<init>", Phase.CONSTRUCTOR_AFTER)
     }
@@ -645,6 +667,14 @@ internal object InjectionManager {
     }
 
     @JvmStatic
+    fun beginReload(scope: ScriptPackScope, environment: ScriptEnvironment) {
+        handles.values
+            .filter { it.scope == scope && it.environment == environment }
+            .map { it.id }
+            .forEach(::rollback)
+    }
+
+    @JvmStatic
     /**
      * Advice enter dispatcher.
      */
@@ -654,9 +684,11 @@ internal object InjectionManager {
         val replaceEntry = replaceHandlers[key]?.lastOrNull()
         if (replaceEntry != null) {
             runCatching {
-                val invocation = InjectionInvocation(method, instance, args, replaceEntry.owner).bindEnter(enterControl)
-                val replaced = replaceEntry.handler(invocation)
-                invocation.cancelWith(replaced)
+                withHandleContext(replaceEntry.id) {
+                    val invocation = InjectionInvocation(method, instance, args, replaceEntry.owner).bindEnter(enterControl)
+                    val replaced = replaceEntry.handler(invocation)
+                    invocation.cancelWith(replaced)
+                }
             }.onFailure {
                 logger.error("[Katton Unsafe] replace handler failed at {}", key, it)
             }
@@ -665,11 +697,13 @@ internal object InjectionManager {
         val redirectEntry = redirectHandlers[key]?.lastOrNull()
         if (redirectEntry != null) {
             runCatching {
-                val invocation = InjectionInvocation(method, instance, args, redirectEntry.owner).bindEnter(enterControl)
-                val target = redirectEntry.target
-                val receiver = if (java.lang.reflect.Modifier.isStatic(target.modifiers)) null else instance
-                val redirected = target.invoke(receiver, *args)
-                invocation.cancelWith(redirected)
+                withHandleContext(redirectEntry.id) {
+                    val invocation = InjectionInvocation(method, instance, args, redirectEntry.owner).bindEnter(enterControl)
+                    val target = redirectEntry.target
+                    val receiver = if (java.lang.reflect.Modifier.isStatic(target.modifiers)) null else instance
+                    val redirected = target.invoke(receiver, *args)
+                    invocation.cancelWith(redirected)
+                }
             }.onFailure {
                 logger.error("[Katton Unsafe] redirect handler failed at {}", key, it)
             }
@@ -678,7 +712,9 @@ internal object InjectionManager {
         val entries = beforeHandlers[key] ?: return
         for (entry in entries) {
             runCatching {
-                entry.handler(InjectionInvocation(method, instance, args, entry.owner).bindEnter(enterControl))
+                withHandleContext(entry.id) {
+                    entry.handler(InjectionInvocation(method, instance, args, entry.owner).bindEnter(enterControl))
+                }
             }.onFailure {
                 logger.error("[Katton Unsafe] before handler failed at {}", key, it)
             }
@@ -701,11 +737,13 @@ internal object InjectionManager {
         val entries = afterHandlers[key] ?: return
         for (entry in entries) {
             runCatching {
-                entry.handler(
-                    InjectionInvocation(method, instance, args, entry.owner).bindExit(exitControl),
-                    result,
-                    throwable
-                )
+                withHandleContext(entry.id) {
+                    entry.handler(
+                        InjectionInvocation(method, instance, args, entry.owner).bindExit(exitControl),
+                        result,
+                        throwable
+                    )
+                }
             }.onFailure {
                 logger.error("[Katton Unsafe] after handler failed at {}", key, it)
             }
@@ -718,7 +756,9 @@ internal object InjectionManager {
         val entries = constructorBeforeHandlers[key] ?: return
         for (entry in entries) {
             runCatching {
-                entry.handler(ConstructorInvocation(constructor, instance, args, entry.owner))
+                withHandleContext(entry.id) {
+                    entry.handler(ConstructorInvocation(constructor, instance, args, entry.owner))
+                }
             }.onFailure {
                 logger.error("[Katton Unsafe] constructor before handler failed at {}", key, it)
             }
@@ -731,7 +771,9 @@ internal object InjectionManager {
         val entries = constructorAfterHandlers[key] ?: return
         for (entry in entries) {
             runCatching {
-                entry.handler(ConstructorInvocation(constructor, instance, args, entry.owner))
+                withHandleContext(entry.id) {
+                    entry.handler(ConstructorInvocation(constructor, instance, args, entry.owner))
+                }
             }.onFailure {
                 logger.error("[Katton Unsafe] constructor after handler failed at {}", key, it)
             }

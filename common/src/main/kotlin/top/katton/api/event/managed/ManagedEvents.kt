@@ -1,5 +1,6 @@
 package top.katton.api.event.managed
 
+import top.katton.engine.ScriptEnvironment
 import top.katton.pack.ScriptPackScope
 import top.katton.util.ScriptExecutionContext
 
@@ -15,6 +16,7 @@ data class ManagedEventHandle(
 /**
  * Platform bridge for managed native event listeners.
  * Paper, Fabric, and NeoForge can provide their own implementation through [provider].
+ * Implementations track scope and environment so integrated client and server listeners can reload independently.
  *
  * 事件会按脚本所有者和作用域记录。WORLD/SERVER_CACHE 作用域会在重载或清理时自动移除，
  * GLOBAL 作用域需要显式注销或在全局清理时移除。
@@ -31,6 +33,7 @@ interface ManagedListenerProvider {
 
     fun unregister(handle: ManagedEventHandle)
     fun clearByScope(scope: ScriptPackScope)
+    fun clearByScopeAndEnvironment(scope: ScriptPackScope, environment: ScriptEnvironment)
     fun clearAll()
 }
 
@@ -87,6 +90,10 @@ fun unregisterEvent(handle: ManagedEventHandle) {
  */
 fun clearManagedByScope(scope: ScriptPackScope) {
     provider?.clearByScope(scope)
+}
+
+fun clearManagedByScopeAndEnvironment(scope: ScriptPackScope, environment: ScriptEnvironment) {
+    provider?.clearByScopeAndEnvironment(scope, environment)
 }
 
 /**

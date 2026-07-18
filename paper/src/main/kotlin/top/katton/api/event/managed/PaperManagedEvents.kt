@@ -6,6 +6,7 @@ import org.bukkit.event.HandlerList
 import org.bukkit.plugin.EventExecutor
 import org.bukkit.plugin.java.JavaPlugin
 import org.slf4j.LoggerFactory
+import top.katton.engine.ScriptEnvironment
 import top.katton.pack.ScriptPackScope
 import top.katton.util.ScriptExecutionContext
 
@@ -58,14 +59,17 @@ object PaperManagedEvents {
                 handler: (Any) -> Unit
             ): ManagedEventHandle {
                 val id = nextId++
+                val environment = ScriptExecutionContext.currentScriptEnvironment()
 
                 val listener = object : org.bukkit.event.Listener {}
 
                 val executor = EventExecutor { _, event ->
                     try {
-                        ScriptExecutionContext.withScope(scope) {
-                            ScriptExecutionContext.withOwner(owner) {
-                                handler(event)
+                        ScriptExecutionContext.withEnvironment(environment) {
+                            ScriptExecutionContext.withScope(scope) {
+                                ScriptExecutionContext.withOwner(owner) {
+                                    handler(event)
+                                }
                             }
                         }
                     } catch (t: Throwable) {
@@ -83,7 +87,7 @@ object PaperManagedEvents {
                     ignoreCancelled
                 )
 
-                val registration = ManagedRegistration(id, eventClass, listener, scope)
+                val registration = ManagedRegistration(id, eventClass, listener, scope, environment)
                 registrations[id] = registration
                 if (scope != null) {
                     scopeRegistrations.getOrPut(scope) { mutableSetOf() }.add(id)
@@ -102,6 +106,18 @@ object PaperManagedEvents {
                 val ids = scopeRegistrations.remove(scope) ?: return
                 ids.forEach { id ->
                     registrations.remove(id)?.let { HandlerList.unregisterAll(it.listener) }
+                }
+            }
+
+            override fun clearByScopeAndEnvironment(scope: ScriptPackScope, environment: ScriptEnvironment) {
+                val ids = scopeRegistrations[scope] ?: return
+                val matchingIds = ids.filter { id -> registrations[id]?.environment == environment }
+                matchingIds.forEach { id ->
+                    registrations.remove(id)?.let { HandlerList.unregisterAll(it.listener) }
+                    ids.remove(id)
+                }
+                if (ids.isEmpty()) {
+                    scopeRegistrations.remove(scope)
                 }
             }
 
@@ -133,6 +149,7 @@ object PaperManagedEvents {
         val id: Long,
         val eventClass: Class<*>,
         val listener: org.bukkit.event.Listener,
-        val scope: ScriptPackScope?
+        val scope: ScriptPackScope?,
+        val environment: ScriptEnvironment?
     )
 }
