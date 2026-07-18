@@ -1,6 +1,14 @@
 package top.katton.util
 
 import com.mojang.logging.LogUtils
+/*? if mc_26_2 {*/
+import net.minecraft.advancements.predicates.MinMaxBounds
+import net.minecraft.advancements.predicates.MinMaxBounds.FloatDegrees
+import net.minecraft.core.registries.BuiltInRegistries
+/*?} else {*/
+/*import net.minecraft.advancements.criterion.MinMaxBounds*/
+/*import net.minecraft.advancements.criterion.MinMaxBounds.FloatDegrees*/
+/*?}*/
 import net.minecraft.commands.arguments.selector.EntitySelector
 import net.minecraft.commands.arguments.selector.EntitySelectorParser
 import net.minecraft.nbt.CompoundTag
@@ -12,6 +20,9 @@ import net.minecraft.server.level.ServerPlayer
 import net.minecraft.tags.TagKey
 import net.minecraft.world.entity.Entity
 import net.minecraft.world.entity.EntityType
+/*? if mc_26_2 {*/
+import net.minecraft.world.entity.EntityTypes
+/*?}*/
 import net.minecraft.world.level.GameType
 import net.minecraft.world.level.storage.loot.LootContext
 import net.minecraft.world.level.storage.loot.LootParams
@@ -21,9 +32,20 @@ import net.minecraft.world.level.storage.loot.predicates.LootItemCondition
 import net.minecraft.world.phys.AABB
 import net.minecraft.world.phys.Vec3
 import top.katton.api.dpcaller.getEntityNbt
-import top.katton.compat.EntitySelectorCompat
 import java.util.*
 import java.util.function.Predicate
+
+/*? if mc_26_2 {*/
+private fun playerEntityType(): EntityType<*> = EntityTypes.PLAYER
+/*?} else {*/
+/*private fun playerEntityType(): EntityType<*> = EntityType.PLAYER*/
+/*?}*/
+
+/*? if mc_26_2 {*/
+private fun entityTypeById(id: Identifier): EntityType<*>? = BuiltInRegistries.ENTITY_TYPE.getOptional(id).orElse(null)
+/*?} else {*/
+/*private fun entityTypeById(id: Identifier): EntityType<*>? = EntityType.byString(id.toString()).orElse(null)*/
+/*?}*/
 
 /**
  * Builder class for creating EntitySelector instances with a fluent API.
@@ -34,16 +56,16 @@ class EntitySelectorBuilder {
     private var maxResults = 0
     private var includesEntities = false
     private var worldLimited = false
-    private var distance: EntitySelectorCompat.DoubleBounds? = null
-    private var level: EntitySelectorCompat.IntBounds? = null
+    private var distance: MinMaxBounds.Doubles? = null
+    private var level: MinMaxBounds.Ints? = null
     private var x: Double? = null
     private var y: Double? = null
     private var z: Double? = null
     private var deltaX: Double? = null
     private var deltaY: Double? = null
     private var deltaZ: Double? = null
-    private var rotX: EntitySelectorCompat.FloatDegreesBounds? = null
-    private var rotY: EntitySelectorCompat.FloatDegreesBounds? = null
+    private var rotX: FloatDegrees? = null
+    private var rotY: FloatDegrees? = null
     private val predicates: MutableList<Predicate<Entity>> = ArrayList()
     private var order = EntitySelector.ORDER_ARBITRARY
     private var namePredicate: Predicate<Entity>? = null
@@ -68,7 +90,7 @@ class EntitySelectorBuilder {
     fun type(entityType: EntityType<*>, inverse: Boolean = false): EntitySelectorBuilder {
         this.type = entityType
         this.typeInverse = inverse
-        if(entityType == EntitySelectorCompat.playerEntityType() && !inverse){
+        if(entityType == playerEntityType() && !inverse){
             this.includesEntities = false
         }
         return this
@@ -199,7 +221,7 @@ class EntitySelectorBuilder {
             LOGGER.error("Min distance cannot be greater than max distance")
             return this
         }
-        this.distance = EntitySelectorCompat.doublesBetween(minDistance, maxDistance)
+        this.distance = MinMaxBounds.Doubles.between(minDistance, maxDistance)
         this.worldLimited = true
         return this
     }
@@ -212,7 +234,7 @@ class EntitySelectorBuilder {
             LOGGER.error("Distance cannot be negative")
             return this
         }
-        this.distance = EntitySelectorCompat.doublesAtMost(maxDistance)
+        this.distance = MinMaxBounds.Doubles.atMost(maxDistance)
         this.worldLimited = true
         return this
     }
@@ -225,7 +247,7 @@ class EntitySelectorBuilder {
             LOGGER.error("Distance cannot be negative")
             return this
         }
-        this.distance = EntitySelectorCompat.doublesAtLeast(minDistance)
+        this.distance = MinMaxBounds.Doubles.atLeast(minDistance)
         this.worldLimited = true
         return this
     }
@@ -242,7 +264,7 @@ class EntitySelectorBuilder {
             LOGGER.error("Min level cannot be greater than max level")
             return this
         }
-        this.level = EntitySelectorCompat.intsBetween(minLevel, maxLevel)
+        this.level = MinMaxBounds.Ints.between(minLevel, maxLevel)
         this.includesEntities = false
         return this
     }
@@ -255,7 +277,7 @@ class EntitySelectorBuilder {
             LOGGER.error("Level cannot be negative")
             return this
         }
-        this.level = EntitySelectorCompat.intsAtMost(maxLevel)
+        this.level = MinMaxBounds.Ints.atMost(maxLevel)
         this.includesEntities = false
         return this
     }
@@ -268,7 +290,7 @@ class EntitySelectorBuilder {
             LOGGER.error("Level cannot be negative")
             return this
         }
-        this.level = EntitySelectorCompat.intsAtLeast(minLevel)
+        this.level = MinMaxBounds.Ints.atLeast(minLevel)
         this.includesEntities = false
         return this
     }
@@ -281,7 +303,7 @@ class EntitySelectorBuilder {
             LOGGER.error("Min rotation cannot be greater than max rotation")
             return this
         }
-        this.rotX = EntitySelectorCompat.floatDegreesBetween(minDegrees, maxDegrees)
+        this.rotX = FloatDegrees(MinMaxBounds.Bounds<Float>(Optional.of(minDegrees), Optional.of(maxDegrees)))
         return this
     }
 
@@ -293,7 +315,7 @@ class EntitySelectorBuilder {
             LOGGER.error("Min rotation cannot be greater than max rotation")
             return this
         }
-        this.rotY = EntitySelectorCompat.floatDegreesBetween(minDegrees, maxDegrees)
+        this.rotY = FloatDegrees(MinMaxBounds.Bounds<Float>(Optional.of(minDegrees), Optional.of(maxDegrees)))
         return this
     }
 
@@ -353,7 +375,7 @@ class EntitySelectorBuilder {
      * Filter target selection based on entity type. If inverse is true, selects entities that are NOT of the specified type.
      */
     fun type(type: Identifier, inverse: Boolean = false): EntitySelectorBuilder {
-        val entityType = EntitySelectorCompat.entityTypeById(type)
+        val entityType = entityTypeById(type)
         if(entityType == null) {
             LOGGER.error("Invalid entity type: $type")
             return this
@@ -490,7 +512,7 @@ class EntitySelectorBuilder {
     fun create(): EntitySelector {
         var aABB: AABB?
 		if (this.deltaX == null && this.deltaY == null && this.deltaZ == null) {
-            val maxDistance = EntitySelectorCompat.maxDistance(this.distance)
+            val maxDistance = this.distance?.bounds()?.max()?.orElse(null)
             if (maxDistance != null) {
                 val d = maxDistance
 				aABB = AABB(-d, -d, -d, d + 1.0, d + 1.0, d + 1.0);
@@ -510,7 +532,7 @@ class EntitySelectorBuilder {
 		} else {
             { vec3: Vec3 -> Vec3(if(this.x == null) vec3.x else this.x!!, if(this.y == null) vec3.y else this.y!!, if(this.z == null) vec3.z else this.z!!) }
 		}
-        return EntitySelectorCompat.createSelector(
+        return EntitySelector(
 			this.maxResults,
 			this.includesEntities,
 			this.worldLimited,
@@ -519,7 +541,11 @@ class EntitySelectorBuilder {
 			function,
 			aABB,
 			this.order,
-			this.type
+			false,
+			null,
+			null,
+			this.type,
+			true
 		);
     }
 
@@ -547,7 +573,7 @@ class EntitySelectorBuilder {
             return EntitySelectorBuilder().apply {
                 maxResults = Int.MAX_VALUE
                 includesEntities = false
-            }.type(EntitySelectorCompat.playerEntityType())
+            }.type(playerEntityType())
         }
 
         /**
@@ -568,7 +594,7 @@ class EntitySelectorBuilder {
                 maxResults = 1
                 includesEntities = false
 
-            }.orderNearest().type(EntitySelectorCompat.playerEntityType())
+            }.orderNearest().type(playerEntityType())
         }
 
         /**
@@ -598,7 +624,7 @@ class EntitySelectorBuilder {
             return EntitySelectorBuilder().apply {
                 maxResults = 1
                 includesEntities = false
-            }.orderRandom().type(EntitySelectorCompat.playerEntityType())
+            }.orderRandom().type(playerEntityType())
         }
     }
 

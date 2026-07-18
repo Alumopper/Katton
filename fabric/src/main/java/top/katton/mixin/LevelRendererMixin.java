@@ -6,7 +6,9 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.renderer.LevelRenderer;
 import net.minecraft.client.renderer.SubmitNodeCollector;
-import net.minecraft.client.renderer.chunk.ChunkSectionsToRender;
+/*? if mc_26_1_2 {*/
+/*import net.minecraft.client.renderer.chunk.ChunkSectionsToRender;*/
+/*?}*/
 import net.minecraft.client.renderer.state.level.CameraRenderState;
 import net.minecraft.client.renderer.state.level.LevelRenderState;
 import org.joml.Matrix4fc;
@@ -23,14 +25,21 @@ import top.katton.client.ClientItemRenderMarkerManager;
 public class LevelRendererMixin {
     @Unique
     private float katton$tickDelta;
-
-    @Inject(method = "renderLevel", at = @At("HEAD"))
-    private void katton$captureTickDelta(GraphicsResourceAllocator resourceAllocator, DeltaTracker deltaTracker, boolean renderOutline, CameraRenderState cameraState, Matrix4fc modelViewMatrix, GpuBufferSlice terrainFog, Vector4f fogColor, boolean shouldRenderSky, ChunkSectionsToRender chunkSectionsToRender, CallbackInfo ci) {
+    /*? if mc_26_2 {*/
+    @Inject(method = "render", at = @At("HEAD"))
+    /*?} else {*/
+    /*@Inject(method = "renderLevel", at = @At("HEAD"))*/
+    /*?}*/
+    private void katton$captureTickDelta(GraphicsResourceAllocator resourceAllocator, DeltaTracker deltaTracker, boolean renderOutline, CameraRenderState cameraState, Matrix4fc modelViewMatrix, GpuBufferSlice terrainFog, Vector4f fogColor, boolean shouldRenderSky, CallbackInfo ci) {
         this.katton$tickDelta = deltaTracker.getGameTimeDeltaPartialTick(false);
     }
 
-    @Inject(method = "renderLevel", at = @At("TAIL"))
-    private void katton$renderWorld(GraphicsResourceAllocator resourceAllocator, DeltaTracker deltaTracker, boolean renderOutline, CameraRenderState cameraState, Matrix4fc modelViewMatrix, GpuBufferSlice terrainFog, Vector4f fogColor, boolean shouldRenderSky, ChunkSectionsToRender chunkSectionsToRender, CallbackInfo ci) {
+    /*? if mc_26_2 {*/
+    @Inject(method = "render", at = @At("HEAD"))
+    /*?} else {*/
+    /*@Inject(method = "renderLevel", at = @At("TAIL"))*/
+    /*?}*/
+    private void katton$renderWorld(GraphicsResourceAllocator resourceAllocator, DeltaTracker deltaTracker, boolean renderOutline, CameraRenderState cameraState, Matrix4fc modelViewMatrix, GpuBufferSlice terrainFog, Vector4f fogColor, boolean shouldRenderSky, CallbackInfo ci) {
         KattonClientRenderApiKt.dispatchWorldRender(cameraState, this.katton$tickDelta);
     }
 

@@ -16,7 +16,6 @@ import net.minecraft.server.packs.resources.ReloadableResourceManager
 import net.minecraft.util.Unit as MinecraftUnit
 import net.minecraft.util.Util
 import net.minecraft.world.flag.FeatureFlagSet
-import top.katton.compat.ClientApiCompat
 import top.katton.pack.ScriptPack
 import top.katton.pack.ScriptPackKind
 import top.katton.pack.ScriptPackScope
@@ -232,7 +231,11 @@ object ScriptPackResourceManager {
 
     private fun runAfterReload(mc: Minecraft) {
         val task = Runnable {
-            ClientApiCompat.resetLevelRenderer(mc)
+            /*? if mc_26_2 {*/
+            mc.levelExtractor.allChanged()
+            /*?} else {*/
+            /*mc.levelRenderer.allChanged()*/
+            /*?}*/
             ClientPostEffectManager.invalidatePostChainCache()
         }
         if (mc.isSameThread) {

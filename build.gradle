@@ -31,39 +31,6 @@ def activeStonecutterVersionProvider = providers
     .map { it.trim() }
     .orElse('26.2')
 
-def manifoldIdeDefinitionsFile = layout.projectDirectory.file('common/src/manifold/java/build.properties')
-def syncManifoldIdeDefinitions = tasks.register('syncManifoldIdeDefinitions') {
-    group = 'ide'
-    description = 'Synchronize Manifold IDE preprocessor symbols with stonecutter.active.'
-    inputs.file(layout.projectDirectory.file('stonecutter.active'))
-    outputs.file(manifoldIdeDefinitionsFile)
-
-    doLast {
-        def activeVersion = layout.projectDirectory.file('stonecutter.active').asFile.getText('UTF-8').trim()
-        if (!(activeVersion in ['26.1.2', '26.2'])) {
-            throw new GradleException("Unsupported active Minecraft version: ${activeVersion}")
-        }
-
-        def definitionsFile = manifoldIdeDefinitionsFile.asFile
-        definitionsFile.parentFile.mkdirs()
-        def definitions = "# Generated from stonecutter.active. Do not edit.\nMC_VERSION=${activeVersion}\n"
-        if (!definitionsFile.exists() || definitionsFile.getText('UTF-8') != definitions) {
-            definitionsFile.setText(definitions, 'UTF-8')
-        }
-    }
-}
-
-gradle.projectsEvaluated {
-    allprojects { candidate ->
-        candidate.tasks.matching { it.name == 'ideaSyncTask' }.configureEach {
-            dependsOn syncManifoldIdeDefinitions
-        }
-        candidate.tasks.matching { it.name.startsWith('stonecutterSwitchTo') }.configureEach {
-            finalizedBy syncManifoldIdeDefinitions
-        }
-    }
-}
-
 def isSnapshotVersion = provider { project.version.toString().endsWith('-SNAPSHOT') }
 def nexusBaseUrl = providers.gradleProperty('nexusBaseUrl').orElse('https://nexus.mcfpp.top')
 def nexusReleasesRepository = providers.gradleProperty('nexusReleasesRepository').orElse('maven-releases')

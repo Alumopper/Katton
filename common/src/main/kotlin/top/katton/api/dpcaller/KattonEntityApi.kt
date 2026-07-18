@@ -31,11 +31,32 @@ import net.minecraft.world.phys.Vec2
 import net.minecraft.world.phys.Vec3
 import top.katton.api.LOGGER
 import top.katton.api.requireServer
-import top.katton.compat.EntityApiCompat
 import top.katton.util.EventHandler
 import top.katton.util.ScriptExecutionContext
 import java.util.*
 import kotlin.jvm.optionals.getOrNull
+
+/*? if mc_26_2 {*/
+private fun isPlayerEntityType(type: EntityType<*>): Boolean = type == EntityTypes.PLAYER
+/*?} else {*/
+/*private fun isPlayerEntityType(type: EntityType<*>): Boolean = type == EntityType.PLAYER*/
+/*?}*/
+
+/*? if mc_26_2 {*/
+private fun loadEntityRecursiveCompat(
+    tag: CompoundTag,
+    level: Level,
+    reason: EntitySpawnReason,
+    processor: EntityProcessor
+): Entity? = EntityType.loadEntityRecursive(tag, level, EntitySpawnRequest(reason, false), processor)
+/*?} else {*/
+/*private fun loadEntityRecursiveCompat(
+    tag: CompoundTag,
+    level: Level,
+    reason: EntitySpawnReason,
+    processor: EntityProcessor
+): Entity? = EntityType.loadEntityRecursive(tag, level, reason, processor)*/
+/*?}*/
 
 /**
  * %en
@@ -582,7 +603,7 @@ fun mount(passenger: Entity, vehicle: Entity): Boolean {
     if(exisingVehicle != null){
         LOGGER.error("${passenger.displayName} is already riding in ${exisingVehicle.displayName}")
         return false
-    }else if(EntityApiCompat.isPlayerEntityType(vehicle.type)){
+    }else if(isPlayerEntityType(vehicle.type)){
         LOGGER.error("Players can't be ridden")
     }else if(passenger.selfAndPassengers.anyMatch { it == vehicle }) {
         LOGGER.error("Can't mount entity on itself or any of its passengers")
@@ -782,7 +803,7 @@ fun summon(
             CompoundTag()
         }
         compoundTag2.putString("id", reference.key().identifier().toString())
-        val entity: Entity? = EntityApiCompat.loadEntityRecursive(
+        val entity: Entity? = loadEntityRecursiveCompat(
             compoundTag2,
             level,
             EntitySpawnReason.COMMAND

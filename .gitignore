@@ -52,6 +52,3 @@ temp_classes/
 /example
 /.opencode
 /output/
-
-# Generated from stonecutter.active for Manifold's IntelliJ preprocessor.
-/common/src/manifold/java/build.properties
