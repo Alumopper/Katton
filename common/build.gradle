@@ -2,10 +2,11 @@ apply plugin: 'org.jetbrains.kotlin.jvm'
 apply plugin: 'maven-publish'
 apply plugin: 'net.fabricmc.fabric-loom'
 
-group = project.maven_group
-version = project.mod_version
-
 def targetMinecraftVersion = stonecutter.current.version
+group = project.maven_group
+version = rootProject.ext.minecraftMavenVersion(targetMinecraftVersion)
+ext.useLeanMavenPublication = true
+
 def platformName = project.parent?.name ?: project.name
 
 base {
@@ -57,4 +58,33 @@ tasks.withType(Javadoc).configureEach {
     options.charSet = 'UTF-8'
     options.addBooleanOption('Xdoclint:none', true)
     options.addBooleanOption('quiet', true)
+}
+
+def mavenJar = tasks.register('mavenJar', Jar) {
+    group = 'build'
+    description = 'Assembles the plain library jar used for Maven publication.'
+    archiveBaseName = platformName
+    archiveVersion = project.version.toString()
+    destinationDirectory = layout.buildDirectory.dir('maven-libs').get().asFile
+    from(sourceSets.main.output)
+}
+
+def mavenSourcesJar = tasks.register('mavenSourcesJar', Jar) {
+    group = 'build'
+    description = 'Assembles the plain sources jar used for Maven publication.'
+    archiveBaseName = platformName
+    archiveVersion = project.version.toString()
+    archiveClassifier = 'sources'
+    destinationDirectory = layout.buildDirectory.dir('maven-libs').get().asFile
+    from(sourceSets.main.allSource)
+}
+
+publishing {
+    publications.withType(MavenPublication).configureEach {
+        setArtifacts([
+            mavenJar.get(),
+            mavenSourcesJar.get(),
+            tasks.named('javadocJar').get()
+        ])
+    }
 }

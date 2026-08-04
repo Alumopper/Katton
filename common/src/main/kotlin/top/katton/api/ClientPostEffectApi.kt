@@ -7,14 +7,14 @@ import top.katton.client.ClientPostEffectManager
 
 /**
  * %en
- * Register a runtime client post effect from Minecraft 26.1 post-effect JSON.
+ * Register a runtime client post effect from Minecraft 26.x post-effect JSON.
  *
  * The JSON is the same format used by resource packs at
  * `assets/<namespace>/post_effect/<path>.json`. Custom shader ids referenced
  * from that JSON can be supplied through [fragmentShaders] and [vertexShaders].
  *
  * %zh
- * 注册一个运行时客户端 post effect，读取 Minecraft 26.1 的 post-effect JSON。
+ * 注册一个运行时客户端 post effect，读取 Minecraft 26.x 的 post-effect JSON。
  *
  * 该 JSON 与资源包中的 `assets/<namespace>/post_effect/<path>.json` 格式一致。
  * JSON 中引用的自定义 shader id 可以通过 [fragmentShaders] 和 [vertexShaders] 提供。

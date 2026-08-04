@@ -1,7 +1,7 @@
 buildscript {
     repositories {
         mavenCentral()
-        maven { url 'https://maven.fabricmc.net/' }
+        maven { url = uri('https://maven.fabricmc.net/') }
     }
     dependencies {
         classpath "net.fabricmc:fabric-loom:${loom_version}"
@@ -11,15 +11,13 @@ buildscript {
 apply plugin: 'org.jetbrains.kotlin.jvm'
 apply plugin: 'java-library'
 apply plugin: 'net.fabricmc.fabric-loom'
-if (stonecutter.current.isActive) {
-    apply plugin: 'maven-publish'
-}
+apply plugin: 'maven-publish'
 
-version = project.mod_version
+def targetMinecraftVersion = stonecutter.current.version
+version = rootProject.ext.minecraftMavenVersion(targetMinecraftVersion)
 group = project.maven_group
 ext.useLeanMavenPublication = true
 
-def targetMinecraftVersion = stonecutter.current.version
 def commonProject = project(":common:${stonecutter.current.project}")
 def commonMainSourceSet = commonProject.sourceSets.main
 def platformName = project.parent?.name ?: project.name
@@ -30,7 +28,7 @@ base {
 
 repositories {
     mavenCentral()
-    maven { url 'https://maven.fabricmc.net/' }
+    maven { url = uri('https://maven.fabricmc.net/') }
 }
 
 loom {
@@ -106,7 +104,7 @@ tasks.named('compileKotlin') {
 
 tasks.named('jar', Jar) {
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
-    archiveFileName = "${platformName}-katton-${project.version}-${stonecutter.current.project}.jar"
+    archiveFileName = "${platformName}-katton-${project.version}.jar"
     destinationDirectory = rootProject.layout.buildDirectory
     from(commonMainSourceSet.output)
 }
@@ -142,77 +140,71 @@ def mavenSourcesJar = tasks.register('mavenSourcesJar', Jar) {
     from(sourceSets.main.allSource)
 }
 
-if (stonecutter.current.isActive) {
-    publishing {
-        publications.withType(MavenPublication).configureEach {
-            setArtifacts([
-                mavenJar.get(),
-                mavenSourcesJar.get(),
-                tasks.named('javadocJar').get()
-            ])
-            pom.withXml {
-                def root = asNode()
-                def dependencySections = root.children().findAll { it instanceof Node && it.name() == 'dependencies' }
-                def dependenciesNode
+publishing {
+    publications.withType(MavenPublication).configureEach {
+        setArtifacts([
+            mavenJar.get(),
+            mavenSourcesJar.get(),
+            tasks.named('javadocJar').get()
+        ])
+        pom.withXml {
+            def root = asNode()
+            def dependencySections = root.children().findAll { it instanceof Node && it.name() == 'dependencies' }
+            def dependenciesNode
 
-                if (dependencySections.size() > 1) {
-                    def mergedDependencies = [:]
-                    dependencySections.each { section ->
-                        section.children()
-                            .findAll { it instanceof Node && it.name() == 'dependency' }
-                            .each { dependency ->
-                                def groupId = dependency.get('groupId')?.text()
-                                def artifactId = dependency.get('artifactId')?.text()
-                                def version = dependency.get('version')?.text()
-                                def scope = dependency.get('scope')?.text()
-                                def key = "${groupId}:${artifactId}"
-                                def existing = mergedDependencies[key]
+            if (dependencySections.size() > 1) {
+                def mergedDependencies = [:]
+                dependencySections.each { section ->
+                    section.children()
+                        .findAll { it instanceof Node && it.name() == 'dependency' }
+                        .each { dependency ->
+                            def groupId = dependency.get('groupId')?.text()
+                            def artifactId = dependency.get('artifactId')?.text()
+                            def version = dependency.get('version')?.text()
+                            def scope = dependency.get('scope')?.text()
+                            def key = "${groupId}:${artifactId}"
+                            def existing = mergedDependencies[key]
 
-                                if (existing == null || (existing.scope == 'runtime' && scope == 'compile')) {
-                                    mergedDependencies[key] = [groupId: groupId, artifactId: artifactId, version: version, scope: scope]
-                                }
+                            if (existing == null || (existing.scope == 'runtime' && scope == 'compile')) {
+                                mergedDependencies[key] = [groupId: groupId, artifactId: artifactId, version: version, scope: scope]
                             }
-                    }
-
-                    dependencySections.each { root.remove(it) }
-                    dependenciesNode = root.appendNode('dependencies')
-                    mergedDependencies.values().each { dependency ->
-                        def dependencyNode = dependenciesNode.appendNode('dependency')
-                        dependencyNode.appendNode('groupId', dependency.groupId)
-                        dependencyNode.appendNode('artifactId', dependency.artifactId)
-                        if (dependency.version) {
-                            dependencyNode.appendNode('version', dependency.version)
                         }
-                        if (dependency.scope) {
-                            dependencyNode.appendNode('scope', dependency.scope)
-                        }
-                    }
-                } else {
-                    dependenciesNode = dependencySections ? dependencySections[0] : root.appendNode('dependencies')
                 }
 
-                def commonArtifactId = "${rootProject.findProperty('archives_base_name')}-common"
-                def hasCommonDependency = dependenciesNode.children()
-                    .findAll { it instanceof Node && it.name() == 'dependency' }
-                    .any { dependency ->
-                        dependency.get('groupId')?.text() == project.group.toString() &&
-                            dependency.get('artifactId')?.text() == commonArtifactId
+                dependencySections.each { root.remove(it) }
+                dependenciesNode = root.appendNode('dependencies')
+                mergedDependencies.values().each { dependency ->
+                    def dependencyNode = dependenciesNode.appendNode('dependency')
+                    dependencyNode.appendNode('groupId', dependency.groupId)
+                    dependencyNode.appendNode('artifactId', dependency.artifactId)
+                    if (dependency.version) {
+                        dependencyNode.appendNode('version', dependency.version)
                     }
-
-                if (!hasCommonDependency) {
-                    def commonDependency = dependenciesNode.appendNode('dependency')
-                    commonDependency.appendNode('groupId', project.group.toString())
-                    commonDependency.appendNode('artifactId', commonArtifactId)
-                    commonDependency.appendNode('version', project.version.toString())
-                    commonDependency.appendNode('scope', 'compile')
+                    if (dependency.scope) {
+                        dependencyNode.appendNode('scope', dependency.scope)
+                    }
                 }
+            } else {
+                dependenciesNode = dependencySections ? dependencySections[0] : root.appendNode('dependencies')
+            }
+
+            def commonArtifactId = "${rootProject.findProperty('archives_base_name')}-common"
+            def hasCommonDependency = dependenciesNode.children()
+                .findAll { it instanceof Node && it.name() == 'dependency' }
+                .any { dependency ->
+                    dependency.get('groupId')?.text() == project.group.toString() &&
+                        dependency.get('artifactId')?.text() == commonArtifactId
+                }
+
+            if (!hasCommonDependency) {
+                def commonDependency = dependenciesNode.appendNode('dependency')
+                commonDependency.appendNode('groupId', project.group.toString())
+                commonDependency.appendNode('artifactId', commonArtifactId)
+                commonDependency.appendNode('version', project.version.toString())
+                commonDependency.appendNode('scope', 'compile')
             }
         }
     }
-}
-
-tasks.withType(GenerateModuleMetadata).configureEach {
-    enabled = false
 }
 
 // 资源放置

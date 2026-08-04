@@ -15,6 +15,16 @@ base {
 	archivesName = project.archives_base_name
 }
 
+ext.minecraftMavenVersion = { Object minecraftVersion ->
+    def baseVersion = rootProject.findProperty('mod_version').toString()
+    def snapshotSuffix = '-SNAPSHOT'
+    def isSnapshot = baseVersion.endsWith(snapshotSuffix)
+    def releaseVersion = isSnapshot
+        ? baseVersion.substring(0, baseVersion.length() - snapshotSuffix.length())
+        : baseVersion
+    "${releaseVersion}+mc${minecraftVersion}${isSnapshot ? snapshotSuffix : ''}"
+}
+
 def stonecutterControllerPaths = [':common', ':fabric', ':neoforge', ':paper'] as Set
 def isStonecutterControllerProject = { Project candidate ->
     stonecutterControllerPaths.contains(candidate.path)
@@ -35,6 +45,10 @@ def isSnapshotVersion = provider { project.version.toString().endsWith('-SNAPSHO
 def nexusBaseUrl = providers.gradleProperty('nexusBaseUrl').orElse('https://nexus.mcfpp.top')
 def nexusReleasesRepository = providers.gradleProperty('nexusReleasesRepository').orElse('maven-releases')
 def nexusSnapshotsRepository = providers.gradleProperty('nexusSnapshotsRepository').orElse('maven-snapshots')
+def nexusUsernameProvider = providers.gradleProperty('nexusUsername')
+    .orElse(providers.environmentVariable('NEXUS_USERNAME'))
+def nexusPasswordProvider = providers.gradleProperty('nexusPassword')
+    .orElse(providers.environmentVariable('NEXUS_PASSWORD'))
 // Keep secrets out of the repository: provide nexusUsername/nexusPassword in ~/.gradle/gradle.properties
 // or via ORG_GRADLE_PROJECT_nexusUsername / ORG_GRADLE_PROJECT_nexusPassword.
 def nexusRepositoryUrl = provider {
@@ -72,6 +86,13 @@ subprojects {
         options.jFlags('-Duser.language=en', '-Duser.country=US', '-Dfile.encoding=UTF-8')
     }
 
+    if (isStonecutterVersionProject(project)) {
+        // These publications replace component artifacts, so Maven POM metadata is canonical.
+        tasks.withType(GenerateModuleMetadata).configureEach {
+            enabled = false
+        }
+    }
+
     plugins.withId('maven-publish') {
         publishing {
             repositories {
@@ -81,12 +102,8 @@ subprojects {
                     url = uri(nexusRepositoryUrl.get())
                     allowInsecureProtocol = false
                     credentials {
-                        username = providers.gradleProperty('nexusUsername')
-                            .orElse(providers.environmentVariable('NEXUS_USERNAME'))
-                            .orNull
-                        password = providers.gradleProperty('nexusPassword')
-                            .orElse(providers.environmentVariable('NEXUS_PASSWORD'))
-                            .orNull
+                        username = nexusUsernameProvider.orNull
+                        password = nexusPasswordProvider.orNull
                     }
                 }
             }
@@ -237,9 +254,61 @@ tasks.register('buildKattonJars') {
     dependsOn ":fabric:${activeTarget}:jar", ":neoforge:${activeTarget}:jar", ":paper:${activeTarget}:shadowJar"
 }
 
+def nexusVersionedModules = ['common', 'fabric', 'neoforge', 'paper']
+def activeNexusPublishTasks = nexusVersionedModules.collect {
+    ":${it}:${activeStonecutterVersionProvider.get()}:publishAllPublicationsToPrivateNexusRepository"
+}
+def allNexusPublishTasks = nexusVersionedModules.collectMany { moduleName ->
+    project(":${moduleName}").subprojects.collect { versionProject ->
+        "${versionProject.path}:publishAllPublicationsToPrivateNexusRepository"
+    }
+}.sort()
+
+def validateNexusCredentials = tasks.register('validateNexusCredentials') {
+    group = 'publishing'
+    description = 'Validate credentials required by the private Nexus repository.'
+    doLast {
+        if (!nexusUsernameProvider.isPresent() || nexusUsernameProvider.get().trim().isEmpty()) {
+            throw new GradleException('Missing Nexus username. Set nexusUsername or NEXUS_USERNAME.')
+        }
+        if (!nexusPasswordProvider.isPresent() || nexusPasswordProvider.get().isEmpty()) {
+            throw new GradleException('Missing Nexus password. Set nexusPassword or NEXUS_PASSWORD.')
+        }
+    }
+}
+
+allprojects {
+    tasks.matching { it.name.endsWith('ToPrivateNexusRepository') }.configureEach {
+        dependsOn validateNexusCredentials
+    }
+}
+
+tasks.register('publishActiveVersionToPrivateNexus') {
+    group = 'publishing'
+    description = "Publish all Minecraft modules for the active Stonecutter version to ${nexusRepositoryUrl.get()}."
+    dependsOn activeNexusPublishTasks
+}
+
+def publishAllVersionsToPrivateNexus = tasks.register('publishAllVersionsToPrivateNexus') {
+    group = 'publishing'
+    description = "Publish every Minecraft module and Stonecutter version to ${nexusRepositoryUrl.get()}."
+    dependsOn allNexusPublishTasks
+}
+
+def publishSignPluginToPrivateNexus = tasks.register('publishSignPluginToPrivateNexus') {
+    group = 'publishing'
+    description = "Publish the version-independent Katton signing Gradle plugin to ${nexusRepositoryUrl.get()}."
+    dependsOn ':sign-plugin:publishAllPublicationsToPrivateNexusRepository'
+}
+
+tasks.register('publishEverythingToPrivateNexus') {
+    group = 'publishing'
+    description = 'Publish all Minecraft versions and the Katton signing Gradle plugin.'
+    dependsOn publishAllVersionsToPrivateNexus, publishSignPluginToPrivateNexus
+}
+
 tasks.register('publishAllToPrivateNexus') {
     group = 'publishing'
-    description = "Publish all subprojects to ${nexusRepositoryUrl.get()}."
-    def activeTarget = activeStonecutterVersionProvider.get()
-    dependsOn(['common', 'fabric', 'neoforge', 'paper'].collect { ":${it}:${activeTarget}:publishAllPublicationsToPrivateNexusRepository" })
+    description = 'Alias for publishAllVersionsToPrivateNexus.'
+    dependsOn publishAllVersionsToPrivateNexus
 }

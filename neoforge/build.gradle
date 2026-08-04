@@ -6,7 +6,8 @@ plugins {
     id 'idea'
 }
 
-version = mod_version
+def targetMinecraftVersion = stonecutter.current.version
+version = rootProject.ext.minecraftMavenVersion(targetMinecraftVersion)
 group = maven_group
 ext.useLeanMavenPublication = true
 
@@ -184,7 +185,7 @@ tasks.named('javadoc', Javadoc) {
 
 tasks.named('jar', Jar) {
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
-    archiveFileName = "${platformName}-katton-${project.version}-${stonecutter.current.project}.jar"
+    archiveFileName = "${platformName}-katton-${project.version}.jar"
     destinationDirectory = rootProject.layout.buildDirectory
     from(commonMainSourceSet.output)
 }
@@ -278,8 +279,4 @@ publishing {
             }
         }
     }
-}
-
-tasks.withType(GenerateModuleMetadata).configureEach {
-    enabled = false
 }

@@ -13,8 +13,9 @@ plugins {
     id("xyz.jpenilla.run-paper") version "3.0.2" // Adds runServer and runMojangMappedServer tasks for testing
 }
 
+def targetMinecraftVersion = stonecutter.current.version
 group = project.maven_group
-version = project.mod_version
+version = rootProject.ext.minecraftMavenVersion(targetMinecraftVersion)
 ext.useLeanMavenPublication = true
 
 def commonProject = project(":common:${stonecutter.current.project}")
@@ -79,7 +80,7 @@ tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
 }
 
 shadowJar {
-    archiveFileName = "${platformName}-katton-${project.version}-${stonecutter.current.project}.jar"
+    archiveFileName = "${platformName}-katton-${project.version}.jar"
     destinationDirectory = rootProject.layout.buildDirectory
     archiveClassifier = ''
     exclude 'META-INF/versions/**'
@@ -143,8 +144,4 @@ publishing {
             dep.appendNode('scope', 'compile')
         }
     }
-}
-
-tasks.withType(GenerateModuleMetadata).configureEach {
-    enabled = false
 }
