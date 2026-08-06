@@ -79,7 +79,7 @@ object NeoForgeManagedEvents {
                     listener
                 )
 
-                val registration = ManagedRegistration(id, eventClass, listener, scope, environment)
+                val registration = ManagedRegistration(id, eventClass, listener, owner, scope, environment)
                 registrations[id] = registration
                 if (scope != null) {
                     scopeRegistrations.getOrPut(scope) { mutableSetOf() }.add(id)
@@ -113,6 +113,13 @@ object NeoForgeManagedEvents {
                 }
             }
 
+            override fun clearByOwnerPrefix(ownerPrefix: String) {
+                registrations.values
+                    .filter { it.owner.startsWith(ownerPrefix) }
+                    .map { ManagedEventHandle(it.id, it.eventClass) }
+                    .forEach(::unregister)
+            }
+
             override fun clearAll() {
                 registrations.values.forEach { NeoForge.EVENT_BUS.unregister(it.listener) }
                 registrations.clear()
@@ -132,6 +139,7 @@ object NeoForgeManagedEvents {
         val id: Long,
         val eventClass: Class<*>,
         val listener: Any,
+        val owner: String,
         val scope: ScriptPackScope?,
         val environment: ScriptEnvironment?
     )

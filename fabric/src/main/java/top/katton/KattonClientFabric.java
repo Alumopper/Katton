@@ -16,6 +16,8 @@ import top.katton.network.ClientNetworkingFabric;
 import top.katton.network.Networking;
 import top.katton.engine.ScriptReloadManager;
 import top.katton.pack.ServerPackCacheManager;
+import top.katton.api.InvocationReason;
+import top.katton.api.ReloadCause;
 
 public class KattonClientFabric implements ClientModInitializer {
 	private static final KeyMapping.Category KATTON_KEY_CATEGORY = KeyMapping.Category.register(
@@ -50,7 +52,9 @@ public class KattonClientFabric implements ClientModInitializer {
 			if (!hasJoinedSinceDisconnect) {
 				hasJoinedSinceDisconnect = true;
 				if (client.hasSingleplayerServer()) {
-					ScriptReloadManager.reloadClientScriptsAsync();
+					ScriptReloadManager.reloadClientScriptsAsync(InvocationReason.INITIAL_LOAD, ReloadCause.CLIENT_JOIN, null);
+				} else {
+					ScriptReloadManager.requestClientJoinedDispatch();
 				}
 			}
 		});
@@ -65,6 +69,7 @@ public class KattonClientFabric implements ClientModInitializer {
 		});
 
 		ClientTickEvents.END_CLIENT_TICK.register(_ -> {
+			ScriptReloadManager.tickClientLifecycle();
 			ClientItemRenderMarkerManager.tick();
 			while (OPEN_PACK_SCREEN.consumeClick()) {
 				ScriptPackUi.openInWorldScreen();

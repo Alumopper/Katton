@@ -36,6 +36,7 @@ object FabricManagedEvents {
     class FabricRegistration(
         val id: Long,
         val wrapper: Any,
+        val owner: String,
         val scope: ScriptPackScope?,
         val environment: ScriptEnvironment?,
         @Volatile var active: Boolean
@@ -75,7 +76,7 @@ object FabricManagedEvents {
                     }
                     null
                 }
-                val registration = FabricRegistration(id, wrapper, scope, environment, active = true)
+                val registration = FabricRegistration(id, wrapper, owner, scope, environment, active = true)
                 registrations[id] = registration
                 if (scope != null) {
                     scopeRegistrations.getOrPut(scope) { mutableSetOf() }.add(id)
@@ -106,6 +107,16 @@ object FabricManagedEvents {
                 if (ids.isEmpty()) {
                     scopeRegistrations.remove(scope)
                 }
+            }
+
+            override fun clearByOwnerPrefix(ownerPrefix: String) {
+                registrations.values
+                    .filter { it.owner.startsWith(ownerPrefix) }
+                    .map { it.id }
+                    .forEach { id ->
+                        registrations.remove(id)?.active = false
+                        scopeRegistrations.values.forEach { it.remove(id) }
+                    }
             }
 
             override fun clearAll() {

@@ -89,14 +89,13 @@ object KattonConfigManager {
 
     /**
      * Resolves the current script's pack ID from [ScriptExecutionContext.currentScriptOwner].
-     * Owner format: `"<scope_serialized>:<fqcn>"` (e.g. `"global:top.katton.mypack.MainKt"`).
+     * Owner format: `"<scope_serialized>:<phase>:<fqcn>"`.
      */
     fun resolveCurrentPack(): String? {
         val owner = ScriptExecutionContext.currentScriptOwner() ?: return null
-        // Owner format: "scope:fqcn"
-        val colonIndex = owner.indexOf(':')
-        if (colonIndex < 0) return null
-        val fqcn = owner.substring(colonIndex + 1)
+        val parts = owner.split(':', limit = 3)
+        if (parts.size < 2) return null
+        val fqcn = if (parts.size == 3) parts[2] else parts[1]
         return fqcnToPackId[fqcn]
     }
 

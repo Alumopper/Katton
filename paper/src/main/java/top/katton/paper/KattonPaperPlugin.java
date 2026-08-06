@@ -9,10 +9,14 @@ import org.bukkit.plugin.java.JavaPlugin;
 import top.katton.Katton;
 import top.katton.LoadState;
 import top.katton.api.event.*;
+import top.katton.api.InvocationReason;
+import top.katton.api.ReloadCause;
 import top.katton.api.event.managed.PaperManagedEvents;
 import top.katton.command.ScriptCommand;
 import top.katton.engine.ScriptEngine;
+import top.katton.engine.ScriptDependencyManager;
 import top.katton.engine.ScriptReloadManager;
+import top.katton.pack.ScriptPlatform;
 import top.katton.pack.ScriptPackManager;
 import top.katton.registry.KattonRegistry;
 
@@ -51,6 +55,7 @@ public class KattonPaperPlugin extends JavaPlugin implements Listener {
     public void onEnable() {
         instance = this;
         getLogger().info("Katton Paper enabling...");
+        ScriptDependencyManager.install(ScriptPlatform.PAPER, new PaperScriptDependencyResolver(this));
 
         // Register the plugin jar as a script compilation classpath entry.
         // On Paper, the plugin classloader may not expose jar URLs via URLClassLoader,
@@ -121,6 +126,7 @@ public class KattonPaperPlugin extends JavaPlugin implements Listener {
         ServerEvent.onDisable(server);
         ServerEvent.onServerStopped.invoke(new ServerArg(server));
         Katton.server = null;
+        ScriptReloadManager.resetServerLifecycle(server);
         Katton.globalState = LoadState.SERVER_STOPPED;
         KattonRegistry.clearWorldRegistrations();
         Katton.clearWorldAndServerEvents();
@@ -137,7 +143,7 @@ public class KattonPaperPlugin extends JavaPlugin implements Listener {
     public void onServerLoad(ServerLoadEvent event) {
         Katton.server = MinecraftServer.getServer();
         Katton.globalState = LoadState.SERVER_STARTED;
-        ScriptReloadManager.reloadScriptsAsync(MinecraftServer.getServer(), serverOk -> {
+        ScriptReloadManager.reloadScriptsAsync(MinecraftServer.getServer(), InvocationReason.INITIAL_LOAD, ReloadCause.SERVER_START, serverOk -> {
             if (serverOk) {
                 getServer().getGlobalRegionScheduler().run(this, task ->
                     ScriptCommand.syncCommandTree(MinecraftServer.getServer())

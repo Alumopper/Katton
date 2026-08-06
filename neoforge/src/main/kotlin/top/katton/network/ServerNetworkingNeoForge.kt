@@ -84,6 +84,32 @@ object ServerNetworkingNeoForge {
             }
         }
 
+        registrar.playToClient(ScriptPackHashListPacket.TYPE, ScriptPackHashListPacket.STREAM_CODEC) { packet, context ->
+            context.enqueueWork {
+                ServerPackCacheManager.handlePlayHashList(packet, context::reply, context::reply)
+            }
+        }
+
+        registrar.playToClient(ScriptPackBundlePacket.TYPE, ScriptPackBundlePacket.STREAM_CODEC) { packet, context ->
+            context.enqueueWork { ServerPackCacheManager.handlePlayBundle(packet) }
+        }
+
+        registrar.playToServer(ScriptPackRequestPacket.TYPE, ScriptPackRequestPacket.STREAM_CODEC) { packet, context ->
+            context.enqueueWork {
+                val player = context.player() as? net.minecraft.server.level.ServerPlayer
+                    ?: return@enqueueWork
+                ServerNetworking.handlePlayRequest(player, packet)
+            }
+        }
+
+        registrar.playToServer(ScriptPackSyncAckPacket.TYPE, ScriptPackSyncAckPacket.STREAM_CODEC) { packet, context ->
+            context.enqueueWork {
+                val player = context.player() as? net.minecraft.server.level.ServerPlayer
+                    ?: return@enqueueWork
+                ServerNetworking.handleSyncAck(player, packet)
+            }
+        }
+
         registrar.playToClient(ClientPostEffectPacket.TYPE, ClientPostEffectPacket.STREAM_CODEC) { packet, context ->
             context.enqueueWork {
                 handleClientPostEffectPacket(packet)

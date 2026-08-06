@@ -134,6 +134,8 @@ interface Event<Arg, R> {
 
     fun clearByScopeAndEnvironment(scope: ScriptPackScope, environment: ScriptEnvironment)
 
+    fun clearByOwnerPrefix(ownerPrefix: String)
+
     fun hasHandlers(): Boolean
 
     operator fun invoke(arg: Arg): Result<R>
@@ -163,6 +165,14 @@ interface Event<Arg, R> {
                 event.clearByScopeAndEnvironment(scope, environment)
             }
         }
+
+
+        @JvmStatic
+        fun clearHandlersByOwnerPrefix(ownerPrefix: String) {
+            for (event in registry) {
+                event.clearByOwnerPrefix(ownerPrefix)
+            }
+        }
     }
 }
 
@@ -186,6 +196,12 @@ class DelegateEvent<Arg, R>(val invoker: EventInvoker<Arg, R>): Event<Arg, R> {
         val es = entries
         if (es.isEmpty()) return
         entries = es.filter { it.scope != scope || it.environment != environment }.toTypedArray()
+    }
+
+    override fun clearByOwnerPrefix(ownerPrefix: String) {
+        val es = entries
+        if (es.isEmpty()) return
+        entries = es.filter { it.owner?.startsWith(ownerPrefix) != true }.toTypedArray()
     }
 
     override fun hasHandlers(): Boolean = entries.isNotEmpty()
@@ -238,6 +254,12 @@ class CancellableDelegateEvent<Arg: CancellableEventArg, R>(val invoker: EventIn
         val es = entries
         if (es.isEmpty()) return
         entries = es.filter { it.scope != scope || it.environment != environment }.toTypedArray()
+    }
+
+    override fun clearByOwnerPrefix(ownerPrefix: String) {
+        val es = entries
+        if (es.isEmpty()) return
+        entries = es.filter { it.owner?.startsWith(ownerPrefix) != true }.toTypedArray()
     }
 
     override fun hasHandlers(): Boolean = entries.isNotEmpty()

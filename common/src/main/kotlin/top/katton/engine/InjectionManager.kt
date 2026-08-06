@@ -653,6 +653,11 @@ internal object InjectionManager {
     }
 
     @JvmStatic
+    fun rollbackByOwnerPrefix(ownerPrefix: String) {
+        handles.values.filter { it.owner?.startsWith(ownerPrefix) == true }.map { it.id }.forEach(::rollback)
+    }
+
+    @JvmStatic
     /**
      * Called before script reload to clear all dynamic injection registries.
      */

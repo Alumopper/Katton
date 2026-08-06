@@ -4,6 +4,8 @@ import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import top.katton.api.LOGGER
+import top.katton.engine.ScriptDependencyManager
+import top.katton.engine.ScriptEnvironment
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
@@ -83,10 +85,11 @@ object ScriptPackManager {
     }
 
     fun collectServerSyncPacks(): List<ScriptPack> {
-        return collectExecutablePacks()
+        val candidates = collectExecutablePacks()
             .asSequence()
             .filter { it.manifest.clientSync }
             .toList()
+        return candidates.filter { ScriptDependencyManager.isPackAvailable(it, ScriptEnvironment.SERVER) }
     }
 
     fun listLocalPacksForGui(lockGlobalInWorld: Boolean): List<ScriptPackView> {
@@ -194,7 +197,11 @@ object ScriptPackManager {
             }
 
         //parse manifest
-        val manifest = ScriptPackManifest.parse(packDirectory, manifestJson)
+        val manifest = runCatching { ScriptPackManifest.parse(packDirectory, manifestJson) }
+            .getOrElse {
+                LOGGER.warn("Invalid Katton pack manifest at {}: {}", manifestFile, it.message)
+                return null
+            }
 
         //collect script files
         val scriptFiles = collectFiles(packDirectory, ".kt", excludeAssets = true)
@@ -259,7 +266,11 @@ object ScriptPackManager {
             }
 
         val manifestJson = readManifestJsonFromJar(jarPath) ?: createFallbackManifestJson(jarPath)
-        val manifest = ScriptPackManifest.parse(jarPath, manifestJson)
+        val manifest = runCatching { ScriptPackManifest.parse(jarPath, manifestJson) }
+            .getOrElse {
+                LOGGER.warn("Invalid Katton jar pack manifest at {}: {}", jarPath, it.message)
+                return null
+            }
         val enabled = forceEnabled ?: readEnabledState(jarPath, ScriptPackKind.JAR) ?: manifest.enabledByDefault
         val syncId = syncIdOverride ?: makeSyncId(scope, manifest.id)
         val contentFile = ScriptPackContentFile(
@@ -445,6 +456,7 @@ object ScriptPackManager {
             addProperty("version", "compiled")
             addProperty("description", "Compiled Katton script pack")
             add("authors", JsonArray())
+            add("dependencies", JsonArray())
             addProperty("enabled", true)
         }.toString()
     }

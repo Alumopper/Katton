@@ -3,12 +3,15 @@ package top.katton.pack
 import net.minecraft.client.Minecraft
 import top.katton.Katton
 import top.katton.api.LOGGER
+import top.katton.api.InvocationReason
+import top.katton.api.ReloadCause
 import top.katton.client.ScriptPackResourceManager
 import top.katton.client.ScriptPackUi
 import top.katton.engine.ScriptReloadManager
 import top.katton.network.ScriptPackBundlePacket
 import top.katton.network.ScriptPackHashListPacket
 import top.katton.network.ScriptPackRequestPacket
+import top.katton.network.ScriptPackSyncAckPacket
 import top.katton.util.ReflectUtil
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
@@ -18,6 +21,8 @@ import java.security.MessageDigest
 import java.util.Base64
 import java.util.Comparator
 import java.util.concurrent.CountDownLatch
+import java.util.concurrent.CompletableFuture
+import java.nio.file.StandardCopyOption
 import kotlin.io.path.absolutePathString
 
 object ServerPackCacheManager {
@@ -45,6 +50,15 @@ object ServerPackCacheManager {
 
     @Volatile
     private var expectedHashes: Map<String, String> = emptyMap()
+
+    @Volatile
+    private var activeRevision: Long = 0L
+
+    @Volatile
+    private var pendingRevision: Long = 0L
+
+    @Volatile
+    private var liveAckSender: ((ScriptPackSyncAckPacket) -> Unit)? = null
 
     @Volatile
     private var activePacks: List<ScriptPack> = emptyList()
@@ -95,6 +109,9 @@ object ServerPackCacheManager {
         ScriptPackResourceManager.clearServerCacheResources()
         activeServerBucket = null
         expectedHashes = emptyMap()
+        activeRevision = 0L
+        pendingRevision = 0L
+        liveAckSender = null
         activePacks = emptyList()
         pendingPacks = emptyList()
         syncState = RemoteSyncState.IDLE
@@ -132,6 +149,183 @@ object ServerPackCacheManager {
         return activePacks.toList()
     }
 
+    /** Starts a play-phase delta update while keeping the current revision active. */
+    @Synchronized
+    fun handlePlayHashList(
+        packet: ScriptPackHashListPacket,
+        requestSender: (ScriptPackRequestPacket) -> Unit,
+        ackSender: (ScriptPackSyncAckPacket) -> Unit
+    ) {
+        if (packet.revision <= 0L) return
+        if (packet.revision < activeRevision) return
+        if (packet.revision == activeRevision) {
+            ackSender(ScriptPackSyncAckPacket(packet.revision, true, "already active"))
+            return
+        }
+        if (packet.revision == pendingRevision) return
+        val bucket = resolveCurrentServerBucket() ?: run {
+            ackSender(ScriptPackSyncAckPacket(packet.revision, false, "cannot resolve server identity"))
+            return
+        }
+
+        activeServerBucket = bucket
+        liveAckSender?.invoke(
+            ScriptPackSyncAckPacket(pendingRevision, false, "superseded by revision ${packet.revision}")
+        )
+        pendingRevision = packet.revision
+        liveAckSender = ackSender
+        expectedHashes = packet.entries.associate { it.syncId to it.hash }
+        pendingPacks = emptyList()
+        syncState = RemoteSyncState.DOWNLOADING
+
+        val stagingRoot = resolveRevisionRoot(bucket, packet.revision)
+        runCatching {
+            deleteDirectory(stagingRoot)
+            Files.createDirectories(stagingRoot)
+            packet.entries.forEach { entry ->
+                val unchanged = activePacks.firstOrNull { it.syncId == entry.syncId && it.hash == entry.hash }
+                if (unchanged != null) {
+                    copyPackDirectory(unchanged.location, stagingRoot.resolve(encodeSyncId(entry.syncId)))
+                }
+            }
+        }.onFailure {
+            failLiveRevision(packet.revision, "cannot create staging snapshot: ${it.message}")
+            return
+        }
+
+        val changed = packet.entries
+            .filter { entry -> activePacks.none { it.syncId == entry.syncId && it.hash == entry.hash } }
+            .map { it.syncId }
+        if (changed.isEmpty()) {
+            finishLiveDownload(stagingRoot)
+        } else {
+            requestSender(ScriptPackRequestPacket(changed, packet.revision))
+        }
+    }
+
+    /** Applies the changed part of a play-phase revision to its staging snapshot. */
+    @Synchronized
+    fun handlePlayBundle(packet: ScriptPackBundlePacket) {
+        if (packet.revision <= 0L || packet.revision != pendingRevision) return
+        val bucket = activeServerBucket ?: return
+        val stagingRoot = resolveRevisionRoot(bucket, packet.revision)
+        for (packData in packet.packs) {
+            if (expectedHashes[packData.syncId] != packData.hash) {
+                failLiveRevision(packet.revision, "unexpected pack or hash for ${packData.syncId}")
+                return
+            }
+            val signatureResult = RemoteScriptSignatureVerifier.verify(packData)
+            if (!signatureResult.valid) {
+                failLiveRevision(packet.revision, "${packData.syncId}: ${signatureResult.reason}")
+                return
+            }
+            persistPackBundle(stagingRoot, packData)
+        }
+        finishLiveDownload(stagingRoot)
+    }
+
+    private fun finishLiveDownload(stagingRoot: Path) {
+        val revision = pendingRevision
+        val resolved = expectedHashes.mapNotNull { (syncId, expectedHash) ->
+            loadCachedPack(stagingRoot, syncId)?.takeIf { it.hash == expectedHash }
+        }
+        if (resolved.size != expectedHashes.size) {
+            val present = resolved.mapTo(hashSetOf()) { it.syncId }
+            failLiveRevision(revision, "incomplete snapshot: missing ${expectedHashes.keys - present}")
+            return
+        }
+        val identity = resolveCurrentServerIdentity(activeServerBucket) ?: run {
+            failLiveRevision(revision, "cannot resolve server identity")
+            return
+        }
+        pendingPacks = resolved
+        syncState = RemoteSyncState.CACHED
+        if (!RemoteScriptTrustStore.isTrusted(identity.bucket) || hasUntrustedSigningKeys(resolved)) {
+            syncState = RemoteSyncState.PENDING_TRUST
+            ScriptPackUi.openRemoteScriptTrustScreen(identity.address, resolved) { trusted ->
+                if (!isPendingRevision(revision)) return@openRemoteScriptTrustScreen
+                if (!trusted) {
+                    failLiveRevision(revision, "user rejected the updated scripts")
+                } else {
+                    RemoteScriptTrustStore.trust(identity.bucket, identity.address)
+                    trustPackSigningKeys(identity, resolved)
+                    prepareAndActivateLiveRevision(resolved)
+                }
+            }
+            return
+        }
+        prepareAndActivateLiveRevision(resolved)
+    }
+
+    private fun prepareAndActivateLiveRevision(resolved: List<ScriptPack>) {
+        val revision = pendingRevision
+        val previous = activePacks
+        syncState = RemoteSyncState.EXECUTING
+        CompletableFuture.supplyAsync { ScriptReloadManager.prepareClientPacks(resolved) }
+            .whenComplete { prepared, error ->
+                Minecraft.getInstance().execute {
+                    if (!isPendingRevision(revision)) return@execute
+                    if (error != null || prepared != true) {
+                        failLiveRevision(revision, error?.message ?: "candidate scripts did not compile")
+                        return@execute
+                    }
+                    activePacks = resolved
+                    ScriptReloadManager.reloadClientScriptsAsync(
+                        InvocationReason.HOT_RELOAD,
+                        ReloadCause.SERVER_PACK_SYNC
+                    ) { activated ->
+                        if (activated) {
+                            completeLiveRevision(revision)
+                        } else {
+                            activePacks = previous
+                            Minecraft.getInstance().execute {
+                                ScriptReloadManager.reloadClientScriptsAsync(
+                                    InvocationReason.HOT_RELOAD,
+                                    ReloadCause.SERVER_PACK_SYNC,
+                                    null
+                                )
+                            }
+                            failLiveRevision(revision, "candidate scripts failed during activation")
+                        }
+                    }
+                }
+            }
+    }
+
+    @Synchronized
+    private fun completeLiveRevision(revision: Long) {
+        if (revision != pendingRevision) return
+        activeRevision = revision
+        pendingRevision = 0L
+        pendingPacks = emptyList()
+        syncState = RemoteSyncState.IDLE
+        sendAndClearLiveAck(ScriptPackSyncAckPacket(revision, true, "applied"))
+    }
+
+    @Synchronized
+    private fun failLiveRevision(revision: Long, reason: String) {
+        if (revision != pendingRevision) return
+        LOGGER.warn("Failed to apply Katton script-pack revision {}: {}", revision, reason)
+        pendingRevision = 0L
+        pendingPacks = emptyList()
+        syncState = RemoteSyncState.REJECTED
+        sendAndClearLiveAck(ScriptPackSyncAckPacket(revision, false, reason.take(1024)))
+    }
+
+    @Synchronized
+    private fun isPendingRevision(revision: Long): Boolean = pendingRevision == revision
+
+    private fun sendAndClearLiveAck(packet: ScriptPackSyncAckPacket) {
+        val sender = liveAckSender ?: return
+        liveAckSender = null
+        val minecraft = Minecraft.getInstance()
+        if (minecraft.isSameThread) {
+            sender(packet)
+        } else {
+            minecraft.execute { sender(packet) }
+        }
+    }
+
     @Synchronized
     fun handleHashList(packet: ScriptPackHashListPacket, requestSender: (ScriptPackRequestPacket) -> Unit) {
         val bucket = resolveCurrentServerBucket() ?: run {
@@ -146,7 +340,7 @@ object ServerPackCacheManager {
             // No packs on server: clear stale cache with an async client reload.
             activePacks = emptyList()
             syncState = RemoteSyncState.EXECUTING
-            ScriptReloadManager.reloadClientScriptsAsync { completeClientReload(null) }
+            ScriptReloadManager.reloadClientScriptsAsync { success -> completeClientReload(null, success) }
             return
         }
 
@@ -171,7 +365,7 @@ object ServerPackCacheManager {
         if (packet.entries.isEmpty()) {
             activePacks = emptyList()
             syncState = RemoteSyncState.EXECUTING
-            ScriptReloadManager.reloadClientScriptsAsync { completeClientReload(completeWhenDeferred) }
+            ScriptReloadManager.reloadClientScriptsAsync { success -> completeClientReload(completeWhenDeferred, success) }
             return false
         }
 
@@ -235,7 +429,10 @@ object ServerPackCacheManager {
             LOGGER.warn("Some server packs are still unresolved after bundle sync: {}", unresolved)
             activePacks = emptyList()
             pendingPacks = emptyList()
-            syncState = RemoteSyncState.IDLE
+            syncState = RemoteSyncState.REJECTED
+            if (completeWhenDeferred != null) {
+                ScriptPackUi.disconnectRemoteScripts("Katton server pack snapshot is incomplete: $unresolved")
+            }
             return true
         }
 
@@ -270,6 +467,7 @@ object ServerPackCacheManager {
             activePacks = emptyList()
             pendingPacks = emptyList()
             syncState = RemoteSyncState.REJECTED
+            ScriptPackUi.disconnectRemoteScripts("Remote Katton scripts were not accepted")
             completeWhenDeferred?.invoke()
             return
         }
@@ -286,13 +484,16 @@ object ServerPackCacheManager {
         // Keep configuration networking waiting when requested, but move the
         // heavy client scan/compile phase onto the client reload worker.
         syncState = RemoteSyncState.EXECUTING
-        ScriptReloadManager.reloadClientScriptsAsync { completeClientReload(completeWhenDeferred) }
+        ScriptReloadManager.reloadClientScriptsAsync { success -> completeClientReload(completeWhenDeferred, success) }
         return completeWhenDeferred == null
     }
 
     @Synchronized
-    private fun completeClientReload(completeWhenDeferred: (() -> Unit)?) {
-        syncState = RemoteSyncState.IDLE
+    private fun completeClientReload(completeWhenDeferred: (() -> Unit)?, success: Boolean = true) {
+        syncState = if (success) RemoteSyncState.IDLE else RemoteSyncState.REJECTED
+        if (!success && completeWhenDeferred != null) {
+            ScriptPackUi.disconnectRemoteScripts("Katton server scripts failed dependency validation, compilation, or execution")
+        }
         completeWhenDeferred?.invoke()
     }
 
@@ -403,6 +604,28 @@ object ServerPackCacheManager {
             ?: resolveConnectionAddress(mc)
             ?: return null
         return RemoteServerIdentity(bucketOverride ?: sha256(address), address)
+    }
+
+    private fun resolveRevisionRoot(bucket: String, revision: Long): Path {
+        val root = resolveCachedRoot(bucket).resolve("revisions").resolve(revision.toString())
+        Files.createDirectories(root)
+        return root
+    }
+
+    private fun copyPackDirectory(source: Path, target: Path) {
+        require(Files.isDirectory(source)) { "Pack cache path is not a directory: $source" }
+        Files.walk(source).use { stream ->
+            stream.forEach { path ->
+                val output = target.resolve(source.relativize(path).toString()).normalize()
+                require(output.startsWith(target)) { "Pack cache path escaped staging directory" }
+                if (Files.isDirectory(path)) {
+                    Files.createDirectories(output)
+                } else {
+                    output.parent?.let(Files::createDirectories)
+                    Files.copy(path, output, StandardCopyOption.REPLACE_EXISTING)
+                }
+            }
+        }
     }
 
     private fun normalizeAddress(address: String?): String? {

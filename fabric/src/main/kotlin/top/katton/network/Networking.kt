@@ -3,6 +3,7 @@ package top.katton.network
 import net.fabricmc.fabric.impl.networking.PayloadTypeRegistryImpl
 import net.fabricmc.fabric.impl.networking.PayloadTypeRegistryImpl.CLIENTBOUND_PLAY
 import net.fabricmc.fabric.impl.networking.PayloadTypeRegistryImpl.SERVERBOUND_CONFIGURATION
+import net.fabricmc.fabric.impl.networking.PayloadTypeRegistryImpl.SERVERBOUND_PLAY
 
 /**
  * Common networking initialization.
@@ -41,6 +42,19 @@ object Networking {
 
         if(CLIENTBOUND_PLAY.get(ClientItemRenderMarkerPacket.TYPE.id) == null){
             CLIENTBOUND_PLAY.register(ClientItemRenderMarkerPacket.TYPE, ClientItemRenderMarkerPacket.STREAM_CODEC)
+        }
+
+        if(CLIENTBOUND_PLAY.get(ScriptPackHashListPacket.TYPE.id) == null){
+            CLIENTBOUND_PLAY.register(ScriptPackHashListPacket.TYPE, ScriptPackHashListPacket.STREAM_CODEC)
+        }
+        if(CLIENTBOUND_PLAY.get(ScriptPackBundlePacket.TYPE.id) == null){
+            CLIENTBOUND_PLAY.register(ScriptPackBundlePacket.TYPE, ScriptPackBundlePacket.STREAM_CODEC)
+        }
+        if(SERVERBOUND_PLAY.get(ScriptPackRequestPacket.TYPE.id) == null){
+            SERVERBOUND_PLAY.register(ScriptPackRequestPacket.TYPE, ScriptPackRequestPacket.STREAM_CODEC)
+        }
+        if(SERVERBOUND_PLAY.get(ScriptPackSyncAckPacket.TYPE.id) == null){
+            SERVERBOUND_PLAY.register(ScriptPackSyncAckPacket.TYPE, ScriptPackSyncAckPacket.STREAM_CODEC)
         }
 
         if(CLIENTBOUND_PLAY.get(ClientPostEffectPacket.TYPE.id) == null){

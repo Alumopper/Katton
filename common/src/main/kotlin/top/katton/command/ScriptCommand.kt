@@ -461,15 +461,10 @@ object ScriptCommand {
 
     @JvmStatic
     fun reloadScript(server: MinecraftServer): Boolean {
-        val isDedicated = server.isDedicatedServer
-
         ScriptReloadManager.reloadScriptsAsync(server) { serverOk ->
             server.execute {
                 if (serverOk) {
                     syncCommandTree(server)
-                }
-                if (!isDedicated && Katton.hasClient) {
-                    ScriptReloadManager.reloadClientScriptsAsync()
                 }
             }
         }

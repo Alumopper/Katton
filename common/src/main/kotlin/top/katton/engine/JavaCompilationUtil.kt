@@ -44,7 +44,12 @@ object JavaCompilationUtil {
      * @param javaFiles the Java source files to compile
      * @param cacheDir  where to store (and look up) cached compilation jars
      */
-    fun compileToJar(javaFiles: List<ScriptPackScriptFile>, cacheDir: Path?): Path? {
+    fun compileToJar(
+        javaFiles: List<ScriptPackScriptFile>,
+        cacheDir: Path?,
+        additionalClasspath: List<Path> = emptyList(),
+        dependencyFingerprints: List<String> = emptyList()
+    ): Path? {
         if (javaFiles.isEmpty()) return null
         val compiler = javac ?: run {
             LOGGER.warn("JavaCompiler not available — is a JDK (not JRE) being used?")
@@ -55,7 +60,7 @@ object JavaCompilationUtil {
             return null
         }
 
-        val hash = computeJavaHash(javaFiles)
+        val hash = computeJavaHash(javaFiles, dependencyFingerprints)
         val cachedJar = cacheDir?.resolve("java-$hash.jar")
         if (cachedJar != null && Files.isRegularFile(cachedJar)) {
             LOGGER.info("Reusing cached Java compilation jar {}", cachedJar)
@@ -84,8 +89,12 @@ object JavaCompilationUtil {
             val classOutput = tempDir.resolve("classes")
             Files.createDirectories(classOutput)
 
+            val effectiveClasspath = buildList {
+                add(runtimeClasspath)
+                addAll(additionalClasspath.map(Path::toString))
+            }.filter(String::isNotBlank).joinToString(java.io.File.pathSeparator)
             val options = listOf(
-                "-classpath", runtimeClasspath,
+                "-classpath", effectiveClasspath,
                 "-d", classOutput.toString(),
                 "-source", System.getProperty("java.specification.version", "25")
             )
@@ -135,12 +144,19 @@ object JavaCompilationUtil {
     /**
      * SHA-256 of all Java source contents, used for cache key.
      */
-    private fun computeJavaHash(javaFiles: List<ScriptPackScriptFile>): String {
+    private fun computeJavaHash(
+        javaFiles: List<ScriptPackScriptFile>,
+        dependencyFingerprints: List<String>
+    ): String {
         val digest = MessageDigest.getInstance("SHA-256")
         javaFiles.sortedBy { it.relativePath }.forEach { f ->
             digest.update(f.relativePath.toByteArray(StandardCharsets.UTF_8))
             digest.update(0)
             digest.update(f.bytes)
+            digest.update(0)
+        }
+        dependencyFingerprints.sorted().forEach { fingerprint ->
+            digest.update(fingerprint.toByteArray(StandardCharsets.UTF_8))
             digest.update(0)
         }
         return digest.digest().joinToString("") { "%02x".format(it) }

@@ -66,6 +66,22 @@ object ClientNetworkingFabric {
             }
         }
 
+        ClientPlayNetworking.registerGlobalReceiver(ScriptPackHashListPacket.TYPE) { packet, context ->
+            context.client().execute {
+                ServerPackCacheManager.handlePlayHashList(
+                    packet,
+                    ClientPlayNetworking::send,
+                    ClientPlayNetworking::send
+                )
+            }
+        }
+
+        ClientPlayNetworking.registerGlobalReceiver(ScriptPackBundlePacket.TYPE) { packet, context ->
+            context.client().execute {
+                ServerPackCacheManager.handlePlayBundle(packet)
+            }
+        }
+
         ClientPlayNetworking.registerGlobalReceiver(ClientPostEffectPacket.TYPE) { packet, context ->
             context.client().execute {
                 ClientPostEffectManager.handlePacket(packet)

@@ -7,7 +7,8 @@ import net.minecraft.resources.Identifier
 import top.katton.Katton
 
 data class ScriptPackHashListPacket(
-    val entries: List<HashEntry>
+    val entries: List<HashEntry>,
+    val revision: Long = 0L
 ) : CustomPacketPayload {
 
     data class HashEntry(
@@ -36,6 +37,7 @@ data class ScriptPackHashListPacket(
     }
 
     fun write(buf: FriendlyByteBuf) {
+        buf.writeVarLong(revision)
         buf.writeVarInt(entries.size)
         entries.forEach { it.write(buf) }
     }
@@ -50,12 +52,13 @@ data class ScriptPackHashListPacket(
             StreamCodec.of({ buf, packet -> packet.write(buf) }, { buf -> read(buf) })
 
         fun read(buf: FriendlyByteBuf): ScriptPackHashListPacket {
+            val revision = buf.readVarLong()
             val count = buf.readVarInt()
             val entries = ArrayList<HashEntry>(count)
             repeat(count) {
                 entries.add(HashEntry.read(buf))
             }
-            return ScriptPackHashListPacket(entries)
+            return ScriptPackHashListPacket(entries, revision)
         }
     }
 

@@ -34,6 +34,7 @@ interface ManagedListenerProvider {
     fun unregister(handle: ManagedEventHandle)
     fun clearByScope(scope: ScriptPackScope)
     fun clearByScopeAndEnvironment(scope: ScriptPackScope, environment: ScriptEnvironment)
+    fun clearByOwnerPrefix(ownerPrefix: String)
     fun clearAll()
 }
 
@@ -94,6 +95,10 @@ fun clearManagedByScope(scope: ScriptPackScope) {
 
 fun clearManagedByScopeAndEnvironment(scope: ScriptPackScope, environment: ScriptEnvironment) {
     provider?.clearByScopeAndEnvironment(scope, environment)
+}
+
+fun clearManagedByOwnerPrefix(ownerPrefix: String) {
+    provider?.clearByOwnerPrefix(ownerPrefix)
 }
 
 /**

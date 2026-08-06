@@ -20,6 +20,9 @@ Server-transferred cache on client:
 - `<gameDir>/serverpacks/<sha256(serverAddress)>/<base64(syncId)>/assets/<namespace>/**`
 - `<gameDir>/serverpacks/<sha256(serverAddress)>/<base64(syncId)>/data/<namespace>/**`
 
+Live revision staging:
+- `<gameDir>/serverpacks/<sha256(serverAddress)>/revisions/<revision>/<base64(syncId)>/**`
+
 Optional `assets/` directories use the standard Minecraft resource pack layout.
 Katton exposes them as generated client resource packs, so script packs can ship
 textures, models, shaders, lang files, and other client resources without asking
@@ -63,6 +66,7 @@ kattonpacks/example_pack/data/example_pack/tags/item/magic_tools.json
   "authors": ["YourName"],
   "enabled": true,
   "clientSync": true,
+  "dependencies": [],
   "signature": {
     "algorithm": "Ed25519",
     "keyId": "example-server-key",
@@ -81,6 +85,7 @@ kattonpacks/example_pack/data/example_pack/tags/item/magic_tools.json
 - `authors`: optional string array.
 - `enabled`: default enabled state if no local state file exists.
 - `clientSync`: whether this pack should be sent to multiplayer clients during Katton server sync. Defaults to `true` for compatibility.
+- `dependencies`: required array of external Fabric mods, NeoForge mods, or Paper plugins. Use `[]` when the pack has none.
 - `signature`: recommended for remote client-synced packs. Uses Ed25519 and signs the pack's canonical content digest.
 
 Side behavior:
@@ -91,6 +96,29 @@ Side behavior:
 - Paper is server-only, so `assets/` has no client resource-pack effect there.
 - `data/` resources are server-side only. They are loaded as generated required data packs after server scripts execute and before scripted datapack mutations are applied.
 - On Fabric/NeoForge/Paper servers, `data/` can use the standard vanilla data pack namespace layout under `data/<namespace>/...`.
+
+Dependency example:
+
+```json
+"dependencies": [
+  {
+    "id": "create",
+    "version": ">=6.0.0",
+    "required": true,
+    "platforms": ["fabric", "neoforge"],
+    "environment": "both"
+  },
+  {
+    "id": "Vault",
+    "version": ">=1.7.0",
+    "required": true,
+    "platforms": ["paper"],
+    "environment": "server"
+  }
+]
+```
+
+`platforms` must be non-empty. `environment` defaults to `both`, `required` defaults to `true`, and `version` defaults to `*`. Missing `dependencies` is a manifest error.
 
 Signature behavior:
 - Signed client-synced packs are verified before they are written to the client's `serverpacks` cache.

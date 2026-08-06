@@ -15,6 +15,7 @@ data class ScriptPackManifest(
     val enabledByDefault: Boolean,
     val clientSync: Boolean,
     val signature: ScriptPackSignature?,
+    val dependencies: List<ScriptDependency>,
     val config: Map<String, Any> = emptyMap()
 ) {
     companion object {
@@ -32,6 +33,7 @@ data class ScriptPackManifest(
             val enabled = root.booleanOrNull("enabled") ?: true
             val clientSync = root.booleanOrNull("clientSync") ?: true
             val signature = root.jsonObjectOrNull("signature")?.toSignature()
+            val dependencies = root.dependenciesOrThrow(packPath)
             val config = root.jsonObjectOrNull("config")?.toConfigMap().orEmpty()
 
             return ScriptPackManifest(
@@ -43,10 +45,52 @@ data class ScriptPackManifest(
                 enabledByDefault = enabled,
                 clientSync = clientSync,
                 signature = signature,
+                dependencies = dependencies,
                 config = config
             )
         }
     }
+}
+
+private fun JsonObject.dependenciesOrThrow(packPath: Path): List<ScriptDependency> {
+    if (!has("dependencies")) {
+        throw IllegalArgumentException(
+            "Pack manifest at $packPath must declare a dependencies array; use \"dependencies\": [] when none are required"
+        )
+    }
+    val dependenciesElement = get("dependencies")
+    require(dependenciesElement.isJsonArray) { "Pack manifest dependencies at $packPath must be an array" }
+    return dependenciesElement.asJsonArray.mapIndexed { index, element ->
+        require(element.isJsonObject) { "Dependency #$index at $packPath must be an object" }
+        element.asJsonObject.toDependency(packPath, index)
+    }
+}
+
+private fun JsonObject.toDependency(packPath: Path, index: Int): ScriptDependency {
+    val id = stringOrNull("id")?.trim().orEmpty()
+    require(id.isNotEmpty()) { "Dependency #$index at $packPath must declare a non-empty id" }
+    val version = stringOrNull("version")?.trim()?.takeIf(String::isNotEmpty) ?: "*"
+    val required = booleanOrNull("required") ?: true
+    val environmentValue = stringOrNull("environment") ?: DependencyEnvironment.BOTH.serializedName
+    val environment = DependencyEnvironment.parse(environmentValue)
+        ?: throw IllegalArgumentException(
+            "Dependency '$id' at $packPath has invalid environment '$environmentValue' (expected server, client, or both)"
+        )
+    val platformsElement = get("platforms")
+    require(platformsElement != null && platformsElement.isJsonArray) {
+        "Dependency '$id' at $packPath must declare a non-empty platforms array"
+    }
+    val platforms = platformsElement.asJsonArray.map { platformElement ->
+        require(platformElement.isJsonPrimitive && platformElement.asJsonPrimitive.isString) {
+            "Dependency '$id' at $packPath contains a non-string platform"
+        }
+        val value = platformElement.asString
+        ScriptPlatform.parse(value)
+            ?.takeIf { it != ScriptPlatform.UNKNOWN }
+            ?: throw IllegalArgumentException("Dependency '$id' at $packPath has unsupported platform '$value'")
+    }.toSet()
+    require(platforms.isNotEmpty()) { "Dependency '$id' at $packPath must target at least one platform" }
+    return ScriptDependency(id, version, required, platforms, environment)
 }
 
 data class ScriptPackSignature(

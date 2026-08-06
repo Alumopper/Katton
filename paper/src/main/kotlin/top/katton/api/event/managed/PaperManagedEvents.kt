@@ -87,7 +87,7 @@ object PaperManagedEvents {
                     ignoreCancelled
                 )
 
-                val registration = ManagedRegistration(id, eventClass, listener, scope, environment)
+                val registration = ManagedRegistration(id, eventClass, listener, owner, scope, environment)
                 registrations[id] = registration
                 if (scope != null) {
                     scopeRegistrations.getOrPut(scope) { mutableSetOf() }.add(id)
@@ -121,6 +121,13 @@ object PaperManagedEvents {
                 }
             }
 
+            override fun clearByOwnerPrefix(ownerPrefix: String) {
+                registrations.values
+                    .filter { it.owner.startsWith(ownerPrefix) }
+                    .map { ManagedEventHandle(it.id, it.eventClass) }
+                    .forEach(::unregister)
+            }
+
             override fun clearAll() {
                 registrations.values.forEach { HandlerList.unregisterAll(it.listener) }
                 registrations.clear()
@@ -149,6 +156,7 @@ object PaperManagedEvents {
         val id: Long,
         val eventClass: Class<*>,
         val listener: org.bukkit.event.Listener,
+        val owner: String,
         val scope: ScriptPackScope?,
         val environment: ScriptEnvironment?
     )

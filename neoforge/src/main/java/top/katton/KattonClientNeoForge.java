@@ -19,6 +19,8 @@ import top.katton.client.ScriptPackResourceManager;
 import top.katton.client.ScriptPackUi;
 import top.katton.engine.ScriptReloadManager;
 import top.katton.pack.ServerPackCacheManager;
+import top.katton.api.InvocationReason;
+import top.katton.api.ReloadCause;
 
 /**
  * Client-only event listeners for NeoForge.
@@ -69,6 +71,7 @@ public class KattonClientNeoForge {
     private static volatile boolean gameEventsRegistered = false;
 
     private static void onClientTick(ClientTickEvent.Post event) {
+        ScriptReloadManager.tickClientLifecycle();
         ClientItemRenderMarkerManager.tick();
         while (OPEN_PACK_SCREEN.consumeClick()) {
             ScriptPackUi.openInWorldScreen();
@@ -77,7 +80,9 @@ public class KattonClientNeoForge {
 
     private static void onLoggingIn(ClientPlayerNetworkEvent.LoggingIn event) {
         if (Minecraft.getInstance().hasSingleplayerServer()) {
-            ScriptReloadManager.reloadClientScriptsAsync();
+            ScriptReloadManager.reloadClientScriptsAsync(InvocationReason.INITIAL_LOAD, ReloadCause.CLIENT_JOIN, null);
+        } else {
+            ScriptReloadManager.requestClientJoinedDispatch();
         }
     }
 

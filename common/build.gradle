@@ -40,11 +40,19 @@ dependencies {
     compileOnly "org.ow2.asm:asm:9.9.1"
     compileOnly "org.ow2.asm:asm-commons:9.9.1"
 
+    testImplementation 'org.jetbrains.kotlin:kotlin-test-junit5:2.3.10'
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.12.2'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher:1.12.2'
+
     // To change the versions see the gradle.properties file
     minecraft "com.mojang:minecraft:${targetMinecraftVersion}"
     
     // Fabric API for common module
     compileOnly "net.fabricmc.fabric-api:fabric-api:${project.property('fabric_api_version')}"
+}
+
+tasks.withType(Test).configureEach {
+    useJUnitPlatform()
 }
 
 

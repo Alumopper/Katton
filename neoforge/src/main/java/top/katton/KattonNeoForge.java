@@ -9,6 +9,7 @@ import net.neoforged.neoforge.event.entity.EntityAttributeCreationEvent;
 import net.neoforged.neoforge.event.entity.RegisterSpawnPlacementsEvent;
 import net.neoforged.neoforge.event.server.ServerStartedEvent;
 import net.neoforged.neoforge.event.server.ServerStoppedEvent;
+import net.neoforged.neoforge.event.tick.ServerTickEvent;
 import top.katton.api.event.ChunkAndBlockEvent;
 import top.katton.api.event.ItemEvent;
 import top.katton.api.event.LivingBehaviorEvent;
@@ -21,6 +22,8 @@ import top.katton.api.event.ServerMessageEvent;
 import top.katton.api.event.ServerMobEffectEvent;
 import top.katton.api.event.ServerPlayerEvent;
 import top.katton.api.event.managed.NeoForgeManagedEvents;
+import top.katton.api.InvocationReason;
+import top.katton.api.ReloadCause;
 import top.katton.command.ScriptCommand;
 import top.katton.network.ServerNetworking;
 import top.katton.network.ServerNetworkingNeoForge;
@@ -32,6 +35,9 @@ import top.katton.platform.EntityAttributeHooks;
 import top.katton.platform.NeoForgeDynamicRegistryHooks;
 import top.katton.platform.NeoForgeEntityAttributeHooks;
 import top.katton.platform.NeoForgeSpawnPlacementHooks;
+import top.katton.platform.NeoForgeScriptDependencyResolver;
+import top.katton.engine.ScriptDependencyManager;
+import top.katton.pack.ScriptPlatform;
 import net.neoforged.neoforge.network.PacketDistributor;
 
 /** NeoForge mod entry point that initializes Katton and bridges NeoForge lifecycle events. */
@@ -44,6 +50,7 @@ public class KattonNeoForge {
      * @param modEventBus the NeoForge mod event bus
      */
     public KattonNeoForge(IEventBus modEventBus) {
+        ScriptDependencyManager.install(ScriptPlatform.NEOFORGE, NeoForgeScriptDependencyResolver.INSTANCE);
         DynamicRegistryHooks.setAfterDynamicBlockRegistered(NeoForgeDynamicRegistryHooks::afterDynamicBlockRegistered);
 
         // Mode-aware attribute registration: GLOBAL uses ModBus event, RELOADABLE uses reflection
@@ -63,6 +70,7 @@ public class KattonNeoForge {
         NeoForge.EVENT_BUS.addListener(this::onRegisterCommands);
         NeoForge.EVENT_BUS.addListener(this::onServerStarted);
         NeoForge.EVENT_BUS.addListener(this::onServerStopped);
+        NeoForge.EVENT_BUS.addListener(this::onServerTick);
     }
 
     private void registerGameEventBridges() {
@@ -94,7 +102,7 @@ public class KattonNeoForge {
     private void onServerStarted(ServerStartedEvent event) {
         Katton.server = event.getServer();
         Katton.globalState = LoadState.SERVER_STARTED;
-        ScriptReloadManager.reloadScriptsAsync(event.getServer(), serverOk -> {
+        ScriptReloadManager.reloadScriptsAsync(event.getServer(), InvocationReason.INITIAL_LOAD, ReloadCause.SERVER_START, serverOk -> {
             if (serverOk) {
                 event.getServer().execute(() -> ScriptCommand.syncCommandTree(event.getServer()));
             }
@@ -103,10 +111,15 @@ public class KattonNeoForge {
     }
 
     private void onServerStopped(ServerStoppedEvent event) {
+        ScriptReloadManager.resetServerLifecycle(event.getServer());
         Katton.server = null;
         Katton.globalState = LoadState.SERVER_STOPPED;
         KattonRegistry.INSTANCE.clearWorldRegistrations();
         Katton.clearWorldAndServerEvents();
         ScriptPackManager.INSTANCE.clearWorldDirectory();
+    }
+
+    private void onServerTick(ServerTickEvent.Post event) {
+        ServerNetworking.pollSyncTimeouts(event.getServer());
     }
 }

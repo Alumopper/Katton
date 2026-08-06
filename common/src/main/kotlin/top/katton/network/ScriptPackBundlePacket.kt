@@ -8,7 +8,8 @@ import top.katton.Katton
 import java.nio.charset.StandardCharsets
 
 data class ScriptPackBundlePacket(
-    val packs: List<PackData>
+    val packs: List<PackData>,
+    val revision: Long = 0L
 ) : CustomPacketPayload {
 
     data class ScriptFileData(
@@ -63,6 +64,7 @@ data class ScriptPackBundlePacket(
     }
 
     fun write(buf: FriendlyByteBuf) {
+        buf.writeVarLong(revision)
         buf.writeVarInt(packs.size)
         packs.forEach { it.write(buf) }
     }
@@ -77,12 +79,13 @@ data class ScriptPackBundlePacket(
             StreamCodec.of({ buf, packet -> packet.write(buf) }, { buf -> read(buf) })
 
         fun read(buf: FriendlyByteBuf): ScriptPackBundlePacket {
+            val revision = buf.readVarLong()
             val count = buf.readVarInt()
             val packs = ArrayList<PackData>(count)
             repeat(count) {
                 packs.add(PackData.read(buf))
             }
-            return ScriptPackBundlePacket(packs)
+            return ScriptPackBundlePacket(packs, revision)
         }
     }
 

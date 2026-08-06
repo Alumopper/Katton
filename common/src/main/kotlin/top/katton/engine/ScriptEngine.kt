@@ -5,6 +5,13 @@ import org.jetbrains.kotlin.config.JvmTarget
 import org.jetbrains.kotlin.scripting.compiler.plugin.impl.KJvmCompiledModuleInMemoryImpl
 import org.objectweb.asm.*
 import top.katton.api.LOGGER
+import top.katton.api.ClientPhase
+import top.katton.api.ClientScriptEntrypoint
+import top.katton.api.InvocationReason
+import top.katton.api.ReloadCause
+import top.katton.api.ScriptInvocationContext
+import top.katton.api.ServerPhase
+import top.katton.api.ServerScriptEntrypoint
 import top.katton.config.KattonConfigManager
 import top.katton.pack.ScriptPack
 import top.katton.pack.ScriptPackKind
@@ -17,6 +24,7 @@ import java.lang.invoke.MethodHandles
 import java.lang.invoke.MethodType
 import java.lang.management.ManagementFactory
 import java.net.URL
+import java.net.URI
 import java.net.URLClassLoader
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
@@ -37,6 +45,7 @@ import kotlin.jvm.optionals.getOrNull
 import kotlin.script.experimental.api.*
 import kotlin.script.experimental.host.toScriptSource
 import kotlin.script.experimental.jvm.dependenciesFromCurrentContext
+import kotlin.script.experimental.jvm.baseClassLoader
 import kotlin.script.experimental.jvm.impl.KJvmCompiledScript
 import kotlin.script.experimental.jvm.jvm
 import kotlin.script.experimental.jvm.jvmTarget
@@ -53,7 +62,8 @@ object ScriptEngine {
 
     private data class CompiledScriptArtifact(
         val compiledScript: CompiledScript,
-        val cacheJar: Path?
+        val cacheJar: Path?,
+        val baseClassLoader: ClassLoader
     )
 
     private data class SourceCompilationPlan(
@@ -62,7 +72,8 @@ object ScriptEngine {
         val scriptPaths: List<String>,
         val classpathJars: List<Path>,
         val cacheKey: String,
-        val classScopes: Map<String, ScriptPackScope>
+        val classPacks: Map<String, ScriptPack>,
+        val baseClassLoader: ClassLoader
     )
 
     @Suppress("ArrayInDataClass")
@@ -74,14 +85,14 @@ object ScriptEngine {
     private data class EntrypointDescriptor(
         val className: String,
         val methodName: String,
-        val methodDescriptor: String
+        val methodDescriptor: String,
+        val phaseName: String,
+        val replay: Boolean
     )
 
     private val compiler = JvmScriptCompiler()
 
     private val externalClasspathJars = mutableListOf<File>()
-
-    private val hostClasspath: List<File> by lazy(::resolveHostClasspath)
 
     @JvmStatic
     fun addHostClasspathJar(file: File) {
@@ -95,19 +106,6 @@ object ScriptEngine {
 
     private val sourceCompileCache = ConcurrentHashMap<String, CompiledScriptArtifact>()
     private val jarLoadCache = ConcurrentHashMap<String, Optional<CompiledScriptArtifact>>()
-
-    private val baseConfig by lazy {
-        ScriptCompilationConfiguration {
-            jvm {
-                dependenciesFromCurrentContext(wholeClasspath = true)
-                updateClasspath(hostClasspath)
-            }
-        }
-    }
-
-    private val evaluationConfig = ScriptEvaluationConfiguration {
-        enableScriptsInstancesSharing()
-    }
 
     @JvmStatic
     fun setCacheDirectory(path: Path?) {
@@ -178,7 +176,7 @@ object ScriptEngine {
 
     @JvmStatic
     fun compileAndExecuteAll(packs: Collection<ScriptPack>, environment: ScriptEnvironment): Boolean {
-        return compileAndExecuteAll(packs, environment, null)
+        return compileAndExecuteAll(packs, legacyInvocation(packs, environment), null)
     }
 
     @JvmStatic
@@ -187,19 +185,81 @@ object ScriptEngine {
         environment: ScriptEnvironment,
         progressReporter: ((String) -> Unit)?
     ): Boolean {
+        return compileAndExecuteAll(packs, legacyInvocation(packs, environment), progressReporter)
+    }
+
+    /** Compiles and resolves a candidate snapshot without invoking any entrypoints. */
+    fun prepareAll(packs: Collection<ScriptPack>, invocation: ScriptInvocation): Boolean {
+        val enabledPacks = packs.filter { it.enabled }.toList()
+        if (enabledPacks.isEmpty()) return true
+        val dependencySelection = ScriptDependencyManager.resolve(
+            enabledPacks,
+            invocation.environment,
+            invocation.phaseName
+        )
+        if (dependencySelection.errors.isNotEmpty()) {
+            dependencySelection.errors.forEach(LOGGER::error)
+        }
+        if (dependencySelection.validPacks.size != enabledPacks.size) return false
+
+        val globalJarPacks = enabledPacks.filter { it.scope == ScriptPackScope.GLOBAL && it.kind == ScriptPackKind.JAR }
+        val plan = buildSourceCompilationPlan(enabledPacks, globalJarPacks, dependencySelection)
+        if (plan != null && loadCompiledSourceArtifact(plan, invocation.environment, null) == null) return false
+        val baseLoader = plan?.baseClassLoader ?: createBaseClassLoader(dependencySelection)
+        return enabledPacks.asSequence()
+            .filter { it.kind == ScriptPackKind.JAR }
+            .all { pack ->
+                val jar = pack.compiledJar
+                jar != null && Files.isRegularFile(jar) &&
+                    runCatching { loadJarPack(pack, baseLoader, dependencySelection.fingerprints) }.isSuccess
+            }
+    }
+
+    fun compileAndExecuteAll(
+        packs: Collection<ScriptPack>,
+        invocation: ScriptInvocation,
+        progressReporter: ((String) -> Unit)? = null
+    ): Boolean {
         val enabledPacks = packs.filter { it.enabled }.toList()
         if (enabledPacks.isEmpty()) return true
 
-        val globalJarPacks = enabledPacks.filter { it.scope == ScriptPackScope.GLOBAL && it.kind == ScriptPackKind.JAR }
-        return compileAndExecute(enabledPacks, environment, globalJarPacks, progressReporter)
+        val dependencySelection = ScriptDependencyManager.resolve(
+            enabledPacks,
+            invocation.environment,
+            invocation.phaseName
+        )
+        if (dependencySelection.errors.isNotEmpty()) {
+            dependencySelection.errors.forEach(LOGGER::error)
+            ScriptIssueReporter.report(
+                title = "Katton script dependencies are unavailable",
+                detail = dependencySelection.errors.joinToString("\n")
+            )
+        }
+        val strictFailure = enabledPacks
+            .filterNot(dependencySelection.validPacks::contains)
+            .any { it.scope == ScriptPackScope.SERVER_CACHE }
+        if (strictFailure) return false
+        if (dependencySelection.validPacks.isEmpty()) return dependencySelection.errors.isEmpty()
+
+        val globalJarPacks = dependencySelection.validPacks
+            .filter { it.scope == ScriptPackScope.GLOBAL && it.kind == ScriptPackKind.JAR }
+        return compileAndExecute(
+            dependencySelection.validPacks,
+            invocation,
+            globalJarPacks,
+            dependencySelection,
+            progressReporter
+        )
     }
 
     private fun compileAndExecute(
         packs: List<ScriptPack>,
-        environment: ScriptEnvironment,
+        invocation: ScriptInvocation,
         extraClasspathJars: List<ScriptPack>,
+        dependencySelection: ScriptDependencySelection,
         progressReporter: ((String) -> Unit)?
     ): Boolean {
+        val environment = invocation.environment
         val sourcePackCount = packs.count { it.scripts.isNotEmpty() }
         val jarPackCount = packs.count { it.kind == ScriptPackKind.JAR }
         var ok = true
@@ -215,7 +275,12 @@ object ScriptEngine {
         reportProgress(progressReporter, "katton.reload.common.prepare_scripts")
         registerConfigs(packs)
 
-        val sourcePlan = buildSourceCompilationPlan(packs, extraClasspathJars, progressReporter)
+        val sourcePlan = buildSourceCompilationPlan(
+            packs,
+            extraClasspathJars,
+            dependencySelection,
+            progressReporter
+        )
         if (sourcePlan != null) {
             LOGGER.info(
                 "Compiling {} source packs together with {} jar dependencies for {}",
@@ -229,9 +294,9 @@ object ScriptEngine {
                 runBlocking {
                     val executionResult = executeCombined(
                         artifact = artifact,
-                        environment = environment,
+                        invocation = invocation,
                         scope = packs.first().scope,
-                        classScopes = sourcePlan.classScopes,
+                        classPacks = sourcePlan.classPacks,
                         label = "source packs (${sourcePlan.sourcePacks.size})"
                     )
                     ok = logExecutionResult("source packs", environment, executionResult) && ok
@@ -246,19 +311,42 @@ object ScriptEngine {
             .filter { it.kind == ScriptPackKind.JAR }
             .forEach { pack ->
                 reportProgress(progressReporter, "katton.reload.common.load_jar_scripts")
-                val artifact = loadJarPack(pack) ?: return@forEach
+                val artifact = loadJarPack(
+                    pack,
+                    sourcePlan?.baseClassLoader ?: createBaseClassLoader(dependencySelection),
+                    dependencySelection.fingerprints
+                )
+                    ?: return@forEach
                 reportProgress(progressReporter, "katton.reload.common.execute_jar_scripts")
                 runBlocking {
                     val executionResult = executeCombined(
                         artifact = artifact,
-                        environment = environment,
+                        invocation = invocation,
                         scope = pack.scope,
+                        defaultPack = pack,
                         label = "jar pack ${pack.manifest.name}"
                     )
                     ok = logExecutionResult(pack.manifest.name, environment, executionResult) && ok
                 }
             }
         return ok
+    }
+
+    private fun legacyInvocation(packs: Collection<ScriptPack>, environment: ScriptEnvironment): ScriptInvocation {
+        val firstScope = packs.firstOrNull()?.scope ?: ScriptPackScope.WORLD
+        return when (environment) {
+            ScriptEnvironment.SERVER -> ScriptInvocation.server(
+                if (firstScope == ScriptPackScope.GLOBAL) ServerPhase.BOOTSTRAP else ServerPhase.READY,
+                InvocationReason.INITIAL_LOAD,
+                ReloadCause.SERVER_START,
+                top.katton.Katton.server
+            )
+            ScriptEnvironment.CLIENT -> ScriptInvocation.client(
+                if (firstScope == ScriptPackScope.GLOBAL) ClientPhase.READY else ClientPhase.REGISTRY_SETUP,
+                InvocationReason.INITIAL_LOAD,
+                ReloadCause.CLIENT_JOIN
+            )
+        }
     }
 
     private fun registerConfigs(packs: List<ScriptPack>) {
@@ -273,8 +361,8 @@ object ScriptEngine {
             }
 
             // For jar packs: pre-scan compiled jar for FQCN mappings
-            if (pack.kind == ScriptPackKind.JAR && pack.compiledJar != null) {
-                registerJarFqcnMappings(pack.compiledJar!!, pack.manifest.id)
+            if (pack.kind == ScriptPackKind.JAR) {
+                pack.compiledJar?.let { registerJarFqcnMappings(it, pack.manifest.id) }
             }
         }
     }
@@ -298,6 +386,7 @@ object ScriptEngine {
     private fun buildSourceCompilationPlan(
         packs: Collection<ScriptPack>,
         extraClasspathJars: List<ScriptPack> = emptyList(),
+        dependencySelection: ScriptDependencySelection,
         progressReporter: ((String) -> Unit)? = null
     ): SourceCompilationPlan? {
         val sourcePacks = packs
@@ -311,15 +400,17 @@ object ScriptEngine {
             .distinctBy { it.syncId }
             .sortedBy { it.syncId }
         val classpathJars = binaryPacks.mapNotNull { it.compiledJar?.toAbsolutePath()?.normalize() }.toMutableList()
+        classpathJars += dependencySelection.resolved.flatMap { it.classpath }
 
         val scriptPaths = sourcePacks
             .flatMap { pack -> pack.scripts.sortedBy { it.relativePath }.map { it.absolutePath.toAbsolutePath().normalize().toString() } }
 
-        val cacheKey = buildSourceCacheKey(sourcePacks, binaryPacks)
-        val classScopes = buildScriptClassScopeMap(sourcePacks)
+        val cacheKey = buildSourceCacheKey(sourcePacks, binaryPacks, dependencySelection.fingerprints)
+        val classPacks = buildScriptClassPackMap(sourcePacks)
+        val baseClassLoader = createBaseClassLoader(dependencySelection)
 
         // Compile .java files from enabled directory packs (independent of script collection)
-        val classpathFromJava = compileJavaFromPacks(packs, progressReporter)
+        val classpathFromJava = compileJavaFromPacks(packs, classpathJars, dependencySelection.fingerprints, progressReporter)
         if (classpathFromJava != null) classpathJars.add(classpathFromJava)
 
         return SourceCompilationPlan(
@@ -328,20 +419,21 @@ object ScriptEngine {
             scriptPaths = scriptPaths,
             classpathJars = classpathJars,
             cacheKey = cacheKey,
-            classScopes = classScopes
+            classPacks = classPacks,
+            baseClassLoader = baseClassLoader
         )
     }
 
-    private fun buildScriptClassScopeMap(sourcePacks: List<ScriptPack>): Map<String, ScriptPackScope> {
-        val classScopes = LinkedHashMap<String, ScriptPackScope>()
+    private fun buildScriptClassPackMap(sourcePacks: List<ScriptPack>): Map<String, ScriptPack> {
+        val classPacks = LinkedHashMap<String, ScriptPack>()
         sourcePacks.forEach { pack ->
             pack.scripts.forEach { script ->
                 val content = runCatching { String(script.bytes, StandardCharsets.UTF_8) }.getOrNull() ?: return@forEach
                 val fqcn = KattonConfigManager.deriveFqcn(content, script.relativePath.substringAfterLast('/'))
-                classScopes[fqcn] = pack.scope
+                classPacks[fqcn] = pack
             }
         }
-        return classScopes
+        return classPacks
     }
 
     /**
@@ -350,6 +442,8 @@ object ScriptEngine {
      */
     private fun compileJavaFromPacks(
         packs: Collection<ScriptPack>,
+        classpath: List<Path>,
+        dependencyFingerprints: List<String>,
         progressReporter: ((String) -> Unit)?
     ): Path? {
         val javaFiles = mutableListOf<ScriptPackScriptFile>()
@@ -378,7 +472,7 @@ object ScriptEngine {
         }
         LOGGER.info("Compiling {} .java files from {} packs", javaFiles.size, packs.size)
         reportProgress(progressReporter, "katton.reload.common.compile_java_sources")
-        val result = JavaCompilationUtil.compileToJar(javaFiles, cacheDirectory)
+        val result = JavaCompilationUtil.compileToJar(javaFiles, cacheDirectory, classpath, dependencyFingerprints)
         result?.let(::cleanStaleJavaCaches)
         LOGGER.info("Java compilation result: {}", result)
         return result
@@ -425,7 +519,7 @@ object ScriptEngine {
         }
 
         val compiledScript = (compileResult as? ResultWithDiagnostics.Success)?.value
-        val artifact = compiledScript?.let { CompiledScriptArtifact(it, cacheJar) }
+        val artifact = compiledScript?.let { CompiledScriptArtifact(it, cacheJar, plan.baseClassLoader) }
         if (artifact != null) {
             LOGGER.info(
                 "Stored combined source compilation result for {} packs with cache key {}",
@@ -454,8 +548,12 @@ object ScriptEngine {
         }
     }
 
-    private fun loadJarPack(pack: ScriptPack): CompiledScriptArtifact? {
-        val cacheKey = "${pack.syncId}:${pack.codeHash}"
+    private fun loadJarPack(
+        pack: ScriptPack,
+        baseClassLoader: ClassLoader,
+        dependencyFingerprints: List<String>
+    ): CompiledScriptArtifact? {
+        val cacheKey = listOf(pack.syncId, pack.codeHash, dependencyFingerprints.joinToString("|")).joinToString(":")
         if (jarLoadCache.containsKey(cacheKey)) {
             LOGGER.info("Reusing jar load cache for {}", pack.manifest.name)
             return jarLoadCache[cacheKey]?.getOrNull()
@@ -476,7 +574,7 @@ object ScriptEngine {
                 null
             }
 
-        val artifact = compiledScript?.let { CompiledScriptArtifact(it, jarPath) }
+        val artifact = compiledScript?.let { CompiledScriptArtifact(it, jarPath, baseClassLoader) }
         if (artifact == null) {
             LOGGER.info("Jar pack {} has no loadable script metadata, using it as classpath only", pack.manifest.name)
         } else {
@@ -563,18 +661,19 @@ object ScriptEngine {
 
     private suspend fun executeCombined(
         artifact: CompiledScriptArtifact,
-        environment: ScriptEnvironment,
+        invocation: ScriptInvocation,
         scope: ScriptPackScope,
-        classScopes: Map<String, ScriptPackScope> = emptyMap(),
+        classPacks: Map<String, ScriptPack> = emptyMap(),
+        defaultPack: ScriptPack? = null,
         label: String
     ): ResultWithDiagnostics<EvaluationResult> {
         val script = artifact.compiledScript
 
-        val pluginLoader = ScriptEngine::class.java.classLoader
+        val pluginLoader = artifact.baseClassLoader
         val savedCcl = Thread.currentThread().contextClassLoader
         Thread.currentThread().contextClassLoader = pluginLoader
         try {
-            return executeCombinedWithClassLoader(script, artifact, environment, scope, classScopes, label)
+            return executeCombinedWithClassLoader(script, artifact, invocation, scope, classPacks, defaultPack, label)
         } finally {
             Thread.currentThread().contextClassLoader = savedCcl
         }
@@ -583,11 +682,19 @@ object ScriptEngine {
     private suspend fun executeCombinedWithClassLoader(
         script: CompiledScript,
         artifact: CompiledScriptArtifact,
-        environment: ScriptEnvironment,
+        invocation: ScriptInvocation,
         scope: ScriptPackScope,
-        classScopes: Map<String, ScriptPackScope>,
+        classPacks: Map<String, ScriptPack>,
+        defaultPack: ScriptPack?,
         label: String
     ): ResultWithDiagnostics<EvaluationResult> {
+        val environment = invocation.environment
+        val evaluationConfig = ScriptEvaluationConfiguration {
+            enableScriptsInstancesSharing()
+            jvm {
+                baseClassLoader(artifact.baseClassLoader)
+            }
+        }
         val rootClass = when (val res = script.getClass(evaluationConfig)) {
             is ResultWithDiagnostics.Success -> res.value
             is ResultWithDiagnostics.Failure -> return res
@@ -610,7 +717,8 @@ object ScriptEngine {
 
         for ((fqcn, entrypoints) in entrypointsByClass) {
             runCatching {
-                val entryScope = classScopes[fqcn] ?: scope
+                val entryPack = classPacks[fqcn] ?: defaultPack
+                val entryScope = entryPack?.scope ?: scope
                 val clazz = Class.forName(fqcn, false, loader)
                 if (entrypoints.isNotEmpty()) {
                     LOGGER.info(
@@ -622,17 +730,28 @@ object ScriptEngine {
                 }
 
                 for (entrypoint in entrypoints) {
-                    val methodType = MethodType.fromMethodDescriptorString(entrypoint.methodDescriptor, loader)
-                    if (methodType.parameterCount() != 0) {
+                    val validationError = validateEntrypoint(entrypoint, entryScope, environment)
+                    if (validationError != null) {
                         failureCount++
-                        errorMessages += "$fqcn.${entrypoint.methodName}: ${environment.annotationClassName.substringAfterLast('.')} functions must not declare parameters"
+                        errorMessages += "pack '${entryPack?.manifest?.id ?: "unknown"}' $fqcn.${entrypoint.methodName}: $validationError"
+                        continue
+                    }
+                    if (entrypoint.phaseName != invocation.phaseName) continue
+                    if (!ScriptLifecyclePolicy.shouldInvoke(entryScope, invocation.reason, entrypoint.replay)) continue
+                    val pack = entryPack ?: error("Cannot resolve owning pack for $fqcn.${entrypoint.methodName}")
+                    val context = invocation.contextFor(pack)
+                    val methodType = MethodType.fromMethodDescriptorString(entrypoint.methodDescriptor, loader)
+                    if (methodType.parameterCount() !in 0..1 ||
+                        (methodType.parameterCount() == 1 && !methodType.parameterType(0).isAssignableFrom(context.javaClass))) {
+                        failureCount++
+                        errorMessages += "pack '${pack.manifest.id}' $fqcn.${entrypoint.methodName}: ${environment.annotationClassName.substringAfterLast('.')} functions must take no parameters or one compatible ${context.javaClass.simpleName} parameter"
                         continue
                     }
 
                     ScriptExecutionContext.withEnvironment(environment) {
                         ScriptExecutionContext.withScope(entryScope) {
-                            ScriptExecutionContext.withOwner("${entryScope.serializedName}:$fqcn") {
-                                invokeEntrypoint(clazz, entrypoint, methodType, environment)
+                            ScriptExecutionContext.withOwner("${entryScope.serializedName}:${invocation.phaseName}:$fqcn") {
+                                invokeEntrypoint(clazz, entrypoint, methodType, environment, context)
                             }
                         }
                     }
@@ -666,23 +785,39 @@ object ScriptEngine {
         )
     }
 
+    private fun validateEntrypoint(
+        entrypoint: EntrypointDescriptor,
+        scope: ScriptPackScope,
+        environment: ScriptEnvironment
+    ): String? {
+        val valid = ScriptLifecyclePolicy.isValid(scope, environment, entrypoint.phaseName)
+        return if (valid) null else "phase ${entrypoint.phaseName} is not valid for ${scope.serializedName} ${environment.name.lowercase()} packs"
+    }
+
     private fun createCompilationConfiguration(
         orderedScriptPaths: List<String>,
         classpathJars: List<Path>,
         cacheJar: Path?
     ): ScriptCompilationConfiguration {
         // Source packs are compiled as one unit so Kotlin symbols can be referenced across pack boundaries.
-        return ScriptCompilationConfiguration(baseConfig) {
+        val currentHostClasspath = resolveHostClasspath()
+        return ScriptCompilationConfiguration {
             importScripts(orderedScriptPaths.map { File(it).toScriptSource() })
             jvm {
                 jvmTarget("25")
                 dependenciesFromCurrentContext(wholeClasspath = true)
-                updateClasspath(hostClasspath)
+                updateClasspath(currentHostClasspath)
                 if (classpathJars.isNotEmpty()) {
                     updateClasspath(classpathJars.map(Path::toFile))
                 }
             }
         }
+    }
+
+    private fun createBaseClassLoader(selection: ScriptDependencySelection): ClassLoader {
+        val parent = Thread.currentThread().contextClassLoader ?: ScriptEngine::class.java.classLoader
+        val delegates = selection.resolved.mapNotNull { it.classLoader }.filter { it !== parent }.distinct()
+        return if (delegates.isEmpty()) parent else DependencyDelegatingClassLoader(parent, delegates)
     }
 
     private fun resolveHostClasspath(): List<File> {
@@ -699,7 +834,7 @@ object ScriptEngine {
                 "file" -> runCatching { addFile(Paths.get(url.toURI()).toFile()) }
                 "jar" -> {
                     val spec = url.file.substringBefore("!/")
-                    runCatching { addUrl(URL(spec)) }
+                    runCatching { addUrl(URI.create(spec).toURL()) }
                 }
             }
         }
@@ -783,7 +918,11 @@ object ScriptEngine {
         }
     }
 
-    private fun buildSourceCacheKey(sourcePacks: List<ScriptPack>, binaryPacks: List<ScriptPack>): String {
+    private fun buildSourceCacheKey(
+        sourcePacks: List<ScriptPack>,
+        binaryPacks: List<ScriptPack>,
+        dependencyFingerprints: List<String>
+    ): String {
         // Both source pack content and binary jar hashes affect the combined compilation result.
         val digest = MessageDigest.getInstance("SHA-256")
         digest.update("katton-source-pack-cache-v2".toByteArray(StandardCharsets.UTF_8))
@@ -797,6 +936,10 @@ object ScriptEngine {
             digest.update(pack.syncId.toByteArray(StandardCharsets.UTF_8))
             digest.update(0)
             digest.update(pack.codeHash.toByteArray(StandardCharsets.UTF_8))
+            digest.update(0)
+        }
+        dependencyFingerprints.sorted().forEach { fingerprint ->
+            digest.update(fingerprint.toByteArray(StandardCharsets.UTF_8))
             digest.update(0)
         }
         return digest.digest().joinToString("") { "%02x".format(it) }
@@ -847,10 +990,19 @@ object ScriptEngine {
         environment: ScriptEnvironment
     ): Map<String, List<EntrypointDescriptor>> {
         val annotationDescriptor = Type.getDescriptor(environment.annotationClass)
+        val defaultPhase = when (environment) {
+            ScriptEnvironment.CLIENT -> ClientPhase.READY.name
+            ScriptEnvironment.SERVER -> ServerPhase.BOOTSTRAP.name
+        }
         return collectTopLevelClassFiles(script, cacheJar)
             .sortedBy { it.className }
             .associate { classFile ->
-                classFile.className to scanEntrypoints(classFile.bytes, classFile.className, annotationDescriptor)
+                classFile.className to scanEntrypoints(
+                    classFile.bytes,
+                    classFile.className,
+                    annotationDescriptor,
+                    defaultPhase
+                )
             }
             .filterValues { it.isNotEmpty() }
     }
@@ -858,7 +1010,8 @@ object ScriptEngine {
     private fun scanEntrypoints(
         classBytes: ByteArray,
         className: String,
-        annotationDescriptor: String
+        annotationDescriptor: String,
+        defaultPhase: String
     ): List<EntrypointDescriptor> {
         val entrypoints = mutableListOf<EntrypointDescriptor>()
         ClassReader(classBytes).accept(object : ClassVisitor(Opcodes.ASM9) {
@@ -876,11 +1029,28 @@ object ScriptEngine {
                 return object : MethodVisitor(Opcodes.ASM9) {
                     override fun visitAnnotation(descriptorName: String, visible: Boolean): AnnotationVisitor? {
                         if (descriptorName == annotationDescriptor) {
-                            entrypoints += EntrypointDescriptor(
-                                className = className,
-                                methodName = name,
-                                methodDescriptor = descriptor
-                            )
+                            return object : AnnotationVisitor(Opcodes.ASM9) {
+                                var phaseName = defaultPhase
+                                var replay = true
+
+                                override fun visit(name: String, value: Any) {
+                                    if (name == "replay") replay = value as Boolean
+                                }
+
+                                override fun visitEnum(name: String, descriptor: String, value: String) {
+                                    if (name == "phase") phaseName = value
+                                }
+
+                                override fun visitEnd() {
+                                    entrypoints += EntrypointDescriptor(
+                                        className = className,
+                                        methodName = name,
+                                        methodDescriptor = descriptor,
+                                        phaseName = phaseName,
+                                        replay = replay
+                                    )
+                                }
+                            }
                         }
                         return null
                     }
@@ -895,17 +1065,19 @@ object ScriptEngine {
         clazz: Class<*>,
         entrypoint: EntrypointDescriptor,
         methodType: MethodType,
-        environment: ScriptEnvironment
+        environment: ScriptEnvironment,
+        context: ScriptInvocationContext
     ) {
         val lookup = MethodHandles.privateLookupIn(clazz, MethodHandles.lookup())
         val handle = lookup.findStatic(clazz, entrypoint.methodName, methodType)
+        val arguments = if (methodType.parameterCount() == 0) emptyList() else listOf(context)
         if (environment != ScriptEnvironment.CLIENT) {
-            handle.invokeWithArguments()
+            handle.invokeWithArguments(arguments)
             KattonRegistry.flushPendingRegistrations()
             return
         }
         runOnClientMainThreadAndWait {
-            handle.invokeWithArguments()
+            handle.invokeWithArguments(arguments)
             KattonRegistry.flushPendingRegistrations()
         }
     }
