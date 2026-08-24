@@ -9,6 +9,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import top.katton.Katton;
 import top.katton.LoadState;
 import top.katton.engine.ScriptReloadManager;
+import top.katton.engine.InternalDatapackReloads;
 import top.katton.api.InvocationReason;
 import top.katton.api.ReloadCause;
 import top.katton.api.event.EndDatapackReloadArg;
@@ -35,15 +36,17 @@ public class MinecraftServerMixin {
 
     @Inject(method = "reloadResources", at = @At("TAIL"))
     private void endResourceReload(Collection<String> collection, CallbackInfoReturnable<CompletableFuture<Void>> cir) {
+        MinecraftServer requestedServer = (MinecraftServer) (Object) this;
+        boolean internalReload = InternalDatapackReloads.consume(requestedServer);
         cir.getReturnValue().handleAsync((v, throwable) -> {
             // Hook into fail
-            MinecraftServer server = (MinecraftServer) (Object) this;
+            MinecraftServer server = requestedServer;
             boolean success = throwable == null;
 
             ServerEvent.onEndDatapackReload.invoke(new EndDatapackReloadArg(server, this.resources.resourceManager(), success));
             Katton.globalState = LoadState.END_DATA_PACK_RELOAD;
 
-            if (success) {
+            if (success && !internalReload) {
                 ScriptReloadManager.reloadScriptsAsync(server, InvocationReason.HOT_RELOAD, ReloadCause.DATAPACK_RELOAD, serverOk -> {
                     if (serverOk) {
                         ScriptCommand.syncCommandTree(server);

@@ -127,9 +127,9 @@ object ServerEntityEvent {
                 val sourceLevel = PaperNmsBridge.toNmsLevel(event.from.world)
                 val destinationWorld = to.world
 
-                plugin.server.scheduler.runTask(plugin, Runnable {
+                event.entity.scheduler.runDelayed(plugin, { _ ->
                     if (!event.entity.isValid || event.entity.world != destinationWorld) {
-                        return@Runnable
+                        return@runDelayed
                     }
 
                     onAfterEntityChangeLevel(
@@ -140,7 +140,7 @@ object ServerEntityEvent {
                             PaperNmsBridge.toNmsLevel(destinationWorld)
                         )
                     )
-                })
+                }, null, 1L)
             }
 
             @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)

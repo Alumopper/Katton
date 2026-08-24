@@ -5,6 +5,7 @@ import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import com.google.gson.JsonPrimitive
 import java.nio.file.Path
+import java.util.Locale
 
 private const val MAX_MANIFEST_DEPENDENCIES = 1_024
 private const val MAX_PACK_ID_LENGTH = 256
@@ -34,6 +35,7 @@ data class ScriptPackManifest(
     val clientSync: Boolean,
     val signature: ScriptPackSignature?,
     val dependencies: List<ScriptDependency>,
+    val packDependencies: List<ScriptPackDependency> = emptyList(),
     val config: Map<String, Any> = emptyMap()
 ) {
     companion object {
@@ -87,6 +89,7 @@ data class ScriptPackManifest(
                 else -> throw IllegalArgumentException("Pack signature at $packPath must be an object")
             }
             val dependencies = root.dependenciesOrThrow(packPath)
+            val packDependencies = root.packDependenciesOrThrow(packPath)
             val config = root.jsonObjectOrNull("config")?.toConfigMap().orEmpty()
 
             return ScriptPackManifest(
@@ -99,9 +102,30 @@ data class ScriptPackManifest(
                 clientSync = clientSync,
                 signature = signature,
                 dependencies = dependencies,
+                packDependencies = packDependencies,
                 config = config
             )
         }
+    }
+}
+
+private fun JsonObject.packDependenciesOrThrow(packPath: Path): List<ScriptPackDependency> {
+    val element = get("packDependencies") ?: return emptyList()
+    require(element.isJsonArray) { "Pack manifest packDependencies at $packPath must be an array" }
+    require(element.asJsonArray.size() <= MAX_MANIFEST_DEPENDENCIES) {
+        "Pack manifest at $packPath declares too many packDependencies"
+    }
+    val seen = hashSetOf<String>()
+    return element.asJsonArray.mapIndexed { index, dependencyElement ->
+        require(dependencyElement.isJsonObject) { "Pack dependency #$index at $packPath must be an object" }
+        val dependency = dependencyElement.asJsonObject
+        val id = dependency.stringOrNull("id")?.trim().orEmpty()
+        require(id.isNotEmpty()) { "Pack dependency #$index at $packPath must declare a non-empty id" }
+        require(id.length <= MAX_DEPENDENCY_ID_LENGTH) { "Pack dependency id at $packPath is too long" }
+        require(seen.add(id.lowercase(Locale.ROOT))) { "Duplicate pack dependency '$id' at $packPath" }
+        val version = dependency.stringOrNull("version")?.trim()?.takeIf(String::isNotEmpty) ?: "*"
+        require(version.length <= MAX_DEPENDENCY_VERSION_LENGTH) { "Pack dependency '$id' version is too long" }
+        ScriptPackDependency(id, version, dependency.booleanOrNull("required") ?: true)
     }
 }
 

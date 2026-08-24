@@ -17,6 +17,7 @@ import top.katton.pack.ScriptPack
 import top.katton.pack.ScriptPackFileLimits
 import top.katton.pack.ScriptPackKind
 import top.katton.pack.ScriptPackJarSnapshots
+import top.katton.pack.ScriptPackDependencyGraph
 import top.katton.pack.ScriptPackScope
 import top.katton.pack.ScriptPackScriptFile
 import top.katton.registry.KattonRegistry
@@ -101,6 +102,11 @@ object ScriptEngine {
         val methodDescriptor: String,
         val phaseName: String,
         val replay: Boolean
+    )
+
+    data class PreparedPackSelection(
+        val packs: List<ScriptPack>,
+        val rejectedCandidateSyncIds: Set<String>
     )
 
     private val compiler = JvmScriptCompiler()
@@ -209,7 +215,12 @@ object ScriptEngine {
 
     /** Compiles and resolves a candidate snapshot without invoking any entrypoints. */
     fun prepareAll(packs: Collection<ScriptPack>, invocation: ScriptInvocation): Boolean {
-        val enabledPacks = packs.filter { it.enabled }.toList()
+        val discoveredPacks = packs.filter { it.enabled }.toList()
+        if (discoveredPacks.isEmpty()) return true
+        val graph = ScriptPackDependencyGraph.resolve(discoveredPacks)
+        graph.errors.forEach(LOGGER::error)
+        if (graph.invalidPacks.any { it.scope == ScriptPackScope.SERVER_CACHE }) return false
+        val enabledPacks = graph.orderedPacks
         if (enabledPacks.isEmpty()) return true
         val dependencySelection = ScriptDependencyManager.resolve(
             enabledPacks,
@@ -219,18 +230,114 @@ object ScriptEngine {
         if (dependencySelection.errors.isNotEmpty()) {
             dependencySelection.errors.forEach(LOGGER::error)
         }
-        if (dependencySelection.validPacks.size != enabledPacks.size) return false
+        if (enabledPacks.filterNot(dependencySelection.validPacks::contains)
+                .any { it.scope == ScriptPackScope.SERVER_CACHE }) return false
 
-        val globalJarPacks = enabledPacks.filter { it.scope == ScriptPackScope.GLOBAL && it.kind == ScriptPackKind.JAR }
-        val plan = buildSourceCompilationPlan(enabledPacks, globalJarPacks, dependencySelection)
+        val validPacks = dependencySelection.validPacks
+        if (validPacks.isEmpty()) return true
+        val globalJarPacks = validPacks.filter { it.scope == ScriptPackScope.GLOBAL && it.kind == ScriptPackKind.JAR }
+        val plan = try {
+            buildSourceCompilationPlan(validPacks, globalJarPacks, dependencySelection)
+        } catch (failure: JavaSourceCompilationException) {
+            LOGGER.error(failure.message)
+            return false
+        }
         if (plan != null && loadCompiledSourceArtifact(plan, invocation.environment, null) == null) return false
         val baseLoader = plan?.baseClassLoader ?: createBaseClassLoader(dependencySelection)
-        return enabledPacks.asSequence()
+        return validPacks.asSequence()
             .filter { it.kind == ScriptPackKind.JAR }
             .all { pack ->
                 ScriptPackJarSnapshots.materialize(pack) != null &&
-                    runCatching { loadJarPack(pack, baseLoader, dependencySelection.fingerprints) }.isSuccess
+                    runCatching { loadJarPack(pack, baseLoader, dependencySelection.fingerprints) }.getOrNull() != null
             }
+    }
+
+    /**
+     * Prepares independent dependency components separately. A broken local
+     * component falls back to its last-known-good pack snapshots without
+     * preventing unrelated components from updating.
+     */
+    fun prepareWithFallback(
+        candidates: Collection<ScriptPack>,
+        previous: Collection<ScriptPack>,
+        invocation: ScriptInvocation
+    ): PreparedPackSelection? {
+        val enabledCandidates = candidates.filter { it.enabled }
+        val graph = ScriptPackDependencyGraph.resolve(enabledCandidates)
+        if (graph.errors.isNotEmpty()) {
+            graph.errors.forEach(LOGGER::error)
+            ScriptIssueReporter.report(
+                "Katton script pack dependencies are unavailable",
+                graph.errors.joinToString("\n")
+            )
+        }
+        if (graph.invalidPacks.any { it.scope == ScriptPackScope.SERVER_CACHE }) return null
+
+        val accepted = mutableListOf<ScriptPack>()
+        val rejected = graph.invalidPacks.mapTo(linkedSetOf()) { it.syncId }
+        ScriptPackDependencyGraph.compilationGroups(graph.orderedPacks).forEach { group ->
+            val platformSelection = ScriptDependencyManager.resolve(
+                group,
+                invocation.environment,
+                invocation.phaseName
+            )
+            if (platformSelection.validPacks.size != group.size) {
+                platformSelection.errors.forEach(LOGGER::error)
+                if (platformSelection.errors.isNotEmpty()) {
+                    ScriptIssueReporter.report(
+                        "Katton script dependencies are unavailable",
+                        platformSelection.errors.joinToString("\n")
+                    )
+                }
+                if (group.any { it.scope == ScriptPackScope.SERVER_CACHE }) return null
+                rejected += group.map { it.syncId }
+                return@forEach
+            }
+            if (prepareAll(group, invocation)) {
+                accepted += group
+                return@forEach
+            }
+            if (group.any { it.scope == ScriptPackScope.SERVER_CACHE }) return null
+
+            val groupIds = group.mapTo(hashSetOf()) { it.syncId }
+            rejected += groupIds
+        }
+
+        val fallbackCandidates = previous.filter { it.enabled && it.syncId in rejected }
+        val fallbackIds = fallbackCandidates.mapTo(hashSetOf()) { it.syncId }
+        val fallbackGraph = ScriptPackDependencyGraph.resolve(accepted + fallbackCandidates)
+        if (fallbackGraph.errors.isNotEmpty()) {
+            fallbackGraph.errors.forEach(LOGGER::error)
+        }
+        ScriptPackDependencyGraph.compilationGroups(fallbackGraph.orderedPacks)
+            .filter { group -> group.any { it.syncId in fallbackIds } }
+            .forEach { group ->
+                val platformSelection = ScriptDependencyManager.resolve(
+                    group,
+                    invocation.environment,
+                    invocation.phaseName
+                )
+                if (platformSelection.validPacks.size == group.size && prepareAll(group, invocation)) {
+                    accepted += group.filter { it.syncId in fallbackIds }
+                }
+        }
+
+        if (rejected.isNotEmpty()) {
+            ScriptIssueReporter.report(
+                "Katton retained last-known-good script packs",
+                "Rejected candidate components: ${rejected.sorted().joinToString()}"
+            )
+        }
+        val finalSelection = ScriptPackDependencyGraph.resolve(accepted.distinctBy { it.syncId })
+        if (finalSelection.errors.isNotEmpty()) {
+            finalSelection.errors.forEach(LOGGER::error)
+            ScriptIssueReporter.report(
+                "Katton script pack fallback dependencies are unavailable",
+                finalSelection.errors.joinToString("\n")
+            )
+        }
+        val ordered = finalSelection.orderedPacks
+        return PreparedPackSelection(ordered, rejected)
     }
 
     fun compileAndExecuteAll(
@@ -238,7 +345,19 @@ object ScriptEngine {
         invocation: ScriptInvocation,
         progressReporter: ((String) -> Unit)? = null
     ): Boolean {
-        val enabledPacks = packs.filter { it.enabled }.toList()
+        val discoveredPacks = packs.filter { it.enabled }.toList()
+        if (discoveredPacks.isEmpty()) return true
+
+        val graph = ScriptPackDependencyGraph.resolve(discoveredPacks)
+        if (graph.errors.isNotEmpty()) {
+            graph.errors.forEach(LOGGER::error)
+            ScriptIssueReporter.report(
+                title = "Katton script pack dependencies are unavailable",
+                detail = graph.errors.joinToString("\n")
+            )
+        }
+        if (graph.invalidPacks.any { it.scope == ScriptPackScope.SERVER_CACHE }) return false
+        val enabledPacks = graph.orderedPacks
         if (enabledPacks.isEmpty()) return true
 
         val dependencySelection = ScriptDependencyManager.resolve(
@@ -257,7 +376,7 @@ object ScriptEngine {
             .filterNot(dependencySelection.validPacks::contains)
             .any { it.scope == ScriptPackScope.SERVER_CACHE }
         if (strictFailure) return false
-        if (dependencySelection.validPacks.isEmpty()) return dependencySelection.errors.isEmpty()
+        if (dependencySelection.validPacks.isEmpty()) return true
 
         val globalJarPacks = dependencySelection.validPacks
             .filter { it.scope == ScriptPackScope.GLOBAL && it.kind == ScriptPackKind.JAR }
@@ -293,13 +412,18 @@ object ScriptEngine {
         reportProgress(progressReporter, "katton.reload.common.prepare_scripts")
         registerConfigs(packs)
 
-        val sourcePlan = buildSourceCompilationPlan(
-            packs,
-            extraClasspathJars,
-            dependencySelection,
-            progressReporter
-        )
-        if (sourcePlan != null) {
+        val sourcePlan = try {
+            buildSourceCompilationPlan(
+                packs,
+                extraClasspathJars,
+                dependencySelection,
+                progressReporter
+            )
+        } catch (failure: JavaSourceCompilationException) {
+            LOGGER.error(failure.message)
+            return false
+        }
+        val sourceArtifact = if (sourcePlan != null) {
             LOGGER.info(
                 "Compiling {} source packs together with {} jar dependencies for {}",
                 sourcePlan.sourcePacks.size,
@@ -307,34 +431,40 @@ object ScriptEngine {
                 environment.name.lowercase(Locale.ROOT)
             )
             val artifact = loadCompiledSourceArtifact(sourcePlan, environment, progressReporter)
-            if (artifact != null) {
+            if (artifact == null) ok = false
+            artifact
+        } else null
+
+        // Execute entrypoints in the dependency graph's topological pack order.
+        // Source packs share one compiler artifact, but each invocation filters
+        // that artifact to the classes owned by the current pack so JAR and
+        // source entrypoints can be interleaved correctly.
+        packs.forEach { pack ->
+            if (pack.scripts.isNotEmpty() && sourcePlan != null && sourceArtifact != null) {
                 reportProgress(progressReporter, "katton.reload.common.execute_source_scripts")
                 runBlocking {
                     val executionResult = executeCombined(
-                        artifact = artifact,
+                        artifact = sourceArtifact,
                         invocation = invocation,
-                        scope = packs.first().scope,
+                        scope = pack.scope,
                         classPacks = sourcePlan.classPacks,
-                        label = "source packs (${sourcePlan.sourcePacks.size})"
+                        includedPackSyncId = pack.syncId,
+                        label = "source pack ${pack.manifest.name}"
                     )
-                    ok = logExecutionResult("source packs", environment, executionResult) && ok
+                    ok = logExecutionResult(pack.manifest.name, environment, executionResult) && ok
                 }
-            } else {
-                ok = false
             }
-        }
-
-        packs
-            .asSequence()
-            .filter { it.kind == ScriptPackKind.JAR }
-            .forEach { pack ->
+            if (pack.kind == ScriptPackKind.JAR) {
                 reportProgress(progressReporter, "katton.reload.common.load_jar_scripts")
                 val artifact = loadJarPack(
                     pack,
                     sourcePlan?.baseClassLoader ?: createBaseClassLoader(dependencySelection),
                     dependencySelection.fingerprints
                 )
-                    ?: return@forEach
+                if (artifact == null) {
+                    ok = false
+                    return@forEach
+                }
                 reportProgress(progressReporter, "katton.reload.common.execute_jar_scripts")
                 runBlocking {
                     val executionResult = executeCombined(
@@ -347,6 +477,7 @@ object ScriptEngine {
                     ok = logExecutionResult(pack.manifest.name, environment, executionResult) && ok
                 }
             }
+        }
         return ok
     }
 
@@ -370,22 +501,23 @@ object ScriptEngine {
     private fun registerConfigs(packs: List<ScriptPack>) {
         for (pack in packs) {
             KattonConfigManager.registerPack(pack)
+            val configId = KattonConfigManager.configId(pack)
 
             // Register FQCN → packId mappings for script files
             for (script in pack.scripts) {
                 val content = runCatching { String(script.bytes, StandardCharsets.UTF_8) }.getOrNull() ?: continue
                 val fqcn = KattonConfigManager.deriveFqcn(content, script.relativePath.substringAfterLast('/'))
-                KattonConfigManager.registerFqcnMapping(fqcn, pack.manifest.id)
+                KattonConfigManager.registerFqcnMapping(fqcn, configId)
             }
 
             // For jar packs: pre-scan compiled jar for FQCN mappings
             if (pack.kind == ScriptPackKind.JAR) {
-                ScriptPackJarSnapshots.materialize(pack)?.let { registerJarFqcnMappings(it, pack.manifest.id) }
+                ScriptPackJarSnapshots.materialize(pack)?.let { registerJarFqcnMappings(it, configId) }
             }
         }
     }
 
-    private fun registerJarFqcnMappings(jarPath: Path, packId: String) {
+    private fun registerJarFqcnMappings(jarPath: Path, syncId: String) {
         if (!Files.isRegularFile(jarPath)) return
         runCatching {
             JarFile(jarPath.toFile()).use { jar ->
@@ -393,7 +525,7 @@ object ScriptEngine {
                     .filter { !it.isDirectory && it.name.endsWith(".class") && !it.name.contains('$') }
                     .forEach { entry ->
                         val fqcn = entry.name.removeSuffix(".class").replace('/', '.')
-                        KattonConfigManager.registerFqcnMapping(fqcn, packId)
+                        KattonConfigManager.registerFqcnMapping(fqcn, syncId)
                     }
             }
         }.onFailure {
@@ -409,7 +541,6 @@ object ScriptEngine {
     ): SourceCompilationPlan? {
         val sourcePacks = packs
             .filter { it.scripts.isNotEmpty() }
-            .sortedBy { it.syncId }
         if (sourcePacks.isEmpty()) {
             return null
         }
@@ -510,11 +641,18 @@ object ScriptEngine {
         }
         LOGGER.info("Compiling {} .java files from {} packs", javaFiles.size, packs.size)
         reportProgress(progressReporter, "katton.reload.common.compile_java_sources")
-        val result = JavaCompilationUtil.compileToJar(javaFiles, cacheDirectory, classpath, dependencyFingerprints)
-        result?.let(::cleanStaleJavaCaches)
-        LOGGER.info("Java compilation result: {}", result)
-        return result
+        return when (val result = JavaCompilationUtil.compileToJar(javaFiles, cacheDirectory, classpath, dependencyFingerprints)) {
+            JavaCompilationUtil.Result.NoSources -> null
+            is JavaCompilationUtil.Result.Success -> result.jar.also {
+                cleanStaleJavaCaches(it)
+                LOGGER.info("Java compilation result: {}", it)
+            }
+            is JavaCompilationUtil.Result.Failure -> throw JavaSourceCompilationException(result.detail)
+        }
     }
+
+    private class JavaSourceCompilationException(detail: String) :
+        RuntimeException("Java source compilation rejected the script candidate: $detail")
 
     private fun loadCompiledSourceArtifact(
         plan: SourceCompilationPlan,
@@ -723,6 +861,7 @@ object ScriptEngine {
         scope: ScriptPackScope,
         classPacks: Map<String, ScriptPack> = emptyMap(),
         defaultPack: ScriptPack? = null,
+        includedPackSyncId: String? = null,
         label: String
     ): ResultWithDiagnostics<EvaluationResult> {
         val script = artifact.compiledScript
@@ -731,7 +870,16 @@ object ScriptEngine {
         val savedCcl = Thread.currentThread().contextClassLoader
         Thread.currentThread().contextClassLoader = pluginLoader
         try {
-            return executeCombinedWithClassLoader(script, artifact, invocation, scope, classPacks, defaultPack, label)
+            return executeCombinedWithClassLoader(
+                script,
+                artifact,
+                invocation,
+                scope,
+                classPacks,
+                defaultPack,
+                includedPackSyncId,
+                label
+            )
         } finally {
             Thread.currentThread().contextClassLoader = savedCcl
         }
@@ -744,6 +892,7 @@ object ScriptEngine {
         scope: ScriptPackScope,
         classPacks: Map<String, ScriptPack>,
         defaultPack: ScriptPack?,
+        includedPackSyncId: String?,
         label: String
     ): ResultWithDiagnostics<EvaluationResult> {
         val environment = invocation.environment
@@ -762,7 +911,9 @@ object ScriptEngine {
         val rootName = rootClass.qualifiedName
         val entrypointsByClass = collectEntrypoints(script, artifact.cacheJar, environment)
             .filterKeys { it != rootName }
-            .toSortedMap()
+            .filterKeys { fqcn ->
+                includedPackSyncId == null || classPacks[fqcn]?.syncId == includedPackSyncId
+            }
         LOGGER.info(
             "Discovered {} top-level compiled classes for {} in {} environment",
             entrypointsByClass.size,
@@ -773,7 +924,13 @@ object ScriptEngine {
         var failureCount = 0
         val errorMessages = mutableListOf<String>()
 
-        for ((fqcn, entrypoints) in entrypointsByClass) {
+        val packOrder = classPacks.values.distinct().withIndex().associate { (index, pack) -> pack to index }
+        val orderedEntrypoints = entrypointsByClass.entries.sortedWith(
+            compareBy<Map.Entry<String, List<EntrypointDescriptor>>> {
+                classPacks[it.key]?.let(packOrder::get) ?: Int.MAX_VALUE
+            }.thenBy { it.key }
+        )
+        for ((fqcn, entrypoints) in orderedEntrypoints) {
             runCatching {
                 val entryPack = classPacks[fqcn] ?: defaultPack
                 val entryScope = entryPack?.scope ?: scope

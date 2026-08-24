@@ -34,6 +34,12 @@ import kotlin.io.path.createTempDirectory
  */
 object JavaCompilationUtil {
 
+    sealed interface Result {
+        data object NoSources : Result
+        data class Success(val jar: Path) : Result
+        data class Failure(val detail: String) : Result
+    }
+
     private val LOGGER = LoggerFactory.getLogger(JavaCompilationUtil::class.java)
     private val javac: JavaCompiler? = ToolProvider.getSystemJavaCompiler()
 
@@ -43,7 +49,7 @@ object JavaCompilationUtil {
     }
 
     /**
-     * Compiles the given `.java` source files. Returns `null` on failure.
+     * Compiles the given `.java` source files and distinguishes absence from failure.
      *
      * @param javaFiles the Java source files to compile
      * @param cacheDir  where to store (and look up) cached compilation jars
@@ -53,22 +59,22 @@ object JavaCompilationUtil {
         cacheDir: Path?,
         additionalClasspath: List<Path> = emptyList(),
         dependencyFingerprints: List<String> = emptyList()
-    ): Path? {
-        if (javaFiles.isEmpty()) return null
+    ): Result {
+        if (javaFiles.isEmpty()) return Result.NoSources
         val compiler = javac ?: run {
             LOGGER.warn("JavaCompiler not available — is a JDK (not JRE) being used?")
             ScriptIssueReporter.report(
                 title = "Katton Java script compilation failed",
                 detail = "JavaCompiler is not available. Run Katton with a JDK instead of a JRE."
             )
-            return null
+            return Result.Failure("JavaCompiler is not available. Run Katton with a JDK instead of a JRE.")
         }
 
         val hash = computeJavaHash(javaFiles, dependencyFingerprints)
         val cachedJar = cacheDir?.resolve("java-$hash.jar")
         if (cachedJar != null && isValidJar(cachedJar)) {
             LOGGER.info("Reusing cached Java compilation jar {}", cachedJar)
-            return cachedJar
+            return Result.Success(cachedJar)
         }
         cachedJar?.takeIf(Files::exists)?.let { corruptJar ->
             LOGGER.warn("Discarding corrupt Java compilation cache {}", corruptJar)
@@ -77,7 +83,7 @@ object JavaCompilationUtil {
 
         val tempDir = runCatching { createTempDirectory("katton-java-") }.getOrElse {
             LOGGER.warn("Failed to create temp dir for Java compilation", it)
-            return null
+            return Result.Failure("Failed to create a temporary directory for Java compilation: ${it.message}")
         }
 
         val result = try {
@@ -123,9 +129,14 @@ object JavaCompilationUtil {
                             append(formatJavaDiagnostics(diagnostics))
                         }
                     )
-                    null
+                    Result.Failure(formatJavaDiagnostics(diagnostics))
                 } else {
-                    packToJar(classOutput, cacheDir?.resolve("java-$hash.jar"))
+                    val jar = packToJar(classOutput, cacheDir?.resolve("java-$hash.jar"))
+                    if (jar == null) {
+                        Result.Failure("Java classes compiled, but the cache jar could not be created")
+                    } else {
+                        Result.Success(jar)
+                    }
                 }
             }
         } catch (e: Exception) {
@@ -134,7 +145,7 @@ object JavaCompilationUtil {
                 title = "Katton Java script compilation failed",
                 detail = e.stackTraceToString()
             )
-            null
+            Result.Failure(e.message ?: e.javaClass.name)
         } finally {
             // Cleanup temp dir
             runCatching {

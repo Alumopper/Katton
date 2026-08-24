@@ -2,7 +2,7 @@
 
 ## 1. Project Positioning
 
-Katton is a Minecraft Fabric/NeoForge mod that executes Kotlin `.kt` scripts at runtime.
+Katton is a Minecraft Fabric/NeoForge mod and Paper/Folia plugin that executes Kotlin `.kt` scripts at runtime.
 
 Core capabilities:
 - Kotlin scripts as gameplay logic.
@@ -20,11 +20,13 @@ Primary upstream docs:
 - `common`: script engine, shared APIs, registry/datapack mutation, pack system, protocol definitions.
 - `fabric`: Fabric entrypoints, Fabric networking registration, Fabric mixins.
 - `neoforge`: NeoForge entrypoints, NeoForge payload handlers, NeoForge mixins.
+- `paper`: Paper/Folia plugin entrypoint, Bukkit event bridges, NMS conversion, and region-aware scheduling.
 
 Important entry classes:
 - `top.katton.Katton` (common bootstrap and reload orchestration).
 - `top.katton.KattonFabric`, `top.katton.KattonClientFabric`.
 - `top.katton.KattonNeoForge`, `top.katton.KattonClientNeoForge`.
+- `top.katton.paper.KattonPaperPlugin`.
 
 ## 3. Script Execution Model
 
@@ -57,9 +59,11 @@ Each pack directory contains:
 - Optional `assets/<namespace>/**` standard resource-pack resources.
 - Optional `data/<namespace>/**` standard data-pack resources.
 
-Current parser fields (tolerant):
+Current parser fields:
 - `id`, `name`, `version`, `description`, `authors[]`
 - `enabled` (default true)
+- required external `dependencies[]` plus optional Katton `packDependencies[]`
+- optional primitive `config` defaults; user overrides live outside the pack under `.katton/config-overrides/` and server-cache keys are isolated from local sync IDs
 
 State persistence:
 - Per pack local state file: `.kattonpack.state.json` with `enabled` boolean.
@@ -107,19 +111,30 @@ Open keybind:
 ## 7. Existing Reload Semantics
 
 Server reload (`Katton.reloadScripts`):
-- Refresh global/world pack snapshot.
-- Clear/rebind script-managed state (events, injections, registries, datapack mutation).
+- Scan and precompile a candidate while the last-known-good snapshot stays active.
+- Validate pack dependencies and isolate independent dependency components; a rejected local component retains its last-known-good snapshot without blocking unrelated packs.
+- Clear/rebind script-managed state only after preflight succeeds.
 - Compile+execute server scripts.
-- Mount static script-pack `data/**` resources as generated required server data packs.
+- Atomically mount static script-pack `data/**` resources; restore the prior snapshot on failure.
 - Apply datapack mutations.
 - Sync runtime registry snapshots and script pack hashes to clients.
 
 Client reload (`Katton.reloadClientScripts`):
-- Refresh local packs.
+- Precompile the candidate before clearing client-owned handlers.
+- Isolate independent dependency components and retain their prior snapshots on compile or entrypoint failure.
 - Merge local + server-cache script sources and execute client environment scripts.
-- Mount script-pack `assets/**` resources as generated required client resource packs.
+- Atomically mount script-pack `assets/**` resources and restore the prior runtime/resources on failure.
 
-## 8. Notes for Future AI Refactors
+## 8. Event Capability Query
+
+Event bridges intentionally expose their real platform limits instead of simulating semantics that the loader cannot provide:
+
+- Script/API: `EventCapabilities.query("LivingUseItemEvent.onUseItemTick")` and `EventCapabilities.notable()`.
+- Command: `/katton capabilities events [EventObject.onEvent]`.
+- Results are `SUPPORTED`, `PARTIAL`, or `UNSUPPORTED`, include execution context, and use an explicit `不支持：...` reason for unavailable events.
+- Paper raw Bukkit events and async chat callbacks are reported as partial; unavailable hooks remain unimplemented.
+
+## 9. Notes for Future AI Refactors
 
 - Keep packet ordering stable in configuration stage; registry sync timing is strict.
 - Preserve owner-based cleanup on reload to avoid handler duplication.

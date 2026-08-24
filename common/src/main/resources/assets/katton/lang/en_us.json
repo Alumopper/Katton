@@ -88,8 +88,8 @@
   "katton.reload.common.clear_item_modifications": "Clearing item modifications",
   "katton.reload.common.reset_entity_renderers": "Resetting entity renderers",
 
-  "commands.katton.help": "[Katton] /katton help | status | registry | registry stale | reload | itemrender spawn <item> [still|spin|float|pulse|showcase] [scale] [lifetimeTicks] | itemrender clear <radius> | debug registryLogging [on|off] | config ...",
-  "commands.katton.status": "[Katton] state=%s, serverBound=%s, clientReloadRunning=%s",
+  "commands.katton.help": "[Katton] /katton help | status | errors | capabilities events [event] | packs list|enable|disable | registry | reload | itemrender ... | config ...",
+  "commands.katton.status": "[Katton] state=%s, serverBound=%s, reloadRunning=%s",
   "commands.katton.registry.summary": "[Katton] %s",
   "commands.katton.registry.row": "%s: entries=%s, managed=%s, stale=%s",
   "commands.katton.registry.stale.none": "[Katton] No stale retained registry entries.",
@@ -114,8 +114,8 @@
   "commands.katton.config.removed": "[Katton] [%s] removed '%s'",
   "commands.katton.config.remove_failed": "[Katton] Failed to remove '%s' in pack '%s'",
   "commands.katton.debug.registry_logging": "[Katton] debugRegistryLogging=%s",
-  "commands.katton.paper.help": "[Katton] /katton help | status | reload",
-  "commands.katton.paper.status": "[Katton] state=%s, serverBound=%s",
+  "commands.katton.paper.help": "[Katton] /katton help | status | reload | errors | capabilities events [event] | packs list|enable|disable",
+  "commands.katton.paper.status": "[Katton] state=%s, serverBound=%s, serverReloadRunning=%s",
   "commands.katton.paper.reload.no_permission": "[Katton] You need katton.admin permission to reload.",
   "commands.katton.paper.server_not_ready": "[Katton] Server not ready.",
   "commands.katton.paper.unknown_subcommand": "[Katton] Unknown subcommand. Try /katton help."

@@ -22,13 +22,18 @@ import top.katton.Katton
 import top.katton.api.ClientItemRenderAnimationMode
 import top.katton.api.ClientItemRenderAnimationSetBuilder
 import top.katton.api.ClientItemRenderEasing
+import top.katton.api.event.EventCapabilities
 import top.katton.config.KattonConfigManager
 import top.katton.engine.ScriptReloadManager
+import top.katton.engine.ScriptIssueReporter
+import top.katton.pack.ScriptPackManager
+import top.katton.pack.ScriptPackScope
 import top.katton.registry.KattonRegistry
 import top.katton.api.clearItemRenderMarkersInRange
 import top.katton.api.itemRenderMarker
 import top.katton.api.showItemRenderMarker
 import java.util.Locale
+import java.util.function.Consumer
 
 object ScriptCommand {
 
@@ -47,6 +52,14 @@ object ScriptCommand {
 
     private val itemRenderPresetSuggestion: SuggestionProvider<CommandSourceStack> = SuggestionProvider { _, builder ->
         SharedSuggestionProvider.suggest(listOf("still", "spin", "float", "pulse", "showcase"), builder)
+    }
+
+    private val localPackSuggestion: SuggestionProvider<CommandSourceStack> = SuggestionProvider { _, builder ->
+        SharedSuggestionProvider.suggest(ScriptPackManager.listLocalPacksForGui(false).map { it.syncId }, builder)
+    }
+
+    private val eventCapabilitySuggestion: SuggestionProvider<CommandSourceStack> = SuggestionProvider { _, builder ->
+        SharedSuggestionProvider.suggest(EventCapabilities.notable().map { it.id }, builder)
     }
 
     private fun tr(key: String, vararg args: Any): Component = Component.translatable(key, *args)
@@ -84,13 +97,74 @@ object ScriptCommand {
                                         "commands.katton.status",
                                         Katton.globalState,
                                         Katton.server != null,
-                                        ScriptReloadManager.isClientReloadRunning()
+                                        "client=${ScriptReloadManager.isClientReloadRunning()}, server=${ScriptReloadManager.isServerReloadRunning()}"
                                     )
                                 },
                                 false
                             )
                             1
                         }
+                )
+                .then(
+                    literal("errors")
+                        .executes {
+                            val issues = ScriptIssueReporter.history().takeLast(10)
+                            val text = if (issues.isEmpty()) {
+                                "[Katton] No recorded script errors."
+                            } else {
+                                issues.joinToString("\n") { issue -> "[Katton] ${issue.title}: ${issue.detail}" }
+                            }
+                            it.source.sendSuccess({ Component.literal(text) }, false)
+                            1
+                        }
+                )
+                .then(
+                    literal("capabilities")
+                        .then(
+                            literal("events")
+                                .executes {
+                                    val capabilities = EventCapabilities.notable()
+                                    val text = if (capabilities.isEmpty()) {
+                                        "[Katton] All queried event capabilities are supported."
+                                    } else {
+                                        capabilities.joinToString("\n") { capability ->
+                                            "[Katton] ${capability.id}: ${capability.status} (${capability.executionContext}) - ${capability.detail}"
+                                        }
+                                    }
+                                    it.source.sendSuccess({ Component.literal(text) }, false)
+                                    1
+                                }
+                                .then(
+                                    Commands.argument("event", StringArgumentType.word())
+                                        .suggests(eventCapabilitySuggestion)
+                                        .executes {
+                                            val capability = EventCapabilities.query(StringArgumentType.getString(it, "event"))
+                                            it.source.sendSuccess({
+                                                Component.literal(
+                                                    "[Katton] ${capability.id}: ${capability.status} " +
+                                                        "(${capability.executionContext}) - ${capability.detail}"
+                                                )
+                                            }, false)
+                                            if (capability.supported) 1 else 0
+                                        }
+                                )
+                        )
+                )
+                .then(
+                    literal("packs")
+                        .then(
+                            literal("list")
+                                .executes {
+                                    val packs = ScriptPackManager.listLocalPacksForGui(false)
+                                    val text = if (packs.isEmpty()) "[Katton] No local script packs." else packs.joinToString("\n") { pack ->
+                                        "[Katton] ${pack.syncId} ${pack.version} enabled=${pack.enabled} kind=${pack.kind}"
+                                    }
+                                    it.source.sendSuccess({ Component.literal(text) }, false)
+                                    1
+                                }
+                        )
+                        .then(packStateCommand("enable", true))
+                        .then(packStateCommand("disable", false))
                 )
                 .then(
                     literal("registry")
@@ -132,7 +206,13 @@ object ScriptCommand {
                         .requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS))
                         .executes {
                             val source = it.source
-                            if (reloadScript(source.server)) {
+                            if (reloadScript(source.server, Consumer { success ->
+                                    if (success) {
+                                        source.sendSuccess({ Component.literal("[Katton] Script pack reload completed.") }, true)
+                                    } else {
+                                        source.sendFailure(tr("commands.katton.reload.failed.logs"))
+                                    }
+                                })) {
                                 source.sendSuccess({ tr("commands.katton.reload.started") }, true)
                                 1
                             } else {
@@ -358,6 +438,38 @@ object ScriptCommand {
         return 1
     }
 
+    private fun packStateCommand(name: String, enabled: Boolean) =
+        literal(name)
+            .requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS))
+            .then(
+                Commands.argument("pack", StringArgumentType.word())
+                    .suggests(localPackSuggestion)
+                    .executes {
+                        val source = it.source
+                        val syncId = StringArgumentType.getString(it, "pack")
+                        val pack = ScriptPackManager.getPackBySyncId(syncId)
+                        if (pack == null || !ScriptPackManager.setPackEnabled(syncId, enabled)) {
+                            source.sendFailure(Component.literal("[Katton] Could not update pack '$syncId'."))
+                            return@executes 0
+                        }
+                        if (pack.scope == ScriptPackScope.GLOBAL) {
+                            source.sendSuccess({
+                                Component.literal("[Katton] Updated '$syncId'; restart is required for a global pack.")
+                            }, true)
+                            return@executes 1
+                        }
+                        source.sendSuccess({ Component.literal("[Katton] Updated '$syncId'; reload started.") }, true)
+                        reloadScript(source.server, Consumer { success ->
+                            if (success) {
+                                source.sendSuccess({ Component.literal("[Katton] Pack state applied for '$syncId'.") }, true)
+                            } else {
+                                source.sendFailure(Component.literal("[Katton] Pack state for '$syncId' was saved, but reload failed."))
+                            }
+                        })
+                        1
+                    }
+            )
+
     private fun spawnItemRenderMarker(
         source: CommandSourceStack,
         itemId: Identifier,
@@ -462,12 +574,14 @@ object ScriptCommand {
 
     @JvmStatic
     fun reloadScript(server: MinecraftServer): Boolean {
+        return reloadScript(server, Consumer { })
+    }
+
+    @JvmStatic
+    fun reloadScript(server: MinecraftServer, onComplete: Consumer<Boolean>): Boolean {
         ScriptReloadManager.reloadScriptsAsync(server) { serverOk ->
-            server.execute {
-                if (serverOk) {
-                    syncCommandTree(server)
-                }
-            }
+            syncCommandTree(server)
+            onComplete.accept(serverOk)
         }
 
         return true

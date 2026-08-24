@@ -58,16 +58,39 @@ object ScriptPackResourceManager {
     private var activeSignature: String = ""
 
     @Synchronized
+    @Deprecated("Use activateAndReload; activation is transactional")
     fun activateForClient(packs: List<ScriptPack>): Boolean {
-        val entries = packs.mapIndexedNotNull { index, pack -> createEntry(index, pack) }
-        return updateActiveEntries(entries)
+        return activateAndReload(packs)
+    }
+
+    /**
+     * Atomically publishes client asset packs. If the candidate reload fails,
+     * the repository state is reset and the previous resources are reloaded.
+     */
+    @Synchronized
+    fun activateAndReload(packs: List<ScriptPack>): Boolean {
+        val entries = runCatching { packs.mapIndexedNotNull { index, pack -> createEntry(index, pack) } }
+            .onFailure { logger.warn("Failed to materialize candidate Katton script assets", it) }
+            .getOrNull() ?: return false
+        val nextSignature = signatureOf(entries)
+        if (nextSignature == activeSignature) return true
+
+        val previousEntries = activeEntries
+        val previousSignature = activeSignature
+        activeEntries = entries
+        activeSignature = nextSignature
+        if (reloadClientResources("publish candidate script assets")) return true
+
+        activeEntries = previousEntries
+        activeSignature = previousSignature
+        if (!reloadClientResources("restore previous script assets")) {
+            logger.error("Failed to restore the previous Katton script assets after a rejected reload")
+        }
+        return false
     }
 
     @Synchronized
     fun reloadActiveResources(): Boolean {
-        if (activeEntries.isEmpty()) {
-            return true
-        }
         return reloadClientResources("post-script refresh")
     }
 
@@ -93,8 +116,7 @@ object ScriptPackResourceManager {
         if (!updateActiveEntries(entries)) {
             return false
         }
-        reloadClientResources(reason)
-        return true
+        return reloadClientResources(reason)
     }
 
     private fun updateActiveEntries(entries: List<ResourceEntry>): Boolean {
@@ -114,11 +136,13 @@ object ScriptPackResourceManager {
             ScriptPackKind.DIRECTORY -> {
                 if (assetFiles.isEmpty()) return null
                 val hash = hashAssetFiles(assetFiles)
-                val snapshot = ScriptPackDirectorySnapshots.materialize(pack, "assets", hash) ?: return null
+                val snapshot = ScriptPackDirectorySnapshots.materialize(pack, "assets", hash)
+                    ?: error("Cannot materialize asset snapshot for ${pack.syncId}")
                 snapshot to hash
             }
             ScriptPackKind.JAR -> {
-                val snapshot = ScriptPackJarSnapshots.materialize(pack) ?: return null
+                val snapshot = ScriptPackJarSnapshots.materialize(pack)
+                    ?: error("Cannot materialize JAR snapshot for ${pack.syncId}")
                 if (!jarHasAssets(snapshot)) return null
                 snapshot to pack.hash
             }
@@ -263,7 +287,7 @@ object ScriptPackResourceManager {
 
     private fun jarHasAssets(path: Path): Boolean {
         if (!Files.isRegularFile(path)) {
-            return false
+            error("Materialized JAR asset snapshot is unavailable: $path")
         }
         return runCatching {
             JarFile(path.toFile()).use { jar ->
@@ -271,7 +295,9 @@ object ScriptPackResourceManager {
                     !entry.isDirectory && entry.name.startsWith("assets/")
                 }
             }
-        }.getOrDefault(false)
+        }.getOrElse { failure ->
+            throw IllegalStateException("Cannot inspect JAR assets at $path", failure)
+        }
     }
 
     /** Code-only directory edits must not force an expensive resource reload. */

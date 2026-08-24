@@ -7,6 +7,7 @@ import top.katton.pack.ScriptPackManager;
 import top.katton.pack.ScriptPackScope;
 import top.katton.engine.ScriptEngine;
 import top.katton.engine.ScriptReloadManager;
+import top.katton.config.KattonConfigManager;
 import top.katton.registry.KattonRegistry;
 import top.katton.util.Event;
 
@@ -65,6 +66,7 @@ public class Katton {
     private static void initPacks() {
         ScriptPackManager.INSTANCE.setGameDirectory(gameDirectory);
         ScriptEngine.setCacheDirectory(gameDirectory == null ? null : gameDirectory.resolve(".katton").resolve("compiled-script-cache"));
+        KattonConfigManager.setStorageDirectory(gameDirectory == null ? null : gameDirectory.resolve(".katton").resolve("config-overrides"));
         ScriptPackManager.INSTANCE.refreshGlobalPacks();
         ScriptReloadManager.initializeGlobalPacks();
         Path globalDir = ScriptPackManager.INSTANCE.getGlobalScriptDirectory();
@@ -80,6 +82,7 @@ public class Katton {
         gameDirectory = gameDir;
         ScriptPackManager.INSTANCE.setGameDirectory(gameDir);
         ScriptEngine.setCacheDirectory(gameDir == null ? null : gameDir.resolve(".katton").resolve("compiled-script-cache"));
+        KattonConfigManager.setStorageDirectory(gameDir == null ? null : gameDir.resolve(".katton").resolve("config-overrides"));
     }
 
     /**

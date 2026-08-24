@@ -34,6 +34,16 @@ class ScriptPackManifestTest {
     }
 
     @Test
+    fun `pack dependencies parse independently from platform dependencies`() {
+        val manifest = ScriptPackManifest.parse(
+            path,
+            """{"id":"addon","dependencies":[],"packDependencies":[{"id":"core","version":">=2","required":true}]}"""
+        )
+
+        assertEquals(ScriptPackDependency("core", ">=2", true), manifest.packDependencies.single())
+    }
+
+    @Test
     fun `dependency defaults and filters are parsed`() {
         val manifest = ScriptPackManifest.parse(path, """
             {

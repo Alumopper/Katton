@@ -13,6 +13,7 @@ import top.katton.api.ReloadCause;
 import top.katton.api.event.managed.FabricManagedEvents;
 import top.katton.command.ScriptCommand;
 import top.katton.engine.ScriptReloadManager;
+import top.katton.engine.InternalDatapackReloads;
 import top.katton.network.Networking;
 import top.katton.network.ServerNetworking;
 import top.katton.pack.ScriptPackManager;
@@ -92,7 +93,11 @@ public class KattonFabric implements ModInitializer {
 
         ServerLifecycleEvents.END_DATA_PACK_RELOAD.register((_, _, success) -> {
             globalState = LoadState.END_DATA_PACK_RELOAD;
+            boolean internalReload = server != null && InternalDatapackReloads.consume(server);
             if (!success) {
+                return;
+            }
+            if (internalReload) {
                 return;
             }
             ScriptReloadManager.reloadScriptsAsync(server, InvocationReason.HOT_RELOAD, ReloadCause.DATAPACK_RELOAD, serverOk -> {

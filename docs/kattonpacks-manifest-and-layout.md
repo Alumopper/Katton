@@ -67,6 +67,7 @@ kattonpacks/example_pack/data/example_pack/tags/item/magic_tools.json
   "enabled": true,
   "clientSync": true,
   "dependencies": [],
+  "packDependencies": [],
   "signature": {
     "algorithm": "Ed25519",
     "payloadVersion": 2,
@@ -87,6 +88,7 @@ kattonpacks/example_pack/data/example_pack/tags/item/magic_tools.json
 - `enabled`: default enabled state if no local state file exists.
 - `clientSync`: whether this pack should be sent to multiplayer clients during Katton server sync. Defaults to `true` for compatibility.
 - `dependencies`: required array of external Fabric mods, NeoForge mods, or Paper plugins. Use `[]` when the pack has none.
+- `packDependencies`: optional array of Katton pack dependencies. Dependencies are validated by ID/version and entrypoints run in topological order.
 - `signature`: recommended for remote client-synced packs. Uses Ed25519 payload format v2 and signs the pack's canonical content digest.
 
 Side behavior:
@@ -120,6 +122,18 @@ Dependency example:
 ```
 
 `platforms` must be non-empty. `environment` defaults to `both`, `required` defaults to `true`, and `version` defaults to `*`. Missing `dependencies` is a manifest error.
+
+Katton pack dependency example:
+
+```json
+"packDependencies": [
+  { "id": "core-library", "version": ">=2.0", "required": true }
+]
+```
+
+Use a scope-qualified ID such as `world:core-library` when the same manifest ID exists in more than one scope. Missing required packs, incompatible versions, ambiguous IDs, and dependency cycles reject only the affected dependency chain; independent packs remain eligible.
+
+Runtime config overrides are stored under `<gameDir>/.katton/config-overrides/` using the scope-qualified sync ID. Server-cache configs add a `server_cache:` runtime prefix so a remote `global:x` cannot overwrite a local `global:x`. Katton never rewrites a pack manifest for config changes, so directory, JAR, and signed packs persist settings consistently and global/world packs with the same manifest ID do not collide.
 
 Signature behavior:
 - Signed client-synced packs are verified before they are written to the client's `serverpacks` cache.

@@ -34,6 +34,9 @@ object ScriptPackManager {
     @Volatile
     private var worldPacks: List<ScriptPack> = emptyList()
 
+    @Volatile
+    private var activeWorldPacks: List<ScriptPack> = emptyList()
+
     fun setGameDirectory(path: Path?) {
         gameDirectory = path
     }
@@ -54,6 +57,7 @@ object ScriptPackManager {
     fun clearWorldDirectory() {
         worldDirectory = null
         worldPacks = emptyList()
+        activeWorldPacks = emptyList()
     }
 
     @Synchronized
@@ -66,6 +70,26 @@ object ScriptPackManager {
         worldPacks = scanScopePacks(worldDirectory, ScriptPackScope.WORLD)
     }
 
+    /** Scans a candidate without replacing the last-known-good active snapshot. */
+    @Synchronized
+    fun scanWorldPacksCandidate(): List<ScriptPack> {
+        return scanScopePacks(worldDirectory, ScriptPackScope.WORLD)
+    }
+
+    /**
+     * Publishes discovery metadata and the independently validated executable
+     * snapshot only after script and resource activation succeeds.
+     */
+    @Synchronized
+    fun publishWorldPacks(packs: List<ScriptPack>, executablePacks: List<ScriptPack> = packs.filter { it.enabled }) {
+        require(packs.all { it.scope == ScriptPackScope.WORLD } &&
+            executablePacks.all { it.scope == ScriptPackScope.WORLD }) {
+            "Only world-scoped packs can be published as the world snapshot"
+        }
+        worldPacks = packs.toList()
+        activeWorldPacks = executablePacks.filter { it.enabled }.distinctBy { it.syncId }
+    }
+
     @Synchronized
     fun refreshLocalPacks() {
         refreshGlobalPacks()
@@ -73,7 +97,7 @@ object ScriptPackManager {
     }
 
     fun collectExecutableWorldPacks(): List<ScriptPack> {
-        return worldPacks.asSequence().filter { it.enabled }.toList()
+        return activeWorldPacks.toList()
     }
 
     fun collectExecutableGlobalPacks(): List<ScriptPack> {
@@ -81,7 +105,7 @@ object ScriptPackManager {
     }
 
     fun collectExecutablePacks(): List<ScriptPack> {
-        return (globalPacks + worldPacks)
+        return (globalPacks + activeWorldPacks)
             .asSequence()
             .filter { it.enabled }
             .toList()
@@ -146,11 +170,6 @@ object ScriptPackManager {
                 ScriptPackFileLimits.MAX_STATE_BYTES,
                 "script pack state"
             )
-            when (pack.scope) {
-                ScriptPackScope.GLOBAL -> refreshGlobalPacks()
-                ScriptPackScope.WORLD -> refreshWorldPacks()
-                ScriptPackScope.SERVER_CACHE -> Unit
-            }
             true
         }.getOrElse {
             LOGGER.warn("Failed to persist pack enabled state for {}", syncId, it)

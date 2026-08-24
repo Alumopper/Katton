@@ -88,8 +88,8 @@
   "katton.reload.common.clear_item_modifications": "正在清理物品修改",
   "katton.reload.common.reset_entity_renderers": "正在重置实体渲染器",
 
-  "commands.katton.help": "[Katton] /katton help | status | registry | registry stale | reload | itemrender spawn <item> [still|spin|float|pulse|showcase] [scale] [lifetimeTicks] | itemrender clear <radius> | debug registryLogging [on|off] | config ...",
-  "commands.katton.status": "[Katton] 状态=%s，服务器绑定=%s，客户端重载中=%s",
+  "commands.katton.help": "[Katton] /katton help | status | errors | capabilities events [事件] | packs list|enable|disable | registry | reload | itemrender ... | config ...",
+  "commands.katton.status": "[Katton] 状态=%s，服务器绑定=%s，重载中=%s",
   "commands.katton.registry.summary": "[Katton] %s",
   "commands.katton.registry.row": "%s：条目=%s，托管=%s，滞留=%s",
   "commands.katton.registry.stale.none": "[Katton] 没有滞留的注册表条目。",
@@ -114,8 +114,8 @@
   "commands.katton.config.removed": "[Katton] [%s] 已移除“%s”",
   "commands.katton.config.remove_failed": "[Katton] 无法在脚本包“%2$s”中移除“%1$s”",
   "commands.katton.debug.registry_logging": "[Katton] debugRegistryLogging=%s",
-  "commands.katton.paper.help": "[Katton] /katton help | status | reload",
-  "commands.katton.paper.status": "[Katton] 状态=%s，服务器绑定=%s",
+  "commands.katton.paper.help": "[Katton] /katton help | status | reload | errors | capabilities events [事件] | packs list|enable|disable",
+  "commands.katton.paper.status": "[Katton] 状态=%s，服务器绑定=%s，服务端重载中=%s",
   "commands.katton.paper.reload.no_permission": "[Katton] 你需要 katton.admin 权限才能重载。",
   "commands.katton.paper.server_not_ready": "[Katton] 服务器尚未就绪。",
   "commands.katton.paper.unknown_subcommand": "[Katton] 未知子命令。请尝试 /katton help。"

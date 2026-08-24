@@ -11,7 +11,8 @@ import top.katton.pack.ScriptPackScope
  * determine which script they are being called from without requiring every
  * API function to pass explicit context parameters.
  *
- * Owner format is always `"<scope>:<fqcn>"` (e.g. `"GLOBAL:top.katton.scripts.MyScript"`).
+ * Entrypoint owners use `"<scope>:<phase>:<fqcn>"` so registrations from
+ * different lifecycle phases can be replaced independently.
  */
 object ScriptExecutionContext {
     private val currentScriptOwner = ThreadLocal<String?>()

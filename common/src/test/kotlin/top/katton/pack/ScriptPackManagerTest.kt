@@ -232,6 +232,24 @@ class ScriptPackManagerTest {
         )
     }
 
+    @Test
+    fun `published discovery metadata does not replace the validated executable snapshot`() {
+        val directory = createPack("transactional")
+        write(directory.resolve("main.kt"), "fun version() = 1")
+        val previous = assertNotNull(ScriptPackManager.scanPackDirectory(directory, ScriptPackScope.WORLD))
+        write(directory.resolve("main.kt"), "fun version() = 2")
+        val candidate = assertNotNull(ScriptPackManager.scanPackDirectory(directory, ScriptPackScope.WORLD))
+
+        try {
+            ScriptPackManager.publishWorldPacks(listOf(candidate), listOf(previous))
+
+            assertEquals(previous.codeHash, ScriptPackManager.collectExecutableWorldPacks().single().codeHash)
+            assertEquals(candidate.hash, ScriptPackManager.listLocalPacksForGui(false).single().hash)
+        } finally {
+            ScriptPackManager.clearWorldDirectory()
+        }
+    }
+
     private fun createPack(id: String): Path {
         val pack = Files.createDirectory(temporaryDirectory.resolve(id))
         write(pack.resolve("manifest.json"), """{"id":"$id","dependencies":[]}""")

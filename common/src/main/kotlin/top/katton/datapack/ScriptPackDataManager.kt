@@ -22,6 +22,7 @@ import top.katton.pack.ScriptPackFileLimits
 import top.katton.pack.ScriptPackKind
 import top.katton.pack.ScriptPackJarSnapshots
 import top.katton.pack.ScriptPackScope
+import top.katton.engine.InternalDatapackReloads
 import top.katton.util.ReflectUtil
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
@@ -59,25 +60,45 @@ object ScriptPackDataManager {
     private var activeSignature: String = ""
 
     @Synchronized
+    @Deprecated("Use activateAndReload; activation is transactional")
     fun activateForServer(server: MinecraftServer, packs: List<ScriptPack>): Boolean {
+        return activateAndReload(server, packs)
+    }
+
+    /**
+     * Atomically publishes script-pack data resources. A failed resource reload
+     * restores both the repository view and the previously active data packs.
+     */
+    @Synchronized
+    fun activateAndReload(server: MinecraftServer, packs: List<ScriptPack>): Boolean {
         val repository = server.packRepository
         val repositoryChanged = installedRepository !== repository
-        val previousSignature = activeSignature
-        if (!installRepositorySource(repository)) {
-            return false
-        }
-
-        val entries = packs.mapIndexedNotNull { index, pack -> createEntry(index, pack) }
+        val previousEntries = if (repositoryChanged) emptyList() else activeEntries
+        val previousSignature = if (repositoryChanged) "" else activeSignature
+        val entries = runCatching { packs.mapIndexedNotNull { index, pack -> createEntry(index, pack) } }
+            .onFailure { logger.warn("Failed to materialize candidate Katton script data", it) }
+            .getOrNull() ?: return false
         val nextSignature = signatureOf(entries)
-        val shouldReload = when {
-            repositoryChanged && nextSignature.isEmpty() -> false
-            repositoryChanged -> true
-            else -> nextSignature != previousSignature
+        val changed = (repositoryChanged && nextSignature.isNotEmpty()) || nextSignature != previousSignature
+        if (!installRepositorySource(repository)) return false
+        if (!changed) {
+            // A fresh repository must never expose entries retained from the
+            // previous server, even when the new candidate has no data packs.
+            activeEntries = entries
+            activeSignature = nextSignature
+            return true
         }
 
         activeEntries = entries
         activeSignature = nextSignature
-        return shouldReload
+        if (reloadServerResources(server)) return true
+
+        activeEntries = previousEntries
+        activeSignature = previousSignature
+        if (!reloadServerResources(server)) {
+            logger.error("Failed to restore the previous Katton script data resources after a rejected reload")
+        }
+        return false
     }
 
     fun reloadServerResources(server: MinecraftServer): Boolean {
@@ -94,13 +115,15 @@ object ScriptPackDataManager {
 
     private fun createEntry(index: Int, pack: ScriptPack): DataEntry? {
         val jarLocation = if (pack.kind == ScriptPackKind.JAR) {
-            ScriptPackJarSnapshots.materialize(pack) ?: return null
+            ScriptPackJarSnapshots.materialize(pack)
+                ?: error("Cannot materialize JAR snapshot for ${pack.syncId}")
         } else null
         val dataHash = packDataHash(pack, jarLocation) ?: return null
         val effectiveLocation = when (pack.kind) {
             ScriptPackKind.JAR -> jarLocation ?: return null
             ScriptPackKind.DIRECTORY ->
-                ScriptPackDirectorySnapshots.materialize(pack, "data", dataHash) ?: return null
+                ScriptPackDirectorySnapshots.materialize(pack, "data", dataHash)
+                    ?: error("Cannot materialize data snapshot for ${pack.syncId}")
         }
         val scopeOrder = when (pack.scope) {
             ScriptPackScope.GLOBAL -> 0
@@ -153,14 +176,20 @@ object ScriptPackDataManager {
 
             repository.reload()
             val requestedIds = LinkedHashSet<String>().apply {
-                addAll(repository.selectedIds)
+                addAll(repository.selectedIds.filterNot(::isKattonDataPackId))
                 addAll(activeEntries.map { it.packId })
             }
             repository.setSelected(requestedIds)
             val selectedIds = repository.selectedIds.toList()
 
             logger.info("Reloading server data resources for {} Katton script data packs", activeEntries.size)
-            val reloadFuture = server.reloadResources(selectedIds)
+            val markedInternal = InternalDatapackReloads.begin(server)
+            val reloadFuture = try {
+                server.reloadResources(selectedIds)
+            } catch (failure: Throwable) {
+                if (markedInternal) InternalDatapackReloads.cancel(server)
+                throw failure
+            }
             waitForReload(server, reloadFuture)
             restoreWorldDataConfiguration(server)
             true
@@ -252,7 +281,7 @@ object ScriptPackDataManager {
 
     private fun hashJarDataEntries(path: Path): String? {
         if (!Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS) || Files.isSymbolicLink(path)) {
-            return null
+            error("Materialized JAR data snapshot is unavailable or unsafe: $path")
         }
 
         return runCatching {
@@ -303,9 +332,8 @@ object ScriptPackDataManager {
                 }
             }
             if (found) digest.digest().joinToString("") { "%02x".format(it) } else null
-        }.getOrElse {
-            logger.warn("Failed to hash safe data entries from Katton jar {}", path, it)
-            null
+        }.getOrElse { failure ->
+            throw IllegalStateException("Failed to hash safe data entries from Katton JAR $path", failure)
         }
     }
 

@@ -167,6 +167,32 @@ fun clearItemModifications() {
     ACTIVE_ITEM_MODIFICATIONS.clear()
 }
 
+/** Immutable component snapshot used by transactional script reload rollback. */
+internal fun snapshotItemComponents(): Map<Item, DataComponentMap> = buildMap {
+    BuiltInRegistries.ITEM.forEach { item ->
+        ReflectUtil.getT<DataComponentMap>(item, "components").getOrNull()?.let { put(item, it) }
+    }
+}
+
+internal fun restoreItemComponents(snapshot: Map<Item, DataComponentMap>): Boolean {
+    var restored = true
+    snapshot.forEach { (item, components) ->
+        val itemId = BuiltInRegistries.ITEM.getKey(item)
+        val componentWrite = ReflectUtil.set(item, "components", components)
+        if (componentWrite.isFailure) {
+            restored = false
+            LOGGER.error("Failed to restore item components for {}: {}", itemId, componentWrite.errorOrNull())
+            return@forEach
+        }
+        runCatching { item.builtInRegistryHolder().bindComponents(components) }
+            .onFailure { failure ->
+                restored = false
+                LOGGER.error("Failed to restore item component holder for {}", itemId, failure)
+            }
+    }
+    return restored
+}
+
 fun reapplyItemModifications() {
     ACTIVE_ITEM_MODIFICATIONS.values.forEach { config ->
         val item = BuiltInRegistries.ITEM.getOptional(config.itemId).orElse(null) ?: return@forEach
