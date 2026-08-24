@@ -17,11 +17,15 @@ import net.minecraft.world.level.DataPackConfig
 import net.minecraft.world.level.WorldDataConfiguration
 import top.katton.pack.ScriptPack
 import top.katton.pack.ScriptPackContentFile
+import top.katton.pack.ScriptPackDirectorySnapshots
+import top.katton.pack.ScriptPackFileLimits
 import top.katton.pack.ScriptPackKind
+import top.katton.pack.ScriptPackJarSnapshots
 import top.katton.pack.ScriptPackScope
 import top.katton.util.ReflectUtil
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
+import java.nio.file.LinkOption
 import java.nio.file.Path
 import java.security.MessageDigest
 import java.util.Locale
@@ -89,7 +93,15 @@ object ScriptPackDataManager {
     }
 
     private fun createEntry(index: Int, pack: ScriptPack): DataEntry? {
-        val dataHash = packDataHash(pack) ?: return null
+        val jarLocation = if (pack.kind == ScriptPackKind.JAR) {
+            ScriptPackJarSnapshots.materialize(pack) ?: return null
+        } else null
+        val dataHash = packDataHash(pack, jarLocation) ?: return null
+        val effectiveLocation = when (pack.kind) {
+            ScriptPackKind.JAR -> jarLocation ?: return null
+            ScriptPackKind.DIRECTORY ->
+                ScriptPackDirectorySnapshots.materialize(pack, "data", dataHash) ?: return null
+        }
         val scopeOrder = when (pack.scope) {
             ScriptPackScope.GLOBAL -> 0
             ScriptPackScope.WORLD -> 1
@@ -107,7 +119,7 @@ object ScriptPackDataManager {
             packId = packId,
             title = "${pack.manifest.name} data",
             kind = pack.kind,
-            location = pack.location,
+            location = effectiveLocation,
             scope = pack.scope,
             dataHash = dataHash
         )
@@ -215,13 +227,13 @@ object ScriptPackDataManager {
         return true
     }
 
-    private fun packDataHash(pack: ScriptPack): String? {
+    private fun packDataHash(pack: ScriptPack, jarLocation: Path?): String? {
         val dataFiles = pack.contentFiles.filter { it.relativePath.startsWith("data/") }
         if (dataFiles.isNotEmpty()) {
             return hashContentFiles(dataFiles)
         }
         return if (pack.kind == ScriptPackKind.JAR) {
-            hashJarDataEntries(pack.location)
+            jarLocation?.let(::hashJarDataEntries)
         } else {
             null
         }
@@ -229,39 +241,72 @@ object ScriptPackDataManager {
 
     private fun hashContentFiles(files: List<ScriptPackContentFile>): String {
         val digest = MessageDigest.getInstance("SHA-256")
+        digest.updateFramed("katton-directory-data-hash-v2".toByteArray(StandardCharsets.UTF_8))
+        digest.updateInt(files.size)
         files.sortedBy { it.relativePath }.forEach { file ->
-            digest.update(file.relativePath.toByteArray(StandardCharsets.UTF_8))
-            digest.update(0)
-            digest.update(file.bytes)
-            digest.update(0)
+            digest.updateFramed(file.relativePath.toByteArray(StandardCharsets.UTF_8))
+            digest.updateFramed(file.bytes)
         }
         return digest.digest().joinToString("") { "%02x".format(it) }
     }
 
     private fun hashJarDataEntries(path: Path): String? {
-        if (!Files.isRegularFile(path)) {
+        if (!Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS) || Files.isSymbolicLink(path)) {
             return null
         }
 
         return runCatching {
             val digest = MessageDigest.getInstance("SHA-256")
             var found = false
+            var archiveEntryCount = 0
+            var expandedBytes = 0L
             JarFile(path.toFile()).use { jar ->
-                jar.entries().asSequence()
-                    .filter { entry -> !entry.isDirectory && entry.name.startsWith("data/") }
-                    .sortedBy { it.name }
-                    .forEach { entry ->
-                        found = true
-                        digest.update(entry.name.toByteArray(StandardCharsets.UTF_8))
-                        digest.update(0)
-                        jar.getInputStream(entry).use { input ->
-                            digest.update(input.readAllBytes())
+                val dataEntries = buildList {
+                    val entries = jar.entries()
+                    while (entries.hasMoreElements()) {
+                        val entry = entries.nextElement()
+                        archiveEntryCount++
+                        require(archiveEntryCount <= ScriptPackFileLimits.MAX_ARCHIVE_ENTRIES) {
+                            "Archive contains too many entries"
                         }
-                        digest.update(0)
+                        if (!entry.isDirectory && entry.name.startsWith("data/")) add(entry)
                     }
+                }.sortedBy { it.name }
+                digest.updateFramed("katton-jar-data-hash-v2".toByteArray(StandardCharsets.UTF_8))
+                digest.updateInt(dataEntries.size)
+                dataEntries.forEach { entry ->
+                    found = true
+                    digest.updateFramed(entry.name.toByteArray(StandardCharsets.UTF_8))
+                    val entryDigest = MessageDigest.getInstance("SHA-256")
+                    var entryBytes = 0
+                    jar.getInputStream(entry).use { input ->
+                        val buffer = ByteArray(8 * 1024)
+                        while (true) {
+                            val read = input.read(buffer)
+                            if (read < 0) break
+                            entryBytes += read
+                            expandedBytes += read
+                            require(entryBytes <= ScriptPackFileLimits.MAX_FILE_BYTES) {
+                                "Archive data entry '${entry.name}' is too large"
+                            }
+                            require(expandedBytes <= ScriptPackFileLimits.MAX_PACK_CONTENT_BYTES) {
+                                "Archive data entries exceed the pack byte budget"
+                            }
+                            entryDigest.update(buffer, 0, read)
+                        }
+                    }
+                    require(entry.size < 0L || entry.size == entryBytes.toLong()) {
+                        "Archive data entry '${entry.name}' changed size while reading"
+                    }
+                    digest.updateInt(entryBytes)
+                    digest.updateFramed(entryDigest.digest())
+                }
             }
             if (found) digest.digest().joinToString("") { "%02x".format(it) } else null
-        }.getOrNull()
+        }.getOrElse {
+            logger.warn("Failed to hash safe data entries from Katton jar {}", path, it)
+            null
+        }
     }
 
     private fun packSource(scope: ScriptPackScope): PackSource {
@@ -294,6 +339,18 @@ object ScriptPackDataManager {
                 )
             }
         }
+    }
+
+    private fun MessageDigest.updateFramed(bytes: ByteArray) {
+        updateInt(bytes.size)
+        update(bytes)
+    }
+
+    private fun MessageDigest.updateInt(value: Int) {
+        update((value ushr 24).toByte())
+        update((value ushr 16).toByte())
+        update((value ushr 8).toByte())
+        update(value.toByte())
     }
 
     private data class DataEntry(

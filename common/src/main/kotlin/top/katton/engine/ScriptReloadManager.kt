@@ -34,10 +34,28 @@ import java.util.concurrent.CompletableFuture
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 
 object ScriptReloadManager {
     private val logger: Logger = LoggerFactory.getLogger(ScriptReloadManager::class.java)
+    private const val INTERNAL_WAIT_TIMEOUT_SECONDS = 60L
+    private const val SERVER_RELOAD_WAIT_TIMEOUT_SECONDS = 120L
+
+    private data class PendingClientReload(
+        var reason: InvocationReason,
+        var cause: ReloadCause,
+        val callbacks: MutableList<(Boolean) -> Unit>
+    )
+
+    private data class ServerReloadRequest(
+        var server: MinecraftServer,
+        var reason: InvocationReason,
+        var cause: ReloadCause,
+        val callbacks: MutableList<(Boolean) -> Unit>,
+        val future: CompletableFuture<Void> = CompletableFuture()
+    )
 
     private val clientReloadExecutor: ExecutorService = Executors.newSingleThreadExecutor { r ->
         Thread(r, "Katton-ClientReload").also { it.isDaemon = true }
@@ -46,15 +64,20 @@ object ScriptReloadManager {
     private val clientReloadRunning = AtomicBoolean(false)
     private val serverReloadRunning = AtomicBoolean(false)
     private val globalClientInitialized = AtomicBoolean(false)
+    private val clientReloadQueueLock = Any()
+    private val serverReloadStateLock = Any()
+
+    /** Requests arriving during a reload are collapsed into one follow-up pass. */
+    private var pendingClientReload: PendingClientReload? = null
+
+    /** Server mutations stay serialized; only the latest queued state needs another pass. */
+    private var pendingServerReload: ServerReloadRequest? = null
 
     @Volatile
     private var clientJoinedDispatchPending = false
 
     @Volatile
     private var globalReadyServer: MinecraftServer? = null
-
-    @Volatile
-    private var clientReloadFuture: CompletableFuture<Void>? = null
 
     @Volatile
     private var serverReloadFuture: CompletableFuture<Void>? = null
@@ -190,35 +213,111 @@ object ScriptReloadManager {
         onComplete: ((Boolean) -> Unit)? = null
     ): Boolean {
         if (!clientReloadRunning.compareAndSet(false, true)) {
-            val future = clientReloadFuture
-            if (future != null) {
-                future.whenComplete { _, _ -> reloadClientScriptsAsync(reason, cause, onComplete) }
-            } else {
-                onComplete?.invoke(false)
-            }
+            enqueuePendingClientReload(reason, cause, onComplete)
             return true
         }
-        val future = CompletableFuture<Void>()
-        clientReloadFuture = future
-        if (onComplete != null) {
-            future.whenComplete { _, error -> onComplete(error == null) }
-        }
-        clientReloadExecutor.execute {
-            var failure: Throwable? = null
-            try {
-                if (!reloadClientScripts(reason, cause)) {
-                    failure = IllegalStateException("Client script reload failed")
+        startClientReload(reason, cause, listOfNotNull(onComplete))
+        return true
+    }
+
+    private fun startClientReload(
+        reason: InvocationReason,
+        cause: ReloadCause,
+        callbacks: List<(Boolean) -> Unit>
+    ) {
+        try {
+            clientReloadExecutor.execute {
+                var failure: Throwable? = null
+                try {
+                    if (!reloadClientScripts(reason, cause)) {
+                        failure = IllegalStateException("Client script reload failed")
+                    }
+                } catch (t: Throwable) {
+                    failure = t
+                    logger.error("Failed to reload client scripts asynchronously", t)
+                    ReloadProgressState.finish("katton.reload.client.failed")
                 }
-            } catch (t: Throwable) {
-                failure = t
-                logger.error("Failed to reload client scripts asynchronously", t)
-                ReloadProgressState.finish("katton.reload.client.failed")
+                val success = failure == null
+                try {
+                    dispatchClientReloadCallbacks(callbacks, success)
+                } finally {
+                    // Callbacks publish or roll back the pack snapshot. Retain the
+                    // running slot through that transition so an external request
+                    // cannot enter the executor ahead of a callback-scheduled rollback.
+                    clientReloadRunning.set(false)
+                    startPendingClientReloadIfPresent()
+                }
+            }
+        } catch (rejected: RuntimeException) {
+            logger.error("Client reload executor rejected a reload", rejected)
+            try {
+                dispatchClientReloadCallbacks(callbacks, false)
             } finally {
                 clientReloadRunning.set(false)
+                startPendingClientReloadIfPresent()
             }
-            failure?.let(future::completeExceptionally) ?: future.complete(null)
         }
-        return true
+    }
+
+    private fun enqueuePendingClientReload(
+        reason: InvocationReason,
+        cause: ReloadCause,
+        callback: ((Boolean) -> Unit)?
+    ) {
+        synchronized(clientReloadQueueLock) {
+            val pending = pendingClientReload
+            if (pending == null) {
+                pendingClientReload = PendingClientReload(reason, cause, listOfNotNull(callback).toMutableList())
+            } else {
+                // The latest cause describes the state that the follow-up pass will observe.
+                pending.reason = reason
+                pending.cause = cause
+                callback?.let(pending.callbacks::add)
+            }
+        }
+    }
+
+    private fun startPendingClientReloadIfPresent() {
+        val pending = synchronized(clientReloadQueueLock) {
+            pendingClientReload.also { pendingClientReload = null }
+        } ?: return
+
+        if (clientReloadRunning.compareAndSet(false, true)) {
+            startClientReload(pending.reason, pending.cause, pending.callbacks)
+            return
+        }
+
+        // Another caller won the transition between the completed pass and this
+        // drain. Merge our callbacks back into its single queued follow-up pass.
+        synchronized(clientReloadQueueLock) {
+            val queued = pendingClientReload
+            if (queued == null) {
+                pendingClientReload = pending
+            } else {
+                queued.reason = pending.reason
+                queued.cause = pending.cause
+                queued.callbacks += pending.callbacks
+            }
+        }
+    }
+
+    private fun dispatchClientReloadCallbacks(callbacks: List<(Boolean) -> Unit>, success: Boolean) {
+        if (callbacks.isEmpty()) return
+        val action: () -> Unit = {
+            callbacks.forEach { callback ->
+                runCatching { callback(success) }
+                    .onFailure { logger.error("Client script reload completion callback failed", it) }
+            }
+        }
+        // Completion callbacks publish or roll back script-pack state. Wait for
+        // their small main-thread transition before draining the next reload.
+        // Dispatching the coalesced batch together also avoids one queue/latch
+        // round trip per caller when many reload requests arrive at once.
+        runCatching { runOnClientThreadAndWait(action) }
+            .onFailure {
+                logger.warn("Client executor rejected reload callback; running it on the reload thread", it)
+                action()
+            }
     }
 
     /**
@@ -232,25 +331,63 @@ object ScriptReloadManager {
         }
 
         val latch = CountDownLatch(1)
+        // 0 = queued, 1 = running, 2 = cancelled before start, 3 = finished.
+        // A timeout may cancel a queued action, but must never return while an
+        // already-running main-thread mutation is still touching reload state.
+        val executionState = AtomicInteger(0)
         var failure: Throwable? = null
-        minecraft.execute {
-            try {
-                action()
-            } catch (t: Throwable) {
-                failure = t
-            } finally {
-                latch.countDown()
+        try {
+            minecraft.execute {
+                if (!executionState.compareAndSet(0, 1)) {
+                    latch.countDown()
+                    return@execute
+                }
+                try {
+                    action()
+                } catch (t: Throwable) {
+                    failure = t
+                } finally {
+                    executionState.set(3)
+                    latch.countDown()
+                }
             }
+        } catch (rejected: RuntimeException) {
+            executionState.compareAndSet(0, 2)
+            throw IllegalStateException("Client executor rejected reload setup", rejected)
         }
 
         try {
-            latch.await()
+            if (!latch.await(INTERNAL_WAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
+                if (executionState.compareAndSet(0, 2)) {
+                    throw IllegalStateException(
+                        "Timed out waiting for client main-thread reload setup after $INTERNAL_WAIT_TIMEOUT_SECONDS seconds"
+                    )
+                }
+                // The action crossed from queued to running at the timeout
+                // boundary. Wait for it so cleanup cannot race its mutations.
+                latch.await()
+            }
         } catch (interrupted: InterruptedException) {
+            val cancelledBeforeStart = executionState.compareAndSet(0, 2)
+            if (!cancelledBeforeStart) awaitUninterruptibly(latch)
             Thread.currentThread().interrupt()
             throw RuntimeException("Interrupted while waiting for client main-thread reload setup", interrupted)
         }
 
         failure?.let { throw it }
+    }
+
+    private fun awaitUninterruptibly(latch: CountDownLatch) {
+        var interrupted = false
+        while (true) {
+            try {
+                latch.await()
+                break
+            } catch (_: InterruptedException) {
+                interrupted = true
+            }
+        }
+        if (interrupted) Thread.currentThread().interrupt()
     }
 
     @JvmStatic
@@ -313,10 +450,19 @@ object ScriptReloadManager {
      */
     @JvmStatic
     fun awaitServerReloadCompletion() {
-        val future = serverReloadFuture ?: return
+        val future = synchronized(serverReloadStateLock) { serverReloadFuture } ?: return
         try {
-            future.get()
-        } catch (_: Exception) {
+            future.get(SERVER_RELOAD_WAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+        } catch (interrupted: InterruptedException) {
+            Thread.currentThread().interrupt()
+            throw IllegalStateException("Interrupted while waiting for the server script reload", interrupted)
+        } catch (failure: Exception) {
+            // Continuing configuration after a failed/timed-out registry reload
+            // can expose a registry snapshot that does not match the scripts.
+            throw IllegalStateException(
+                "Server script reload did not complete before registry-sensitive work",
+                failure
+            )
         }
     }
 
@@ -488,45 +634,100 @@ object ScriptReloadManager {
         cause: ReloadCause,
         onComplete: (Boolean) -> Unit
     ) {
-        if (!serverReloadRunning.compareAndSet(false, true)) {
-            onComplete(false)
-            return
-        }
-        val future = CompletableFuture<Void>()
-        serverReloadFuture = future
-
-        // Registry, event, command, and datapack mutations must stay on the server thread.
-        server.execute {
-            try {
-                if (reason == InvocationReason.INITIAL_LOAD && !initializeGlobalReadyPacks(server)) {
-                    throw IllegalStateException("Global server READY entrypoints failed")
-                }
-                val ok = reloadScripts(server, reason, cause)
-                if (ok) {
-                    if (Katton.hasClient) {
-                        ServerNetworking.publishPackRevision(server)
-                        if (!server.isDedicatedServer && reason == InvocationReason.HOT_RELOAD) {
-                            reloadClientScriptsAsync(
-                                InvocationReason.HOT_RELOAD,
-                                ReloadCause.SERVER_PACK_SYNC,
-                                null
-                            )
-                        }
+        val requestToStart = synchronized(serverReloadStateLock) {
+            if (serverReloadRunning.get()) {
+                val pending = pendingServerReload
+                if (pending == null) {
+                    ServerReloadRequest(
+                        server = server,
+                        reason = reason,
+                        cause = cause,
+                        callbacks = mutableListOf(onComplete)
+                    ).also {
+                        pendingServerReload = it
+                        serverReloadFuture = it.future
                     }
-                    future.complete(null)
                 } else {
-                    future.completeExceptionally(IllegalStateException("Server script reload failed"))
+                    // The follow-up observes the newest filesystem state. Merge
+                    // callbacks so no caller mistakes coalescing for a failure.
+                    pending.server = server
+                    pending.reason = reason
+                    pending.cause = cause
+                    pending.callbacks += onComplete
                 }
-                onComplete(ok)
-            } catch (t: Throwable) {
-                logger.error("Failed to reload server scripts", t)
-                ReloadProgressState.finish("katton.reload.server.failed")
-                future.completeExceptionally(t)
-                onComplete(false)
-            } finally {
-                serverReloadRunning.set(false)
+                null
+            } else {
+                serverReloadRunning.set(true)
+                ServerReloadRequest(server, reason, cause, mutableListOf(onComplete)).also {
+                    serverReloadFuture = it.future
+                }
             }
         }
+        requestToStart?.let(::scheduleServerReload)
+    }
+
+    private fun scheduleServerReload(request: ServerReloadRequest) {
+        // Registry, event, command, and datapack mutations must stay on the server thread.
+        try {
+            request.server.execute {
+                var completedSuccessfully = false
+                try {
+                    // Calling this on every pass is cheap once initialized and
+                    // also repairs an initial-load failure before a queued reload.
+                    if (!initializeGlobalReadyPacks(request.server)) {
+                        throw IllegalStateException("Global server READY entrypoints failed")
+                    }
+                    val ok = reloadScripts(request.server, request.reason, request.cause)
+                    if (ok) {
+                        if (Katton.hasClient) {
+                            ServerNetworking.publishPackRevision(request.server)
+                            if (!request.server.isDedicatedServer && request.reason == InvocationReason.HOT_RELOAD) {
+                                reloadClientScriptsAsync(
+                                    InvocationReason.HOT_RELOAD,
+                                    ReloadCause.SERVER_PACK_SYNC,
+                                    null
+                                )
+                            }
+                        }
+                        request.future.complete(null)
+                    } else {
+                        request.future.completeExceptionally(IllegalStateException("Server script reload failed"))
+                    }
+                    completedSuccessfully = ok
+                } catch (t: Throwable) {
+                    logger.error("Failed to reload server scripts", t)
+                    ReloadProgressState.finish("katton.reload.server.failed")
+                    request.future.completeExceptionally(t)
+                } finally {
+                    request.callbacks.forEach { callback ->
+                        runCatching { callback(completedSuccessfully) }
+                            .onFailure { logger.error("Server script reload completion callback failed", it) }
+                    }
+                    startPendingServerReloadOrFinish()
+                }
+            }
+        } catch (rejected: RuntimeException) {
+            request.future.completeExceptionally(rejected)
+            request.callbacks.forEach { callback ->
+                runCatching { callback(false) }
+                    .onFailure { logger.error("Rejected server reload callback failed", it) }
+            }
+            startPendingServerReloadOrFinish()
+        }
+    }
+
+    /** Transfers ownership of the running slot directly to the queued pass. */
+    private fun startPendingServerReloadOrFinish() {
+        val next = synchronized(serverReloadStateLock) {
+            pendingServerReload.also { pendingServerReload = null }.also { pending ->
+                if (pending == null) {
+                    serverReloadRunning.set(false)
+                } else {
+                    serverReloadFuture = pending.future
+                }
+            }
+        }
+        next?.let(::scheduleServerReload)
     }
 
     private fun ensureDirectory(path: Path?) {

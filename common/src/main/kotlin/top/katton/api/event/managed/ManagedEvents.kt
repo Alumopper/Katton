@@ -40,7 +40,7 @@ interface ManagedListenerProvider {
 
 /**
  * Active managed-listener provider installed by the current platform.
- * Paper currently initializes this from `PaperManagedEvents.initialize()`.
+ * Fabric, NeoForge, and Paper each install their bridge during platform startup.
  */
 @Volatile
 @JvmField

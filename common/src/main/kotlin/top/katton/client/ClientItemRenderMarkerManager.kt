@@ -43,13 +43,29 @@ private fun getLightCoords(level: BlockAndLightGetter, pos: BlockPos): Int {
 
 object ClientItemRenderMarkerManager {
     private const val FULL_BRIGHT_LIGHT = 0x00F000F0
+    private const val MAX_ACTIVE_MARKERS = 4_096
+    private const val MAX_ACTIVE_ANIMATION_SETS = 16_384L
+    private const val MAX_ACTIVE_ANIMATIONS = 65_536L
+    private const val MAX_ACTIVE_KEYFRAMES = 262_144L
+    private const val CAPACITY_WARNING_INTERVAL_NANOS = 10_000_000_000L
     private val markers = ConcurrentHashMap<UUID, Entry>()
     private val mc = Minecraft.getInstance()
     private val logger = LogUtils.getLogger()
+    private var activeAnimationSets = 0L
+    private var activeAnimations = 0L
+    private var activeKeyframes = 0L
+    private var lastCapacityWarningNanos = 0L
+
+    private data class MarkerComplexity(
+        val animationSets: Long,
+        val animations: Long,
+        val keyframes: Long
+    )
 
     private data class Entry(
         val marker: ClientItemRenderMarker,
         var remainingTicks: Int?,
+        val complexity: MarkerComplexity,
         var ageTicks: Int = 0,
         val renderState: ItemStackRenderState = ItemStackRenderState(),
         val playingAnimationIds: MutableSet<String> = LinkedHashSet(marker.playingAnimationID),
@@ -73,7 +89,7 @@ object ClientItemRenderMarkerManager {
                 packet.markers.forEach { addOrUpdate(it) }
             }
             ClientItemRenderMarkerPacket.Action.REMOVE -> {
-                packet.ids.forEach { markers.remove(it) }
+                packet.ids.forEach(::remove)
             }
             ClientItemRenderMarkerPacket.Action.CLEAR -> clear()
             ClientItemRenderMarkerPacket.Action.PLAY_ANIMATION -> {
@@ -90,23 +106,46 @@ object ClientItemRenderMarkerManager {
     }
 
     @JvmStatic
+    @Synchronized
     fun addOrUpdate(marker: ClientItemRenderMarker) {
         if (marker.stack.isEmpty) {
-            markers.remove(marker.id)
+            remove(marker.id)
+            return
+        }
+        val complexity = markerComplexity(marker)
+        val previous = markers[marker.id]
+        val markerCount = markers.size + if (previous == null) 1 else 0
+        val nextSets = activeAnimationSets - (previous?.complexity?.animationSets ?: 0L) + complexity.animationSets
+        val nextAnimations = activeAnimations - (previous?.complexity?.animations ?: 0L) + complexity.animations
+        val nextKeyframes = activeKeyframes - (previous?.complexity?.keyframes ?: 0L) + complexity.keyframes
+        if (markerCount > MAX_ACTIVE_MARKERS ||
+            nextSets > MAX_ACTIVE_ANIMATION_SETS ||
+            nextAnimations > MAX_ACTIVE_ANIMATIONS ||
+            nextKeyframes > MAX_ACTIVE_KEYFRAMES
+        ) {
+            warnCapacityExceeded()
             return
         }
         val ttl = marker.lifetimeTicks.takeIf { it > 0 }
-        markers[marker.id] = Entry(marker.copy(stack = marker.stack.copy()), ttl)
+        markers[marker.id] = Entry(marker.copy(stack = marker.stack.copy()), ttl, complexity)
+        activeAnimationSets = nextSets
+        activeAnimations = nextAnimations
+        activeKeyframes = nextKeyframes
     }
 
     @JvmStatic
+    @Synchronized
     fun remove(id: UUID) {
-        markers.remove(id)
+        markers.remove(id)?.let(::releaseComplexity)
     }
 
     @JvmStatic
+    @Synchronized
     fun clear() {
         markers.clear()
+        activeAnimationSets = 0L
+        activeAnimations = 0L
+        activeKeyframes = 0L
     }
 
     @JvmStatic
@@ -125,6 +164,7 @@ object ClientItemRenderMarkerManager {
     }
 
     @JvmStatic
+    @Synchronized
     fun tick() {
         val iterator = markers.entries.iterator()
         while (iterator.hasNext()) {
@@ -132,6 +172,7 @@ object ClientItemRenderMarkerManager {
             val remaining = entry.remainingTicks
             if (remaining != null && remaining <= 1) {
                 iterator.remove()
+                releaseComplexity(entry)
                 continue
             }
 
@@ -159,7 +200,13 @@ object ClientItemRenderMarkerManager {
             }
 
             val animationTransform = sampleAnimations(entry, entry.ageTicks + tickDelta)
+            if (!animationTransform.isFinite()) continue
             val animatedPos = marker.pos.add(animationTransform.translation)
+            if (!animatedPos.isFiniteVector()) continue
+            // Two finite world coordinates can still overflow when subtracted (for example,
+            // +Double.MAX_VALUE - -Double.MAX_VALUE). Never pass that result into PoseStack.
+            val renderOffset = animatedPos.subtract(camPos)
+            if (!renderOffset.isFiniteVector()) continue
 
             val distanceLimit = marker.maxDistance
             if (distanceLimit > 0.0 && animatedPos.distanceToSqr(camPos) > distanceLimit * distanceLimit) {
@@ -167,11 +214,26 @@ object ClientItemRenderMarkerManager {
             }
 
             val maxScale = maxOf(animationTransform.scale.x, animationTransform.scale.y, animationTransform.scale.z).coerceAtLeast(0.001)
-            val cullSize = (marker.scale.toDouble() * maxScale).coerceAtLeast(0.25)
+            val rawCullSize = marker.scale.toDouble() * maxScale
+            if (!rawCullSize.isFinite()) continue
+            val cullSize = rawCullSize.coerceAtLeast(0.25)
             val bounds = AABB.ofSize(animatedPos, cullSize, cullSize, cullSize)
+            if (!bounds.minX.isFinite() || !bounds.minY.isFinite() || !bounds.minZ.isFinite() ||
+                !bounds.maxX.isFinite() || !bounds.maxY.isFinite() || !bounds.maxZ.isFinite()
+            ) continue
             if (!cameraState.cullFrustum.isVisible(bounds)) {
                 continue
             }
+
+            val renderYaw = (marker.yaw + animationTransform.rotation.y).toFloat()
+            val renderPitch = (marker.pitch + animationTransform.rotation.x).toFloat()
+            val renderRoll = (marker.roll + animationTransform.rotation.z).toFloat()
+            val renderScaleX = (marker.scale * animationTransform.scale.x).toFloat()
+            val renderScaleY = (marker.scale * animationTransform.scale.y).toFloat()
+            val renderScaleZ = (marker.scale * animationTransform.scale.z).toFloat()
+            if (!renderYaw.isFinite() || !renderPitch.isFinite() || !renderRoll.isFinite() ||
+                !renderScaleX.isFinite() || !renderScaleY.isFinite() || !renderScaleZ.isFinite()
+            ) continue
 
             val light = if (marker.fullBright) {
                 FULL_BRIGHT_LIGHT
@@ -181,14 +243,14 @@ object ClientItemRenderMarkerManager {
 
             poseStack.pushPose()
             try {
-                poseStack.translate(animatedPos.x - camPos.x, animatedPos.y - camPos.y, animatedPos.z - camPos.z)
-                poseStack.mulPose(Axis.YP.rotationDegrees((marker.yaw + animationTransform.rotation.y).toFloat()))
-                poseStack.mulPose(Axis.XP.rotationDegrees((marker.pitch + animationTransform.rotation.x).toFloat()))
-                poseStack.mulPose(Axis.ZP.rotationDegrees((marker.roll + animationTransform.rotation.z).toFloat()))
+                poseStack.translate(renderOffset.x, renderOffset.y, renderOffset.z)
+                poseStack.mulPose(Axis.YP.rotationDegrees(renderYaw))
+                poseStack.mulPose(Axis.XP.rotationDegrees(renderPitch))
+                poseStack.mulPose(Axis.ZP.rotationDegrees(renderRoll))
                 poseStack.scale(
-                    (marker.scale * animationTransform.scale.x).toFloat().coerceAtLeast(0.001f),
-                    (marker.scale * animationTransform.scale.y).toFloat().coerceAtLeast(0.001f),
-                    (marker.scale * animationTransform.scale.z).toFloat().coerceAtLeast(0.001f)
+                    renderScaleX.coerceAtLeast(0.001f),
+                    renderScaleY.coerceAtLeast(0.001f),
+                    renderScaleZ.coerceAtLeast(0.001f)
                 )
 
                 entry.renderState.clear()
@@ -318,7 +380,38 @@ object ClientItemRenderMarkerManager {
         val translation: Vec3 = Vec3.ZERO,
         val rotation: Vec3 = Vec3.ZERO,
         val scale: Vec3 = Vec3(1.0, 1.0, 1.0)
-    )
+    ) {
+        fun isFinite(): Boolean =
+            translation.isFiniteVector() && rotation.isFiniteVector() && scale.isFiniteVector()
+    }
+
+    private fun Vec3.isFiniteVector(): Boolean = x.isFinite() && y.isFinite() && z.isFinite()
+
+    private fun markerComplexity(marker: ClientItemRenderMarker): MarkerComplexity {
+        var animations = 0L
+        var keyframes = 0L
+        marker.animations.values.forEach { animationSet ->
+            animations += animationSet.animations.size
+            animationSet.animations.forEach { animation -> keyframes += animation.keyframes.size }
+        }
+        return MarkerComplexity(marker.animations.size.toLong(), animations, keyframes)
+    }
+
+    private fun releaseComplexity(entry: Entry) {
+        activeAnimationSets = (activeAnimationSets - entry.complexity.animationSets).coerceAtLeast(0L)
+        activeAnimations = (activeAnimations - entry.complexity.animations).coerceAtLeast(0L)
+        activeKeyframes = (activeKeyframes - entry.complexity.keyframes).coerceAtLeast(0L)
+    }
+
+    private fun warnCapacityExceeded() {
+        val now = System.nanoTime()
+        if (lastCapacityWarningNanos == 0L || now - lastCapacityWarningNanos >= CAPACITY_WARNING_INTERVAL_NANOS) {
+            lastCapacityWarningNanos = now
+            logger.warn(
+                "Ignoring client item-render marker because the active marker/animation safety budget is exhausted"
+            )
+        }
+    }
 
     private fun sampleAnimations(entry: Entry, ageTicks: Float): AnimationTransform {
         var translation = Vec3.ZERO

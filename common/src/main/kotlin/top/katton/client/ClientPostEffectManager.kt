@@ -18,9 +18,11 @@ import top.katton.network.ClientPostEffectPacket
 import top.katton.util.ReflectUtil
 import top.katton.util.ScriptExecutionContext
 import java.io.IOException
+import java.io.Reader
 import java.util.concurrent.ConcurrentHashMap
 
 object ClientPostEffectManager {
+    private const val MAX_POST_EFFECT_JSON_CHARS = 1024 * 1024
     private val logger = LogUtils.getLogger()
     private val mc: Minecraft = Minecraft.getInstance()
     private val postEffectResourceConverter = FileToIdConverter.json("post_effect")
@@ -46,6 +48,10 @@ object ClientPostEffectManager {
         vertexShaders: Map<Identifier, String> = emptyMap(),
         owner: String? = ScriptExecutionContext.currentScriptOwner()
     ): Boolean {
+        if (postEffectJson.length > MAX_POST_EFFECT_JSON_CHARS) {
+            logger.warn("Client post effect {} exceeds the {}-character JSON limit", id, MAX_POST_EFFECT_JSON_CHARS)
+            return false
+        }
         val config = parsePostEffectConfig(id, postEffectJson) ?: return false
         warnMissingReferencedResources(id, config, fragmentShaders, vertexShaders)
         definitions[id] = Definition(owner, config, fragmentShaders, vertexShaders)
@@ -65,13 +71,37 @@ object ClientPostEffectManager {
         }
 
         val postEffectJson = try {
-            resource.get().openAsReader().use { reader -> reader.readText() }
+            resource.get().openAsReader().use(::readBoundedPostEffectJson)
         } catch (e: IOException) {
             logger.warn("Failed to read client post effect resource {} for {}", resourceId, id, e)
             return false
         }
 
         return register(id, postEffectJson, owner = owner)
+    }
+
+    /** Resource packs are external input; do not let one JSON file allocate without a bound. */
+    private fun readBoundedPostEffectJson(reader: Reader): String {
+        val result = StringBuilder(minOf(8 * 1024, MAX_POST_EFFECT_JSON_CHARS))
+        val buffer = CharArray(8 * 1024)
+        while (true) {
+            val read = reader.read(buffer)
+            if (read < 0) break
+            if (read == 0) {
+                val character = reader.read()
+                if (character < 0) break
+                if (result.length == MAX_POST_EFFECT_JSON_CHARS) {
+                    throw IOException("Post-effect JSON exceeds $MAX_POST_EFFECT_JSON_CHARS characters")
+                }
+                result.append(character.toChar())
+                continue
+            }
+            if (result.length + read > MAX_POST_EFFECT_JSON_CHARS) {
+                throw IOException("Post-effect JSON exceeds $MAX_POST_EFFECT_JSON_CHARS characters")
+            }
+            result.append(buffer, 0, read)
+        }
+        return result.toString()
     }
 
     fun unregister(id: Identifier): Boolean {

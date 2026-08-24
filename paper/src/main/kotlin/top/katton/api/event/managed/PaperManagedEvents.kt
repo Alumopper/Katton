@@ -9,6 +9,9 @@ import org.slf4j.LoggerFactory
 import top.katton.engine.ScriptEnvironment
 import top.katton.pack.ScriptPackScope
 import top.katton.util.ScriptExecutionContext
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 
 /**
  * %en
@@ -30,10 +33,11 @@ import top.katton.util.ScriptExecutionContext
  */
 object PaperManagedEvents {
     private val LOGGER = LoggerFactory.getLogger(PaperManagedEvents::class.java)
-    private var nextId = 0L
-    private val registrations = mutableMapOf<Long, ManagedRegistration>()
-    private val scopeRegistrations = mutableMapOf<ScriptPackScope, MutableSet<Long>>()
+    private val nextId = AtomicLong()
+    private val registrationLock = Any()
+    private val registrations = ConcurrentHashMap<Long, ManagedRegistration>()
     private var pluginRef: JavaPlugin? = null
+    private var installedProvider: ManagedListenerProvider? = null
 
     /**
      * %en
@@ -46,10 +50,11 @@ object PaperManagedEvents {
      */
     @JvmStatic
     fun initialize(plugin: JavaPlugin) {
-        if (provider != null) return
+        if (pluginRef === plugin && provider === installedProvider) return
+        installedProvider?.clearAll()
         pluginRef = plugin
 
-        provider = object : ManagedListenerProvider {
+        val paperProvider = object : ManagedListenerProvider {
             override fun register(
                 eventClass: Class<*>,
                 owner: String,
@@ -58,12 +63,14 @@ object PaperManagedEvents {
                 ignoreCancelled: Boolean,
                 handler: (Any) -> Unit
             ): ManagedEventHandle {
-                val id = nextId++
+                val id = nextId.getAndIncrement()
                 val environment = ScriptExecutionContext.currentScriptEnvironment()
 
                 val listener = object : org.bukkit.event.Listener {}
+                val active = AtomicBoolean(true)
 
                 val executor = EventExecutor { _, event ->
+                    if (!active.get()) return@EventExecutor
                     try {
                         ScriptExecutionContext.withEnvironment(environment) {
                             ScriptExecutionContext.withScope(scope) {
@@ -77,63 +84,56 @@ object PaperManagedEvents {
                     }
                 }
 
-                @Suppress("UNCHECKED_CAST")
-                plugin.server.pluginManager.registerEvent(
-                    eventClass as Class<out Event>,
-                    listener,
-                    EventPriority.entries.toTypedArray().getOrElse(priority) { EventPriority.NORMAL },
-                    executor,
-                    plugin,
-                    ignoreCancelled
-                )
-
-                val registration = ManagedRegistration(id, eventClass, listener, owner, scope, environment)
-                registrations[id] = registration
-                if (scope != null) {
-                    scopeRegistrations.getOrPut(scope) { mutableSetOf() }.add(id)
+                val registration = ManagedRegistration(id, eventClass, listener, owner, scope, environment, active)
+                synchronized(registrationLock) {
+                    try {
+                        @Suppress("UNCHECKED_CAST")
+                        plugin.server.pluginManager.registerEvent(
+                            eventClass as Class<out Event>,
+                            listener,
+                            toPaperPriority(priority),
+                            executor,
+                            plugin,
+                            ignoreCancelled
+                        )
+                        registrations[id] = registration
+                    } catch (failure: Throwable) {
+                        active.set(false)
+                        HandlerList.unregisterAll(listener)
+                        throw failure
+                    }
                 }
 
                 return ManagedEventHandle(id, eventClass)
             }
 
             override fun unregister(handle: ManagedEventHandle) {
-                val reg = registrations.remove(handle.id) ?: return
+                val reg = synchronized(registrationLock) {
+                    registrations.remove(handle.id)?.also { it.active.set(false) }
+                } ?: return
                 HandlerList.unregisterAll(reg.listener)
-                reg.scope?.let { scopeRegistrations[it]?.remove(handle.id) }
             }
 
             override fun clearByScope(scope: ScriptPackScope) {
-                val ids = scopeRegistrations.remove(scope) ?: return
-                ids.forEach { id ->
-                    registrations.remove(id)?.let { HandlerList.unregisterAll(it.listener) }
-                }
+                removeMatching { it.scope == scope }.forEach { HandlerList.unregisterAll(it.listener) }
             }
 
             override fun clearByScopeAndEnvironment(scope: ScriptPackScope, environment: ScriptEnvironment) {
-                val ids = scopeRegistrations[scope] ?: return
-                val matchingIds = ids.filter { id -> registrations[id]?.environment == environment }
-                matchingIds.forEach { id ->
-                    registrations.remove(id)?.let { HandlerList.unregisterAll(it.listener) }
-                    ids.remove(id)
-                }
-                if (ids.isEmpty()) {
-                    scopeRegistrations.remove(scope)
-                }
+                removeMatching { it.scope == scope && it.environment == environment }
+                    .forEach { HandlerList.unregisterAll(it.listener) }
             }
 
             override fun clearByOwnerPrefix(ownerPrefix: String) {
-                registrations.values
-                    .filter { it.owner.startsWith(ownerPrefix) }
-                    .map { ManagedEventHandle(it.id, it.eventClass) }
-                    .forEach(::unregister)
+                removeMatching { it.owner.startsWith(ownerPrefix) }
+                    .forEach { HandlerList.unregisterAll(it.listener) }
             }
 
             override fun clearAll() {
-                registrations.values.forEach { HandlerList.unregisterAll(it.listener) }
-                registrations.clear()
-                scopeRegistrations.clear()
+                removeMatching { true }.forEach { HandlerList.unregisterAll(it.listener) }
             }
         }
+        installedProvider = paperProvider
+        provider = paperProvider
     }
 
     /**
@@ -147,9 +147,29 @@ object PaperManagedEvents {
      */
     @JvmStatic
     fun shutdown() {
-        provider?.clearAll()
-        registrations.clear()
-        scopeRegistrations.clear()
+        installedProvider?.clearAll()
+        if (provider === installedProvider) provider = null
+        installedProvider = null
+        pluginRef = null
+        synchronized(registrationLock) { registrations.clear() }
+    }
+
+    private fun removeMatching(predicate: (ManagedRegistration) -> Boolean): List<ManagedRegistration> =
+        synchronized(registrationLock) {
+            registrations.values.filter(predicate).onEach { registration ->
+                registration.active.set(false)
+                registrations.remove(registration.id)
+            }
+        }
+
+    /** Do not rely on Bukkit preserving EventPriority's source declaration order. */
+    private fun toPaperPriority(priority: Int): EventPriority = when (priority) {
+        0 -> EventPriority.LOWEST
+        1 -> EventPriority.LOW
+        3 -> EventPriority.HIGH
+        4 -> EventPriority.HIGHEST
+        5 -> EventPriority.MONITOR
+        else -> EventPriority.NORMAL
     }
 
     private data class ManagedRegistration(
@@ -158,6 +178,7 @@ object PaperManagedEvents {
         val listener: org.bukkit.event.Listener,
         val owner: String,
         val scope: ScriptPackScope?,
-        val environment: ScriptEnvironment?
+        val environment: ScriptEnvironment?,
+        val active: AtomicBoolean
     )
 }

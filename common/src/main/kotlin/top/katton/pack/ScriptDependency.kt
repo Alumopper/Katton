@@ -1,5 +1,7 @@
 package top.katton.pack
 
+import java.util.Locale
+
 enum class ScriptPlatform(val serializedName: String) {
     UNKNOWN("unknown"),
     FABRIC("fabric"),
@@ -7,7 +9,8 @@ enum class ScriptPlatform(val serializedName: String) {
     PAPER("paper");
 
     companion object {
-        fun parse(value: String): ScriptPlatform? = entries.firstOrNull { it.serializedName == value.lowercase() }
+        fun parse(value: String): ScriptPlatform? =
+            entries.firstOrNull { it.serializedName == value.lowercase(Locale.ROOT) }
     }
 }
 
@@ -17,7 +20,8 @@ enum class DependencyEnvironment(val serializedName: String) {
     BOTH("both");
 
     companion object {
-        fun parse(value: String): DependencyEnvironment? = entries.firstOrNull { it.serializedName == value.lowercase() }
+        fun parse(value: String): DependencyEnvironment? =
+            entries.firstOrNull { it.serializedName == value.lowercase(Locale.ROOT) }
     }
 }
 

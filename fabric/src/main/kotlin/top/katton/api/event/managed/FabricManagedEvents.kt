@@ -6,7 +6,11 @@ import top.katton.engine.ScriptEnvironment
 import top.katton.pack.ScriptPackScope
 import top.katton.util.ScriptExecutionContext
 import java.lang.reflect.InvocationTargetException
+import java.lang.reflect.Method
 import java.lang.reflect.Proxy
+import java.util.Optional
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicLong
 
 /**
  * %en
@@ -29,17 +33,24 @@ import java.lang.reflect.Proxy
  */
 object FabricManagedEvents {
     internal val LOGGER = LoggerFactory.getLogger(FabricManagedEvents::class.java)
-    private var nextId = 0L
-    val registrations = mutableMapOf<Long, FabricRegistration>()
-    private val scopeRegistrations = mutableMapOf<ScriptPackScope, MutableSet<Long>>()
+    private val nextId = AtomicLong()
+    private val registrationLock = Any()
+    val registrations = ConcurrentHashMap<Long, FabricRegistration>()
+
+    /**
+     * The Fabric event permanently owns the proxy, so the proxy may only retain
+     * this small host-loaded state object. Clearing [callback] releases the old
+     * script lambda and its classloader even though Fabric cannot remove the
+     * proxy itself.
+     */
+    class FabricListenerState(@Volatile var callback: Any? = null)
 
     class FabricRegistration(
         val id: Long,
-        val wrapper: Any,
         val owner: String,
         val scope: ScriptPackScope?,
         val environment: ScriptEnvironment?,
-        @Volatile var active: Boolean
+        val state: FabricListenerState
     )
 
     @JvmStatic
@@ -54,75 +65,53 @@ object FabricManagedEvents {
                 ignoreCancelled: Boolean,
                 handler: (Any) -> Unit
             ): ManagedEventHandle {
-                val id = nextId++
+                val id = nextId.getAndIncrement()
                 val environment = ScriptExecutionContext.currentScriptEnvironment()
-                val wrapper = Proxy.newProxyInstance(
-                    eventClass.classLoader,
-                    arrayOf(eventClass)
-                ) { _, _, args ->
-                    val reg = registrations[id] ?: return@newProxyInstance null
-                    if (reg.active && args != null && args.isNotEmpty()) {
-                        try {
-                            ScriptExecutionContext.withEnvironment(environment) {
-                                ScriptExecutionContext.withScope(scope) {
-                                    ScriptExecutionContext.withOwner(owner) {
-                                        handler(args[0])
-                                    }
-                                }
-                            }
-                        } catch (t: Throwable) {
-                            LOGGER.warn("Managed Fabric event handler failed for {}", owner, t)
-                        }
-                    }
-                    null
-                }
-                val registration = FabricRegistration(id, wrapper, owner, scope, environment, active = true)
-                registrations[id] = registration
-                if (scope != null) {
-                    scopeRegistrations.getOrPut(scope) { mutableSetOf() }.add(id)
-                }
+                // Fabric callbacks are installed by registerFabricEvent below.
+                // This provider entry only supplies lifecycle tracking; creating a
+                // second, never-registered proxy here wasted one proxy per listener.
+                val registration = FabricRegistration(id, owner, scope, environment, FabricListenerState())
+                synchronized(registrationLock) { registrations[id] = registration }
                 return ManagedEventHandle(id, eventClass)
             }
 
             override fun unregister(handle: ManagedEventHandle) {
-                registrations[handle.id]?.active = false
-                registrations.remove(handle.id)
-                scopeRegistrations.values.forEach { it.remove(handle.id) }
+                synchronized(registrationLock) {
+                    registrations.remove(handle.id)?.state?.callback = null
+                }
             }
 
             override fun clearByScope(scope: ScriptPackScope) {
-                val ids = scopeRegistrations.remove(scope) ?: return
-                ids.forEach { id ->
-                    registrations.remove(id)?.active = false
+                synchronized(registrationLock) {
+                    registrations.values.filter { it.scope == scope }.map { it.id }.forEach { id ->
+                        registrations.remove(id)?.state?.callback = null
+                    }
                 }
             }
 
             override fun clearByScopeAndEnvironment(scope: ScriptPackScope, environment: ScriptEnvironment) {
-                val ids = scopeRegistrations[scope] ?: return
-                val matchingIds = ids.filter { id -> registrations[id]?.environment == environment }
-                matchingIds.forEach { id ->
-                    registrations.remove(id)?.active = false
-                    ids.remove(id)
-                }
-                if (ids.isEmpty()) {
-                    scopeRegistrations.remove(scope)
+                synchronized(registrationLock) {
+                    registrations.values
+                        .filter { it.scope == scope && it.environment == environment }
+                        .map { it.id }
+                        .forEach { id -> registrations.remove(id)?.state?.callback = null }
                 }
             }
 
             override fun clearByOwnerPrefix(ownerPrefix: String) {
-                registrations.values
-                    .filter { it.owner.startsWith(ownerPrefix) }
-                    .map { it.id }
-                    .forEach { id ->
-                        registrations.remove(id)?.active = false
-                        scopeRegistrations.values.forEach { it.remove(id) }
-                    }
+                synchronized(registrationLock) {
+                    registrations.values
+                        .filter { it.owner.startsWith(ownerPrefix) }
+                        .map { it.id }
+                        .forEach { id -> registrations.remove(id)?.state?.callback = null }
+                }
             }
 
             override fun clearAll() {
-                registrations.values.forEach { it.active = false }
-                registrations.clear()
-                scopeRegistrations.clear()
+                synchronized(registrationLock) {
+                    registrations.values.forEach { it.state.callback = null }
+                    registrations.clear()
+                }
             }
         }
     }
@@ -130,8 +119,7 @@ object FabricManagedEvents {
     @JvmStatic
     fun shutdown() {
         provider?.clearAll()
-        registrations.clear()
-        scopeRegistrations.clear()
+        synchronized(registrationLock) { registrations.clear() }
     }
 }
 
@@ -147,38 +135,129 @@ fun <T : Any> registerFabricEvent(
     val scope = ScriptExecutionContext.currentScriptScope()
     val owner = ScriptExecutionContext.currentScriptOwner() ?: "unknown"
     val environment = ScriptExecutionContext.currentScriptEnvironment()
-    val iface = callback::class.java
+    val listenerInterface = resolveFabricListenerInterface(event, callback)
 
-    val handle = provider.register(iface, owner, scope, 2, false) { /* handled by proxy */ }
+    val handle = provider.register(listenerInterface, owner, scope, 2, false) { /* handled by proxy */ }
+    val state = FabricManagedEvents.registrations[handle.id]?.state
+        ?: error("Fabric managed-listener registration disappeared before native registration")
+    state.callback = callback
 
-    val activeWrapper = Proxy.newProxyInstance(
-        iface.classLoader,
-        arrayOf(iface)
-    ) { _, method, args ->
-        val reg = FabricManagedEvents.registrations[handle.id]
-        if (reg != null && reg.active) {
-            try {
-                ScriptExecutionContext.withEnvironment(environment) {
-                    ScriptExecutionContext.withScope(scope) {
-                        ScriptExecutionContext.withOwner(owner) {
-                            method.invoke(callback, *(args ?: emptyArray()))
+    val activeWrapper = try {
+        // Compute neutral values once. Inactive proxies remain in Fabric's callback
+        // array forever, so their hot path must not perform reflection or allocate.
+        val inactiveReturns = listenerInterface.methods.associateWith { method ->
+            inferInactiveReturnValue(method.returnType)
+        }
+
+        Proxy.newProxyInstance(
+            listenerInterface.classLoader,
+            arrayOf(listenerInterface)
+        ) { proxy, method, args ->
+            if (method.declaringClass == Any::class.java) {
+                return@newProxyInstance when (method.name) {
+                    "equals" -> proxy === args?.firstOrNull()
+                    "hashCode" -> System.identityHashCode(proxy)
+                    "toString" -> "KattonFabricManagedListener(${listenerInterface.name})"
+                    else -> null
+                }
+            }
+
+            val currentCallback = state.callback
+            if (currentCallback != null) {
+                try {
+                    ScriptExecutionContext.withEnvironment(environment) {
+                        ScriptExecutionContext.withScope(scope) {
+                            ScriptExecutionContext.withOwner(owner) {
+                                method.invoke(currentCallback, *(args ?: emptyArray()))
+                            }
                         }
                     }
+                } catch (t: Throwable) {
+                    val failure = (t as? InvocationTargetException)?.targetException ?: t
+                    FabricManagedEvents.LOGGER.warn("Managed Fabric event handler failed for {}", owner, failure)
+                    inactiveReturns[method]
                 }
-            } catch (t: Throwable) {
-                val failure = (t as? InvocationTargetException)?.targetException ?: t
-                FabricManagedEvents.LOGGER.warn("Managed Fabric event handler failed for {}", owner, failure)
-                null
+            } else {
+                inactiveReturns[method]
             }
-        } else null
+        }
+    } catch (failure: Throwable) {
+        provider.unregister(handle)
+        throw failure
     }
 
     @Suppress("UNCHECKED_CAST")
-    event.register(activeWrapper as T)
+    try {
+        event.register(activeWrapper as T)
+    } catch (failure: Throwable) {
+        // Do not retain a lifecycle registration when Fabric rejected the
+        // callback type or the event implementation failed during registration.
+        provider.unregister(handle)
+        throw failure
+    }
 
     return handle
 }
 
 fun unregisterFabricEvent(handle: ManagedEventHandle) {
     provider?.unregister(handle)
+}
+
+/** Finds the callback contract from Fabric's aggregate invoker, not the lambda implementation class. */
+private fun <T : Any> resolveFabricListenerInterface(event: Event<T>, callback: T): Class<*> {
+    val aggregateInvoker = event.invoker()
+    return collectInterfaces(aggregateInvoker.javaClass)
+        .firstOrNull { candidate -> candidate.isInstance(callback) }
+        ?: collectInterfaces(callback.javaClass)
+            .firstOrNull { candidate -> candidate.isInstance(aggregateInvoker) }
+        ?: error(
+            "Cannot determine Fabric callback interface shared by ${callback.javaClass.name} " +
+                "and ${aggregateInvoker.javaClass.name}"
+        )
+}
+
+private fun collectInterfaces(type: Class<*>): List<Class<*>> {
+    val interfaces = LinkedHashSet<Class<*>>()
+    fun visit(current: Class<*>?) {
+        if (current == null) return
+        current.interfaces.forEach { candidate ->
+            if (interfaces.add(candidate)) visit(candidate)
+        }
+        visit(current.superclass)
+    }
+    visit(type)
+    return interfaces.toList()
+}
+
+/**
+ * Best-effort neutral result for a proxy Fabric can no longer unregister.
+ * Fabric result enums conventionally expose PASS or DEFAULT; primitive and
+ * common JDK return types have allocation-free neutral values.
+ */
+private fun inferInactiveReturnValue(returnType: Class<*>): Any? {
+    if (returnType == Void.TYPE) return null
+    if (returnType == Unit::class.java) return Unit
+    if (returnType == Optional::class.java) return Optional.empty<Any>()
+    if (returnType.isPrimitive) {
+        return when (returnType) {
+            Boolean::class.javaPrimitiveType -> false
+            Char::class.javaPrimitiveType -> '\u0000'
+            Byte::class.javaPrimitiveType -> 0.toByte()
+            Short::class.javaPrimitiveType -> 0.toShort()
+            Int::class.javaPrimitiveType -> 0
+            Long::class.javaPrimitiveType -> 0L
+            Float::class.javaPrimitiveType -> 0F
+            Double::class.javaPrimitiveType -> 0.0
+            else -> null
+        }
+    }
+
+    val conventionalNames = listOf("PASS", "DEFAULT", "CONTINUE")
+    return returnType.enumConstants
+        ?.firstOrNull { constant -> (constant as Enum<*>).name in conventionalNames }
+        ?: conventionalNames.firstNotNullOfOrNull { fieldName ->
+            runCatching { returnType.getField(fieldName).get(null) }
+                .getOrNull()
+                ?.takeIf(returnType::isInstance)
+        }
 }

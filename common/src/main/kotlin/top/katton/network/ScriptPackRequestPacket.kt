@@ -12,9 +12,14 @@ data class ScriptPackRequestPacket(
 ) : CustomPacketPayload {
 
     fun write(buf: FriendlyByteBuf) {
+        ScriptPackPacketLimits.requireCount(requestedSyncIds.size, ScriptPackPacketLimits.MAX_PACKS, "requested script packs")
+        val uniqueIds = HashSet<String>(requestedSyncIds.size)
+        requestedSyncIds.forEach { id ->
+            ScriptPackPacketLimits.requireUniqueForEncoding(id, uniqueIds, "requested script pack id")
+        }
         buf.writeVarLong(revision)
         buf.writeVarInt(requestedSyncIds.size)
-        requestedSyncIds.forEach(buf::writeUtf)
+        requestedSyncIds.forEach { buf.writeUtf(it, ScriptPackPacketLimits.MAX_SYNC_ID_CHARS) }
     }
 
     companion object {
@@ -28,10 +33,13 @@ data class ScriptPackRequestPacket(
 
         fun read(buf: FriendlyByteBuf): ScriptPackRequestPacket {
             val revision = buf.readVarLong()
-            val count = buf.readVarInt()
+            val count = ScriptPackPacketLimits.readCount(buf, ScriptPackPacketLimits.MAX_PACKS, "requested script packs")
             val ids = ArrayList<String>(count)
+            val uniqueIds = HashSet<String>(count)
             repeat(count) {
-                ids.add(buf.readUtf())
+                val id = buf.readUtf(ScriptPackPacketLimits.MAX_SYNC_ID_CHARS)
+                ScriptPackPacketLimits.requireUnique(id, uniqueIds, "requested script pack id")
+                ids.add(id)
             }
             return ScriptPackRequestPacket(ids, revision)
         }

@@ -6,12 +6,15 @@ import com.google.gson.JsonParser
 import top.katton.api.LOGGER
 import top.katton.engine.ScriptDependencyManager
 import top.katton.engine.ScriptEnvironment
+import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
+import java.nio.file.LinkOption
 import java.nio.file.Path
-import java.nio.file.StandardOpenOption
 import java.security.MessageDigest
-import java.util.jar.JarFile
+import java.util.Locale
+import java.util.zip.ZipInputStream
 import kotlin.io.path.absolutePathString
 
 object ScriptPackManager {
@@ -94,7 +97,13 @@ object ScriptPackManager {
 
     fun listLocalPacksForGui(lockGlobalInWorld: Boolean): List<ScriptPackView> {
         return (globalPacks + worldPacks)
-            .sortedWith(compareBy({ it.scope.ordinal }, { it.manifest.name.lowercase() }, { it.manifest.id.lowercase() }))
+            .sortedWith(
+                compareBy(
+                    { it.scope.ordinal },
+                    { it.manifest.name.lowercase(Locale.ROOT) },
+                    { it.manifest.id.lowercase(Locale.ROOT) }
+                )
+            )
             .map { pack ->
                 val locked = lockGlobalInWorld && pack.scope == ScriptPackScope.GLOBAL
                 ScriptPackView(
@@ -131,14 +140,11 @@ object ScriptPackManager {
         }
 
         return runCatching {
-            stateFile.parent?.let(Files::createDirectories)
-            Files.writeString(
+            SafePackFileIo.writeUtf8Atomically(
                 stateFile,
                 stateJson.toString(),
-                StandardCharsets.UTF_8,
-                StandardOpenOption.CREATE,
-                StandardOpenOption.TRUNCATE_EXISTING,
-                StandardOpenOption.WRITE
+                ScriptPackFileLimits.MAX_STATE_BYTES,
+                "script pack state"
             )
             when (pack.scope) {
                 ScriptPackScope.GLOBAL -> refreshGlobalPacks()
@@ -156,22 +162,42 @@ object ScriptPackManager {
         if (rootDirectory == null) return emptyList()
 
         val packsRoot = rootDirectory.resolve(PACKS_DIR_NAME)
-        if (!Files.isDirectory(packsRoot)) {
+        if (!Files.isDirectory(packsRoot, LinkOption.NOFOLLOW_LINKS) || Files.isSymbolicLink(packsRoot)) {
             return emptyList()
         }
 
         return runCatching {
             val discovered = mutableListOf<ScriptPack>()
+            var rootEntryCount = 0
             Files.list(packsRoot).use { stream ->
                 stream.forEach { path ->
+                    rootEntryCount++
+                    require(rootEntryCount <= ScriptPackFileLimits.MAX_PACK_ROOT_ENTRIES) {
+                        "Script pack root contains too many entries " +
+                            "(maximum ${ScriptPackFileLimits.MAX_PACK_ROOT_ENTRIES})"
+                    }
                     when {
-                        Files.isDirectory(path) -> scanPackDirectory(path, scope)?.let(discovered::add)
-                        Files.isRegularFile(path) && path.fileName.toString().endsWith(".jar", ignoreCase = true) ->
+                        Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS) ->
+                            scanPackDirectory(path, scope)?.let(discovered::add)
+                        Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS) &&
+                            path.fileName.toString().endsWith(".jar", ignoreCase = true) ->
                             scanPackJar(path, scope)?.let(discovered::add)
                     }
                 }
             }
-            discovered.sortedWith(compareBy<ScriptPack> { it.manifest.name.lowercase() }.thenBy { it.manifest.id.lowercase() })
+            val duplicateIds = discovered
+                .groupBy { it.syncId.lowercase(Locale.ROOT) }
+                .filterValues { it.size > 1 }
+                .keys
+            duplicateIds.forEach { duplicateId ->
+                LOGGER.warn("Ignoring duplicate script pack id '{}' under {}", duplicateId, packsRoot)
+            }
+            discovered
+                .filterNot { it.syncId.lowercase(Locale.ROOT) in duplicateIds }
+                .sortedWith(
+                    compareBy<ScriptPack> { it.manifest.name.lowercase(Locale.ROOT) }
+                        .thenBy { it.manifest.id.lowercase(Locale.ROOT) }
+                )
         }.getOrElse {
             LOGGER.warn("Failed to scan script packs under {}", packsRoot, it)
             emptyList()
@@ -182,41 +208,68 @@ object ScriptPackManager {
         packDirectory: Path,
         scope: ScriptPackScope,
         syncIdOverride: String? = null,
-        forceEnabled: Boolean? = null
+        forceEnabled: Boolean? = null,
+        maximumDiscoveredEntries: Int = ScriptPackFileLimits.MAX_DIRECTORY_ENTRIES
     ): ScriptPack? {
-        //check manifest existence first
-        val manifestFile = packDirectory.resolve(MANIFEST_FILE_NAME)
-        if (!Files.isRegularFile(manifestFile)) {
+        require(maximumDiscoveredEntries in 1..ScriptPackFileLimits.MAX_DIRECTORY_ENTRIES) {
+            "Directory entry limit must be between 1 and ${ScriptPackFileLimits.MAX_DIRECTORY_ENTRIES}"
+        }
+        val normalizedPackDirectory = packDirectory.toAbsolutePath().normalize()
+        if (!Files.isDirectory(normalizedPackDirectory, LinkOption.NOFOLLOW_LINKS) ||
+            Files.isSymbolicLink(normalizedPackDirectory)
+        ) {
             return null
         }
 
-        val manifestJson = runCatching { Files.readString(manifestFile, StandardCharsets.UTF_8) }
+        // Read the manifest before walking content so its bytes participate in
+        // the same per-pack memory budget used by the network bundle.
+        val manifestFile = normalizedPackDirectory.resolve(MANIFEST_FILE_NAME)
+        val manifestBytes = runCatching {
+            SafePackFileIo.readBytes(
+                manifestFile,
+                ScriptPackFileLimits.MAX_MANIFEST_BYTES,
+                "script pack manifest"
+            )
+        }
             .getOrElse {
                 LOGGER.warn("Failed to read manifest from {}", manifestFile, it)
                 return null
             }
+        val manifestJson = String(manifestBytes, StandardCharsets.UTF_8)
 
-        //parse manifest
-        val manifest = runCatching { ScriptPackManifest.parse(packDirectory, manifestJson) }
+        val manifest = runCatching {
+            ScriptPackManifest.parse(
+                normalizedPackDirectory,
+                manifestJson,
+                fallbackIdOverride = syncIdOverride?.substringAfter(':')
+            )
+        }
             .getOrElse {
                 LOGGER.warn("Invalid Katton pack manifest at {}: {}", manifestFile, it.message)
                 return null
             }
 
-        //collect script files
-        val scriptFiles = collectFiles(packDirectory, ".kt", excludeAssets = true)
-        // we still try to collect java files even if there are no .kt scripts considering future
-        // support for Java script entries,
-//        if (scriptFiles.isEmpty()) {
-//            LOGGER.warn("Skipping script pack {} because it contains no .kt scripts", packDirectory)
-//            return null
-//        }
-        val javaFiles = collectFiles(packDirectory, ".java", excludeAssets = true)
-        val assetFiles = collectPackContentFiles(packDirectory, "assets")
-        val dataFiles = collectPackContentFiles(packDirectory, "data")
-        val codeHash = computeScriptHash(manifestJson, scriptFiles, javaFiles)
+        val collected = runCatching {
+            collectDirectoryFiles(
+                normalizedPackDirectory,
+                ScriptPackReadBudget(manifestBytes.size),
+                maximumDiscoveredEntries
+            )
+        }.getOrElse {
+            LOGGER.warn("Failed to collect safe pack content from {}: {}", normalizedPackDirectory, it.message)
+            return null
+        }
+        val scriptFiles = collected.scripts
+        val javaFiles = collected.javaFiles
+        val assetFiles = collected.assetFiles
+        val dataFiles = collected.dataFiles
+        // Signature bytes are intentionally excluded from the compilation key:
+        // re-signing identical code must not trigger a Kotlin/Java recompile.
+        val codeHash = computeScriptHash(manifestWithoutSignature(manifestJson), scriptFiles, javaFiles)
         val hash = computeScriptHash(manifestJson, scriptFiles, javaFiles, assetFiles, dataFiles)
-        val enabled = forceEnabled ?: readEnabledState(packDirectory, ScriptPackKind.DIRECTORY) ?: manifest.enabledByDefault
+        val enabled = forceEnabled
+            ?: readEnabledState(normalizedPackDirectory, ScriptPackKind.DIRECTORY)
+            ?: manifest.enabledByDefault
         val syncId = syncIdOverride ?: makeSyncId(scope, manifest.id)
         val sourceContentFiles = (scriptFiles + javaFiles).map {
             ScriptPackContentFile(
@@ -231,7 +284,7 @@ object ScriptPackManager {
             syncId = syncId,
             scope = scope,
             kind = ScriptPackKind.DIRECTORY,
-            location = packDirectory,
+            location = normalizedPackDirectory,
             manifestJson = manifestJson,
             manifest = manifest,
             enabled = enabled,
@@ -257,108 +310,196 @@ object ScriptPackManager {
         jarPath: Path,
         scope: ScriptPackScope,
         syncIdOverride: String? = null,
-        forceEnabled: Boolean? = null
+        forceEnabled: Boolean? = null,
+        maximumArchiveEntries: Int = ScriptPackFileLimits.MAX_ARCHIVE_ENTRIES
     ): ScriptPack? {
-        val jarBytes = runCatching { Files.readAllBytes(jarPath) }
+        require(maximumArchiveEntries in 1..ScriptPackFileLimits.MAX_ARCHIVE_ENTRIES) {
+            "Archive entry limit must be between 1 and ${ScriptPackFileLimits.MAX_ARCHIVE_ENTRIES}"
+        }
+        val normalizedJarPath = jarPath.toAbsolutePath().normalize()
+        val jarBytes = runCatching {
+            SafePackFileIo.readBytes(
+                normalizedJarPath,
+                ScriptPackFileLimits.MAX_FILE_BYTES,
+                "script pack jar"
+            )
+        }
             .getOrElse {
-                LOGGER.warn("Failed to read script pack jar {}", jarPath, it)
+                LOGGER.warn("Failed to read script pack jar {}", normalizedJarPath, it)
                 return null
             }
 
-        val manifestJson = readManifestJsonFromJar(jarPath) ?: createFallbackManifestJson(jarPath)
-        val manifest = runCatching { ScriptPackManifest.parse(jarPath, manifestJson) }
+        val embeddedManifest = runCatching {
+            inspectArchiveAndReadManifest(jarBytes, maximumArchiveEntries)
+        }
             .getOrElse {
-                LOGGER.warn("Invalid Katton jar pack manifest at {}: {}", jarPath, it.message)
+                LOGGER.warn("Rejected unsafe or malformed script pack jar {}: {}", normalizedJarPath, it.message)
                 return null
             }
-        val enabled = forceEnabled ?: readEnabledState(jarPath, ScriptPackKind.JAR) ?: manifest.enabledByDefault
+        val manifestJson = embeddedManifest ?: createFallbackManifestJson(normalizedJarPath)
+        val manifestBytes = manifestJson.toByteArray(StandardCharsets.UTF_8)
+        if (manifestBytes.size > ScriptPackFileLimits.MAX_MANIFEST_BYTES ||
+            manifestBytes.size.toLong() + jarBytes.size > ScriptPackFileLimits.MAX_PACK_CONTENT_BYTES
+        ) {
+            LOGGER.warn("Rejected script pack jar {} because its manifest/content budget is too large", normalizedJarPath)
+            return null
+        }
+        val manifest = runCatching { ScriptPackManifest.parse(normalizedJarPath, manifestJson) }
+            .getOrElse {
+                LOGGER.warn("Invalid Katton jar pack manifest at {}: {}", normalizedJarPath, it.message)
+                return null
+            }
+        val enabled = forceEnabled
+            ?: readEnabledState(normalizedJarPath, ScriptPackKind.JAR)
+            ?: manifest.enabledByDefault
         val syncId = syncIdOverride ?: makeSyncId(scope, manifest.id)
         val contentFile = ScriptPackContentFile(
-            relativePath = jarPath.fileName.toString(),
-            absolutePath = jarPath,
+            relativePath = normalizedJarPath.fileName.toString(),
+            absolutePath = normalizedJarPath,
             bytes = jarBytes
         )
         val hash = computeJarHash(manifestJson, contentFile)
+        val codeHash = computeJarHash(manifestWithoutSignature(manifestJson), contentFile)
 
         return ScriptPack(
             syncId = syncId,
             scope = scope,
             kind = ScriptPackKind.JAR,
-            location = jarPath,
+            location = normalizedJarPath,
             manifestJson = manifestJson,
             manifest = manifest,
             enabled = enabled,
             hash = hash,
-            codeHash = hash,
+            codeHash = codeHash,
             scripts = emptyList(),
             contentFiles = listOf(contentFile),
-            compiledJar = jarPath
+            compiledJar = normalizedJarPath
         ).also {
             LOGGER.info("Discovered jar pack {} at {}", it.manifest.name, it.location)
         }
     }
 
-    internal fun collectFiles(
+    /**
+     * Walks a directory pack exactly once and classifies every retained file.
+     * Source files below `assets/` or `data/` are content, never executable
+     * sources; this also guarantees that a relative path occurs only once in a
+     * synchronized bundle.
+     */
+    private fun collectDirectoryFiles(
         packDirectory: Path,
-        extension: String,
-        excludeAssets: Boolean = false
-    ): List<ScriptPackScriptFile> {
-        return runCatching {
-            val files = mutableListOf<ScriptPackScriptFile>()
-            Files.walk(packDirectory).use { stream ->
-                stream
-                    .filter { Files.isRegularFile(it) }
-                    .filter { it.fileName.toString().endsWith(extension, ignoreCase = true) }
-                    .forEach { file ->
-                        val relative = packDirectory.relativize(file).toString().replace('\\', '/')
-                        if (excludeAssets && isAssetsRelativePath(relative)) {
-                            return@forEach
-                        }
-                        val bytes = runCatching { Files.readAllBytes(file) }.getOrNull() ?: return@forEach
-                        files.add(
-                            ScriptPackScriptFile(
-                                relativePath = relative,
-                                absolutePath = file,
-                                bytes = bytes
-                            )
-                        )
-                    }
+        budget: ScriptPackReadBudget,
+        maximumDiscoveredEntries: Int
+    ): CollectedDirectoryFiles {
+        val realRoot = packDirectory.toRealPath()
+        val scripts = mutableListOf<ScriptPackScriptFile>()
+        val javaFiles = mutableListOf<ScriptPackScriptFile>()
+        val assetFiles = mutableListOf<ScriptPackContentFile>()
+        val dataFiles = mutableListOf<ScriptPackContentFile>()
+        val portablePaths = HashSet<String>()
+        var discoveredEntries = 0
+
+        Files.walk(packDirectory).use { stream ->
+            stream.forEach { candidate ->
+                if (candidate == packDirectory) return@forEach
+                discoveredEntries++
+                require(discoveredEntries <= maximumDiscoveredEntries) {
+                    "Pack contains too many directory entries (maximum $maximumDiscoveredEntries)"
+                }
+                require(!Files.isSymbolicLink(candidate)) {
+                    "Symbolic links are not allowed in script packs: $candidate"
+                }
+                if (!Files.isRegularFile(candidate, LinkOption.NOFOLLOW_LINKS)) return@forEach
+
+                // Resolve every retained file as a second containment check for
+                // provider-specific link types such as Windows junctions.
+                val realFile = candidate.toRealPath()
+                require(realFile.startsWith(realRoot)) { "Pack file escapes its root: $candidate" }
+                val relative = normalizedRelativePath(packDirectory, candidate)
+
+                val target = when {
+                    isPackContentRelativePath(relative, "assets") -> assetFiles
+                    isPackContentRelativePath(relative, "data") -> dataFiles
+                    relative.endsWith(".kt", ignoreCase = true) -> null
+                    relative.endsWith(".java", ignoreCase = true) -> null
+                    else -> return@forEach
+                }
+                require(ScriptPackFileLimits.isPortableRelativePath(relative)) {
+                    "Pack file path is unsafe or not portable across clients: $relative"
+                }
+                require(portablePaths.add(ScriptPackFileLimits.portablePathKey(relative))) {
+                    "Pack contains paths that collide on a case-insensitive client: $relative"
+                }
+                val bytes = budget.readContentFile(candidate, "script pack file '$relative'")
+                if (target != null) {
+                    target += ScriptPackContentFile(relative, candidate, bytes)
+                } else {
+                    val script = ScriptPackScriptFile(relative, candidate, bytes)
+                    if (relative.endsWith(".kt", ignoreCase = true)) scripts += script else javaFiles += script
+                }
             }
-            files.sortedBy { it.relativePath }
-        }.getOrElse {
-            LOGGER.warn("Failed to collect {} files from {}", extension, packDirectory, it)
-            emptyList()
         }
+
+        return CollectedDirectoryFiles(
+            scripts = scripts.sortedBy { it.relativePath },
+            javaFiles = javaFiles.sortedBy { it.relativePath },
+            assetFiles = assetFiles.sortedBy { it.relativePath },
+            dataFiles = dataFiles.sortedBy { it.relativePath }
+        )
     }
 
-    internal fun collectPackContentFiles(packDirectory: Path, directoryName: String): List<ScriptPackContentFile> {
-        val contentDirectory = packDirectory.resolve(directoryName)
-        if (!Files.isDirectory(contentDirectory)) {
-            return emptyList()
+    /**
+     * Reloads one persisted network-cache container using the advertised hash
+     * as the unambiguous kind discriminator. Directory bundles contain their
+     * sources directly; a compiled JAR bundle contains one root-level jar plus
+     * the transmitted manifest alongside it.
+     */
+    internal fun scanCachedPackContainer(
+        containerDirectory: Path,
+        syncId: String,
+        expectedHash: String
+    ): ScriptPack? {
+        if (!Files.isDirectory(containerDirectory, LinkOption.NOFOLLOW_LINKS) ||
+            Files.isSymbolicLink(containerDirectory)
+        ) {
+            return null
         }
 
-        return runCatching {
-            val files = mutableListOf<ScriptPackContentFile>()
-            Files.walk(contentDirectory).use { stream ->
-                stream
-                    .filter { Files.isRegularFile(it) }
-                    .forEach { file ->
-                        val relative = packDirectory.relativize(file).toString().replace('\\', '/')
-                        val bytes = runCatching { Files.readAllBytes(file) }.getOrNull() ?: return@forEach
-                        files.add(
-                            ScriptPackContentFile(
-                                relativePath = relative,
-                                absolutePath = file,
-                                bytes = bytes
-                            )
-                        )
+        val jarCandidates = runCatching {
+            Files.list(containerDirectory).use { entries ->
+                entries
+                    .filter { path ->
+                        Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS) &&
+                            !Files.isSymbolicLink(path) &&
+                            path.fileName.toString().endsWith(".jar", ignoreCase = true)
                     }
+                    .sorted()
+                    .toList()
             }
-            files.sortedBy { it.relativePath }
         }.getOrElse {
-            LOGGER.warn("Failed to collect {} files from {}", directoryName, contentDirectory, it)
-            emptyList()
+            LOGGER.warn("Failed to inspect cached script pack container {}", containerDirectory, it)
+            return null
         }
+        if (jarCandidates.size > 1) {
+            LOGGER.warn("Rejecting cached script pack container {} with multiple root JARs", containerDirectory)
+            return null
+        }
+
+        jarCandidates.forEach { jarPath ->
+            val jarPack = scanPackJar(
+                jarPath = jarPath,
+                scope = ScriptPackScope.SERVER_CACHE,
+                syncIdOverride = syncId,
+                forceEnabled = true
+            )
+            if (jarPack?.hash == expectedHash) return jarPack
+        }
+
+        return scanPackDirectory(
+            packDirectory = containerDirectory,
+            scope = ScriptPackScope.SERVER_CACHE,
+            syncIdOverride = syncId,
+            forceEnabled = true
+        )?.takeIf { pack -> pack.hash == expectedHash }
     }
 
     internal fun computeScriptHash(
@@ -369,56 +510,66 @@ object ScriptPackManager {
         dataFiles: List<ScriptPackContentFile> = emptyList()
     ): String {
         val digest = MessageDigest.getInstance("SHA-256")
-        digest.update(manifestJson.toByteArray(StandardCharsets.UTF_8))
-
-        scripts.sortedBy { it.relativePath }.forEach { script ->
-            digest.update(script.relativePath.toByteArray(StandardCharsets.UTF_8))
-            digest.update(0)
-            digest.update(script.bytes)
-            digest.update(0)
-        }
-
-        javaFiles.sortedBy { it.relativePath }.forEach { javaFile ->
-            digest.update(javaFile.relativePath.toByteArray(StandardCharsets.UTF_8))
-            digest.update(0)
-            digest.update(javaFile.bytes)
-            digest.update(0)
-        }
-
-        assetFiles.sortedBy { it.relativePath }.forEach { assetFile ->
-            digest.update(assetFile.relativePath.toByteArray(StandardCharsets.UTF_8))
-            digest.update(0)
-            digest.update(assetFile.bytes)
-            digest.update(0)
-        }
-
-        dataFiles.sortedBy { it.relativePath }.forEach { dataFile ->
-            digest.update(dataFile.relativePath.toByteArray(StandardCharsets.UTF_8))
-            digest.update(0)
-            digest.update(dataFile.bytes)
-            digest.update(0)
-        }
+        digest.updateFramed("katton-directory-pack-hash-v2".toByteArray(StandardCharsets.UTF_8))
+        digest.updateFramed(manifestJson.toByteArray(StandardCharsets.UTF_8))
+        digest.updateScriptFiles(scripts)
+        digest.updateScriptFiles(javaFiles)
+        digest.updateContentFiles(assetFiles)
+        digest.updateContentFiles(dataFiles)
 
         return digest.digest().joinToString("") { "%02x".format(it) }
     }
 
     internal fun computeJarHash(manifestJson: String, jarFile: ScriptPackContentFile): String {
         val digest = MessageDigest.getInstance("SHA-256")
-        digest.update(manifestJson.toByteArray(StandardCharsets.UTF_8))
-        digest.update(jarFile.relativePath.toByteArray(StandardCharsets.UTF_8))
-        digest.update(0)
-        digest.update(jarFile.bytes)
+        digest.updateFramed("katton-jar-pack-hash-v2".toByteArray(StandardCharsets.UTF_8))
+        digest.updateFramed(manifestJson.toByteArray(StandardCharsets.UTF_8))
+        digest.updateFramed(jarFile.relativePath.toByteArray(StandardCharsets.UTF_8))
+        digest.updateFramed(jarFile.bytes)
         return digest.digest().joinToString("") { "%02x".format(it) }
+    }
+
+    private fun MessageDigest.updateScriptFiles(files: List<ScriptPackScriptFile>) {
+        updateInt(files.size)
+        files.sortedBy { it.relativePath }.forEach { file ->
+            updateFramed(file.relativePath.toByteArray(StandardCharsets.UTF_8))
+            updateFramed(file.bytes)
+        }
+    }
+
+    private fun MessageDigest.updateContentFiles(files: List<ScriptPackContentFile>) {
+        updateInt(files.size)
+        files.sortedBy { it.relativePath }.forEach { file ->
+            updateFramed(file.relativePath.toByteArray(StandardCharsets.UTF_8))
+            updateFramed(file.bytes)
+        }
+    }
+
+    private fun MessageDigest.updateFramed(bytes: ByteArray) {
+        updateInt(bytes.size)
+        update(bytes)
+    }
+
+    private fun MessageDigest.updateInt(value: Int) {
+        update((value ushr 24).toByte())
+        update((value ushr 16).toByte())
+        update((value ushr 8).toByte())
+        update(value.toByte())
     }
 
     private fun readEnabledState(packPath: Path, kind: ScriptPackKind): Boolean? {
         val stateFile = resolveStateFile(packPath, kind)
-        if (!Files.isRegularFile(stateFile)) {
+        if (!Files.isRegularFile(stateFile, LinkOption.NOFOLLOW_LINKS) || Files.isSymbolicLink(stateFile)) {
             return null
         }
 
         return runCatching {
-            val root = JsonParser.parseString(Files.readString(stateFile, StandardCharsets.UTF_8)).asJsonObject
+            val stateJson = SafePackFileIo.readUtf8(
+                stateFile,
+                ScriptPackFileLimits.MAX_STATE_BYTES,
+                "script pack state"
+            )
+            val root = JsonParser.parseString(stateJson).asJsonObject
             val enabledElement = root.get("enabled") ?: return@runCatching null
             if (enabledElement.isJsonPrimitive && enabledElement.asJsonPrimitive.isBoolean) {
                 enabledElement.asBoolean
@@ -435,17 +586,66 @@ object ScriptPackManager {
         }
     }
 
-    private fun readManifestJsonFromJar(jarPath: Path): String? {
-        return runCatching {
-            JarFile(jarPath.toFile()).use { jar ->
-                val entry = jar.getJarEntry(MANIFEST_FILE_NAME)
-                    ?: jar.getJarEntry("META-INF/katton/$MANIFEST_FILE_NAME")
-                    ?: return@use null
-                jar.getInputStream(entry).use { input ->
-                    input.readAllBytes().toString(StandardCharsets.UTF_8)
+    /**
+     * Validates the expanded archive while extracting its optional Katton
+     * manifest. Reading from the already bounded byte snapshot prevents a
+     * symlink race and makes compressed zip bombs fail before class/resource
+     * loaders see the archive.
+     */
+    private fun inspectArchiveAndReadManifest(jarBytes: ByteArray, maximumArchiveEntries: Int): String? {
+        require(
+            jarBytes.size >= 4 && jarBytes[0] == 'P'.code.toByte() && jarBytes[1] == 'K'.code.toByte()
+        ) { "File does not have a ZIP/JAR header" }
+        var entryCount = 0
+        var expandedBytes = 0L
+        var rootManifest: ByteArray? = null
+        var metadataManifest: ByteArray? = null
+        val entryNames = HashSet<String>()
+
+        ZipInputStream(ByteArrayInputStream(jarBytes)).use { archive ->
+            while (true) {
+                val entry = archive.nextEntry ?: break
+                val name = entry.name
+                validateArchiveEntryName(name)
+                require(entryNames.add(name)) { "Archive contains duplicate entry '$name'" }
+
+                // Count directories too. An archive can otherwise contain an
+                // excessive number of zero-byte directory records without ever
+                // consuming the expanded-byte budget below.
+                entryCount++
+                require(entryCount <= maximumArchiveEntries) {
+                    "Archive contains too many entries (maximum $maximumArchiveEntries)"
                 }
+                if (entry.isDirectory) {
+                    archive.closeEntry()
+                    continue
+                }
+
+                val remaining = ScriptPackFileLimits.MAX_PACK_CONTENT_BYTES.toLong() - expandedBytes
+                require(remaining >= 0L) {
+                    "Archive expands beyond ${ScriptPackFileLimits.MAX_PACK_CONTENT_BYTES} bytes"
+                }
+                val isKattonManifest = name == MANIFEST_FILE_NAME ||
+                    name == "META-INF/katton/$MANIFEST_FILE_NAME"
+                val perEntryLimit = minOf(
+                    if (isKattonManifest) {
+                        ScriptPackFileLimits.MAX_MANIFEST_BYTES
+                    } else {
+                        ScriptPackFileLimits.MAX_FILE_BYTES
+                    },
+                    remaining.coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+                )
+                val bytes = readArchiveEntry(archive, perEntryLimit, retain = isKattonManifest)
+                expandedBytes += bytes.size
+                if (isKattonManifest) {
+                    if (name == MANIFEST_FILE_NAME) rootManifest = bytes.content
+                    else metadataManifest = bytes.content
+                }
+                archive.closeEntry()
             }
-        }.getOrNull()
+        }
+
+        return (rootManifest ?: metadataManifest)?.let { String(it, StandardCharsets.UTF_8) }
     }
 
     private fun createFallbackManifestJson(jarPath: Path): String {
@@ -465,7 +665,62 @@ object ScriptPackManager {
         return "${scope.serializedName}:$id"
     }
 
-    private fun isAssetsRelativePath(relativePath: String): Boolean {
-        return relativePath == "assets" || relativePath.startsWith("assets/")
+    private fun manifestWithoutSignature(manifestJson: String): String {
+        val root = JsonParser.parseString(manifestJson).asJsonObject
+        root.remove("signature")
+        return root.toString()
     }
+
+    private fun normalizedRelativePath(root: Path, file: Path): String {
+        val relative = root.relativize(file).normalize()
+        require(!relative.isAbsolute && relative.none { it.toString() == ".." }) {
+            "Pack file has an unsafe relative path: $file"
+        }
+        val serialized = relative.toString().replace('\\', '/')
+        require(serialized.isNotBlank() && serialized.length <= ScriptPackFileLimits.MAX_RELATIVE_PATH_CHARS) {
+            "Pack file path is empty or longer than ${ScriptPackFileLimits.MAX_RELATIVE_PATH_CHARS} characters: $file"
+        }
+        return serialized
+    }
+
+    private fun isPackContentRelativePath(relativePath: String, directoryName: String): Boolean {
+        return relativePath.startsWith("$directoryName/")
+    }
+
+    private fun validateArchiveEntryName(name: String) {
+        require(name.isNotBlank() && name.length <= ScriptPackFileLimits.MAX_RELATIVE_PATH_CHARS) {
+            "Archive entry name is empty or too long"
+        }
+        require('\\' !in name && '\u0000' !in name && !name.startsWith('/')) {
+            "Archive contains unsafe entry '$name'"
+        }
+        require(name.split('/').none { it == ".." }) { "Archive entry escapes its root: $name" }
+    }
+
+    private fun readArchiveEntry(
+        archive: ZipInputStream,
+        maximumBytes: Int,
+        retain: Boolean
+    ): ArchiveEntryBytes {
+        val output = if (retain) ByteArrayOutputStream(minOf(maximumBytes, 8 * 1024)) else null
+        val buffer = ByteArray(8 * 1024)
+        var total = 0
+        while (true) {
+            val read = archive.read(buffer)
+            if (read < 0) break
+            total += read
+            require(total <= maximumBytes) { "Archive entry is too large (maximum $maximumBytes bytes)" }
+            output?.write(buffer, 0, read)
+        }
+        return ArchiveEntryBytes(total, output?.toByteArray())
+    }
+
+    private data class ArchiveEntryBytes(val size: Int, val content: ByteArray?)
+
+    private data class CollectedDirectoryFiles(
+        val scripts: List<ScriptPackScriptFile>,
+        val javaFiles: List<ScriptPackScriptFile>,
+        val assetFiles: List<ScriptPackContentFile>,
+        val dataFiles: List<ScriptPackContentFile>
+    )
 }

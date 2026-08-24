@@ -7,6 +7,8 @@ import org.slf4j.LoggerFactory
 import top.katton.engine.ScriptEnvironment
 import top.katton.pack.ScriptPackScope
 import top.katton.util.Extension.returnIfNot
+import java.lang.ref.WeakReference
+import java.util.concurrent.CopyOnWriteArrayList
 
 /**
  * Invoker strategy: receives the full [EventHandler] array so that metadata
@@ -16,6 +18,23 @@ private typealias EventInvoker<Arg, R> = (Array<EventHandler<Arg, R>>) -> (Arg) 
 
 private val LOGGER = LoggerFactory.getLogger("top.katton.util.Event")
 private val NO_HANDLER_RESULT: Result<Nothing> = Result.failure("No handler")
+
+/** Immutable publication unit; rebuilding the dispatcher only on mutation avoids a lambda allocation per event. */
+private class EventDispatchState<Arg, R>(
+    val entries: Array<EventHandler<Arg, R>>,
+    val dispatch: ((Arg) -> R)?
+)
+
+private fun <Arg, R> buildDispatchState(
+    entries: Array<EventHandler<Arg, R>>,
+    invoker: EventInvoker<Arg, R>
+): EventDispatchState<Arg, R> {
+    if (entries.isEmpty()) return EventDispatchState(entries, null)
+    val dispatch = runCatching { invoker(entries) }
+        // Custom event strategies used to fail during invocation, not registration.
+        .getOrElse { failure -> { _: Arg -> throw failure } }
+    return EventDispatchState(entries, dispatch)
+}
 
 @Suppress("UNCHECKED_CAST")
 private fun <R> noHandlerResult(): Result<R> = NO_HANDLER_RESULT as Result<R>
@@ -74,18 +93,32 @@ fun <T> createAny() = DelegateEvent<T, Boolean>(any())
 fun <T> createAll() = DelegateEvent<T, Boolean>(all())
 
 abstract class Cancellable {
-    private var cancelled = false
+    private class CancellationState(var cancelled: Boolean = false)
+
+    // Paper/Folia can dispatch the same Katton event object concurrently on
+    // different region threads. A small per-thread stack also handles nested
+    // dispatch of the same event without the inner reset erasing outer state.
+    private val invocationStates = ThreadLocal.withInitial { ArrayDeque<CancellationState>() }
+    private val lastCompletedState = ThreadLocal.withInitial { false }
 
     fun cancel() {
-        cancelled = true
+        val current = invocationStates.get().lastOrNull()
+        if (current != null) current.cancelled = true else lastCompletedState.set(true)
     }
 
     fun isCanceled(): Boolean {
-        return cancelled
+        return invocationStates.get().lastOrNull()?.cancelled ?: lastCompletedState.get()
     }
 
-    protected fun reset() {
-        cancelled = false
+    protected fun beginInvocation() {
+        invocationStates.get().addLast(CancellationState())
+    }
+
+    protected fun finishInvocation() {
+        val states = invocationStates.get()
+        val completed = states.removeLastOrNull()?.cancelled ?: false
+        lastCompletedState.set(completed)
+        if (states.isEmpty()) invocationStates.remove()
     }
 
 }
@@ -143,35 +176,47 @@ interface Event<Arg, R> {
     operator fun plusAssign(h: (Arg) -> R)
 
     companion object {
-        val registry = ArrayList<Event<*, *>>()
+        // Script code can create custom DelegateEvent instances. Holding those
+        // strongly here would pin every obsolete hot-reload classloader. Platform
+        // singleton events remain strongly owned by their bridge objects.
+        private val registry = CopyOnWriteArrayList<WeakReference<Event<*, *>>>()
+
+        internal fun register(event: Event<*, *>) {
+            registry.add(WeakReference(event))
+        }
+
+        private inline fun forEachLive(action: (Event<*, *>) -> Unit) {
+            var containsClearedReference = false
+            registry.forEach { reference ->
+                val event = reference.get()
+                if (event == null) containsClearedReference = true else action(event)
+            }
+            if (containsClearedReference) {
+                // CopyOnWriteArrayList copies once for removeIf; removing each
+                // dead reference individually becomes quadratic after many reloads.
+                registry.removeIf { reference -> reference.get() == null }
+            }
+        }
 
         @JvmStatic
         fun clearHandlers(){
-            for (event in registry) {
-                event.clear()
-            }
+            forEachLive { it.clear() }
         }
 
         @JvmStatic
         fun clearHandlersByScope(scope: ScriptPackScope) {
-            for (event in registry) {
-                event.clearByScope(scope)
-            }
+            forEachLive { it.clearByScope(scope) }
         }
 
         @JvmStatic
         fun clearHandlersByScopeAndEnvironment(scope: ScriptPackScope, environment: ScriptEnvironment) {
-            for (event in registry) {
-                event.clearByScopeAndEnvironment(scope, environment)
-            }
+            forEachLive { it.clearByScopeAndEnvironment(scope, environment) }
         }
 
 
         @JvmStatic
         fun clearHandlersByOwnerPrefix(ownerPrefix: String) {
-            for (event in registry) {
-                event.clearByOwnerPrefix(ownerPrefix)
-            }
+            forEachLive { it.clearByOwnerPrefix(ownerPrefix) }
         }
     }
 }
@@ -179,36 +224,47 @@ interface Event<Arg, R> {
 class DelegateEvent<Arg, R>(val invoker: EventInvoker<Arg, R>): Event<Arg, R> {
 
     init {
-        Event.registry.add(this)
+        Event.register(this)
     }
 
+    @Synchronized
     override fun clear() {
         entries = emptyArray()
     }
 
+    @Synchronized
     override fun clearByScope(scope: ScriptPackScope) {
         val es = entries
         if (es.isEmpty()) return
         entries = es.filter { it.scope != scope }.toTypedArray()
     }
 
+    @Synchronized
     override fun clearByScopeAndEnvironment(scope: ScriptPackScope, environment: ScriptEnvironment) {
         val es = entries
         if (es.isEmpty()) return
         entries = es.filter { it.scope != scope || it.environment != environment }.toTypedArray()
     }
 
+    @Synchronized
     override fun clearByOwnerPrefix(ownerPrefix: String) {
         val es = entries
         if (es.isEmpty()) return
         entries = es.filter { it.owner?.startsWith(ownerPrefix) != true }.toTypedArray()
     }
 
-    override fun hasHandlers(): Boolean = entries.isNotEmpty()
+    override fun hasHandlers(): Boolean = dispatchState.entries.isNotEmpty()
 
     @Volatile
-    var entries: Array<EventHandler<Arg, R>> = emptyArray()
+    private var dispatchState = buildDispatchState(emptyArray(), invoker)
 
+    var entries: Array<EventHandler<Arg, R>>
+        get() = dispatchState.entries
+        set(value) {
+            dispatchState = buildDispatchState(value, invoker)
+        }
+
+    @Synchronized
     override operator fun plusAssign(h: (Arg) -> R) {
         val old = entries
         val n = old.size
@@ -223,10 +279,9 @@ class DelegateEvent<Arg, R>(val invoker: EventInvoker<Arg, R>): Event<Arg, R> {
     }
 
     override operator fun invoke(arg: Arg): Result<R> {
-        val es = entries
-        if (es.isEmpty()) return noHandlerResult()
+        val dispatch = dispatchState.dispatch ?: return noHandlerResult()
         return try {
-            Result.success(invoker(es).invoke(arg))
+            Result.success(dispatch(arg))
         } catch (t: Throwable) {
             LOGGER.warn("Script event handler failed for {}", arg?.javaClass?.name ?: "null", t)
             Result.failure("Script event handler failed: ${t.message ?: t.javaClass.name}")
@@ -237,36 +292,47 @@ class DelegateEvent<Arg, R>(val invoker: EventInvoker<Arg, R>): Event<Arg, R> {
 class CancellableDelegateEvent<Arg: CancellableEventArg, R>(val invoker: EventInvoker<Arg, R>): Cancellable(), Event<Arg, R> {
 
     init {
-        Event.registry.add(this)
+        Event.register(this)
     }
 
+    @Synchronized
     override fun clear() {
         entries = emptyArray()
     }
 
+    @Synchronized
     override fun clearByScope(scope: ScriptPackScope) {
         val es = entries
         if (es.isEmpty()) return
         entries = es.filter { it.scope != scope }.toTypedArray()
     }
 
+    @Synchronized
     override fun clearByScopeAndEnvironment(scope: ScriptPackScope, environment: ScriptEnvironment) {
         val es = entries
         if (es.isEmpty()) return
         entries = es.filter { it.scope != scope || it.environment != environment }.toTypedArray()
     }
 
+    @Synchronized
     override fun clearByOwnerPrefix(ownerPrefix: String) {
         val es = entries
         if (es.isEmpty()) return
         entries = es.filter { it.owner?.startsWith(ownerPrefix) != true }.toTypedArray()
     }
 
-    override fun hasHandlers(): Boolean = entries.isNotEmpty()
+    override fun hasHandlers(): Boolean = dispatchState.entries.isNotEmpty()
 
     @Volatile
-    private var entries: Array<EventHandler<Arg, R>> = emptyArray()
+    private var dispatchState = buildDispatchState(emptyArray(), invoker)
 
+    private var entries: Array<EventHandler<Arg, R>>
+        get() = dispatchState.entries
+        set(value) {
+            dispatchState = buildDispatchState(value, invoker)
+        }
+
+    @Synchronized
     override operator fun plusAssign(h: (Arg) -> R) {
         val old = entries
         val n = old.size
@@ -281,15 +347,20 @@ class CancellableDelegateEvent<Arg: CancellableEventArg, R>(val invoker: EventIn
     }
 
     override operator fun invoke(arg: Arg): Result<R> {
-        reset()
+        beginInvocation()
         arg.event = this
-        val es = entries
-        if (es.isEmpty()) return noHandlerResult()
+        val dispatch = dispatchState.dispatch
         return try {
-            Result.success(invoker(es).invoke(arg))
+            if (dispatch == null) {
+                noHandlerResult()
+            } else {
+                Result.success(dispatch(arg))
+            }
         } catch (t: Throwable) {
             LOGGER.warn("Script cancellable event handler failed for {}", arg.javaClass.name, t)
             Result.failure("Script event handler failed: ${t.message ?: t.javaClass.name}")
+        } finally {
+            finishInvocation()
         }
     }
 }

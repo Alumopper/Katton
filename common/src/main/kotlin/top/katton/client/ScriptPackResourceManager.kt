@@ -17,11 +17,16 @@ import net.minecraft.util.Unit as MinecraftUnit
 import net.minecraft.util.Util
 import net.minecraft.world.flag.FeatureFlagSet
 import top.katton.pack.ScriptPack
+import top.katton.pack.ScriptPackContentFile
+import top.katton.pack.ScriptPackDirectorySnapshots
 import top.katton.pack.ScriptPackKind
+import top.katton.pack.ScriptPackJarSnapshots
 import top.katton.pack.ScriptPackScope
 import top.katton.util.ReflectUtil
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.charset.StandardCharsets
+import java.security.MessageDigest
 import java.util.Locale
 import java.util.Optional
 import java.util.concurrent.CompletableFuture
@@ -104,8 +109,19 @@ object ScriptPackResourceManager {
     }
 
     private fun createEntry(index: Int, pack: ScriptPack): ResourceEntry? {
-        if (!packHasAssets(pack)) {
-            return null
+        val assetFiles = pack.contentFiles.filter { it.relativePath.startsWith("assets/") }
+        val (effectiveLocation, assetHash) = when (pack.kind) {
+            ScriptPackKind.DIRECTORY -> {
+                if (assetFiles.isEmpty()) return null
+                val hash = hashAssetFiles(assetFiles)
+                val snapshot = ScriptPackDirectorySnapshots.materialize(pack, "assets", hash) ?: return null
+                snapshot to hash
+            }
+            ScriptPackKind.JAR -> {
+                val snapshot = ScriptPackJarSnapshots.materialize(pack) ?: return null
+                if (!jarHasAssets(snapshot)) return null
+                snapshot to pack.hash
+            }
         }
 
         val scopeOrder = when (pack.scope) {
@@ -125,9 +141,9 @@ object ScriptPackResourceManager {
             packId = packId,
             title = "${pack.manifest.name} assets",
             kind = pack.kind,
-            location = pack.location,
+            location = effectiveLocation,
             scope = pack.scope,
-            hash = pack.hash
+            hash = assetHash
         )
     }
 
@@ -245,13 +261,6 @@ object ScriptPackResourceManager {
         }
     }
 
-    private fun packHasAssets(pack: ScriptPack): Boolean {
-        if (pack.contentFiles.any { it.relativePath.startsWith("assets/") }) {
-            return true
-        }
-        return pack.kind == ScriptPackKind.JAR && jarHasAssets(pack.location)
-    }
-
     private fun jarHasAssets(path: Path): Boolean {
         if (!Files.isRegularFile(path)) {
             return false
@@ -263,6 +272,30 @@ object ScriptPackResourceManager {
                 }
             }
         }.getOrDefault(false)
+    }
+
+    /** Code-only directory edits must not force an expensive resource reload. */
+    private fun hashAssetFiles(files: List<ScriptPackContentFile>): String {
+        val digest = MessageDigest.getInstance("SHA-256")
+        digest.updateFramed("katton-directory-assets-hash-v1".toByteArray(StandardCharsets.UTF_8))
+        digest.updateInt(files.size)
+        files.sortedBy { it.relativePath }.forEach { file ->
+            digest.updateFramed(file.relativePath.toByteArray(StandardCharsets.UTF_8))
+            digest.updateFramed(file.bytes)
+        }
+        return digest.digest().joinToString("") { "%02x".format(it) }
+    }
+
+    private fun MessageDigest.updateFramed(bytes: ByteArray) {
+        updateInt(bytes.size)
+        update(bytes)
+    }
+
+    private fun MessageDigest.updateInt(value: Int) {
+        update((value ushr 24).toByte())
+        update((value ushr 16).toByte())
+        update((value ushr 8).toByte())
+        update(value.toByte())
     }
 
     private fun packSource(scope: ScriptPackScope): PackSource {

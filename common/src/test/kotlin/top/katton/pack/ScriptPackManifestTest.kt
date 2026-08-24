@@ -19,6 +19,14 @@ class ScriptPackManifestTest {
     }
 
     @Test
+    fun `malformed json reports the real manifest error`() {
+        val error = assertFailsWith<IllegalArgumentException> {
+            ScriptPackManifest.parse(path, """{"id":"example","dependencies":[}""")
+        }
+        assertTrue(error.message.orEmpty().contains("Invalid Katton pack manifest JSON"))
+    }
+
+    @Test
     fun `empty dependencies are valid`() {
         val manifest = ScriptPackManifest.parse(path, """{"id":"example","dependencies":[]}""")
         assertEquals("example", manifest.id)
@@ -50,5 +58,66 @@ class ScriptPackManifestTest {
         assertFailsWith<IllegalArgumentException> {
             ScriptPackManifest.parse(path, """{"id":"bad","dependencies":[{"id":"x","platforms":[]}]}""")
         }
+    }
+
+    @Test
+    fun `duplicate dependency ids are rejected case insensitively`() {
+        val error = assertFailsWith<IllegalArgumentException> {
+            ScriptPackManifest.parse(
+                path,
+                """{
+                    "dependencies": [
+                        {"id":"Create","platforms":["fabric"]},
+                        {"id":"create","platforms":["fabric"]}
+                    ]
+                }"""
+            )
+        }
+
+        assertTrue(error.message.orEmpty().contains("overlapping declarations"))
+    }
+
+    @Test
+    fun `malformed signature metadata cannot downgrade to unsigned`() {
+        val error = assertFailsWith<IllegalArgumentException> {
+            ScriptPackManifest.parse(
+                path,
+                """{"dependencies":[],"signature":{"algorithm":"Ed25519","keyId":"publisher"}}"""
+            )
+        }
+
+        assertTrue(error.message.orEmpty().contains("signature value"))
+    }
+
+    @Test
+    fun `signature payload version defaults to legacy v1`() {
+        val manifest = ScriptPackManifest.parse(
+            path,
+            """{"dependencies":[],"signature":{"algorithm":"Ed25519","keyId":"publisher","signature":"AA=="}}"""
+        )
+
+        assertEquals(1, manifest.signature?.payloadVersion)
+    }
+
+    @Test
+    fun `signature payload version parses current v2`() {
+        val manifest = ScriptPackManifest.parse(
+            path,
+            """{"dependencies":[],"signature":{"algorithm":"Ed25519","payloadVersion":2,"keyId":"publisher","signature":"AA=="}}"""
+        )
+
+        assertEquals(SCRIPT_PACK_SIGNATURE_PAYLOAD_VERSION, manifest.signature?.payloadVersion)
+    }
+
+    @Test
+    fun `signature payload version rejects fractional numbers`() {
+        val error = assertFailsWith<IllegalArgumentException> {
+            ScriptPackManifest.parse(
+                path,
+                """{"dependencies":[],"signature":{"payloadVersion":2.5,"keyId":"publisher","signature":"AA=="}}"""
+            )
+        }
+
+        assertTrue(error.message.orEmpty().contains("positive integer"))
     }
 }

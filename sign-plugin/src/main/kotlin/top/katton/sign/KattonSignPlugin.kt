@@ -23,6 +23,9 @@ class KattonSignPlugin : Plugin<Project> {
         project.tasks.register("signKattonPack", KattonSignPackTask::class.java) { task ->
             task.group = "katton"
             task.description = "Signs a Katton script pack and writes signature metadata to manifest.json."
+            // Signing mutates manifest.json and intentionally bypasses Gradle's
+            // recursive input snapshot so Katton can enforce its own safe scan.
+            task.outputs.upToDateWhen { false }
             task.packDir.convention(project.providers.gradleProperty("kattonPackDir").map { project.layout.projectDirectory.dir(it) })
             task.privateKeyFile.convention(project.providers.gradleProperty("kattonPrivateKey").map { project.layout.projectDirectory.file(it) })
             task.publicKeyFile.convention(project.providers.gradleProperty("kattonPublicKey").map { project.layout.projectDirectory.file(it) })

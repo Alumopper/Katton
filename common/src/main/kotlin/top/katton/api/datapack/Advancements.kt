@@ -6,6 +6,7 @@ import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import net.minecraft.resources.Identifier
 import top.katton.datapack.ServerDatapackManager
+import java.util.Locale
 
 fun advancements(block: AdvancementEvent.() -> Unit) {
     AdvancementEvent().apply(block)
@@ -164,7 +165,7 @@ class DisplayBuilder {
         json.add("icon", iconJson)
         json.add("title", title)
         json.add("description", description)
-        json.addProperty("frame", frame.name.lowercase())
+        json.addProperty("frame", frame.name.lowercase(Locale.ROOT))
         background?.let { json.addProperty("background", it) }
         if (!showToast) json.addProperty("show_toast", false)
         if (!announceToChat) json.addProperty("announce_to_chat", false)

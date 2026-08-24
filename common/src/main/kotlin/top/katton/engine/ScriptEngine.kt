@@ -14,7 +14,9 @@ import top.katton.api.ServerPhase
 import top.katton.api.ServerScriptEntrypoint
 import top.katton.config.KattonConfigManager
 import top.katton.pack.ScriptPack
+import top.katton.pack.ScriptPackFileLimits
 import top.katton.pack.ScriptPackKind
+import top.katton.pack.ScriptPackJarSnapshots
 import top.katton.pack.ScriptPackScope
 import top.katton.pack.ScriptPackScriptFile
 import top.katton.registry.KattonRegistry
@@ -35,6 +37,9 @@ import java.security.MessageDigest
 import java.util.*
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.jar.Attributes
 import java.util.jar.JarEntry
 import java.util.jar.JarFile
@@ -59,6 +64,8 @@ import kotlin.script.experimental.jvmhost.loadScriptFromJar
 object ScriptEngine {
     private const val MAX_SOURCE_COMPILE_CACHE_ENTRIES = 3
     private const val MAX_JAR_LOAD_CACHE_ENTRIES = 16
+    private const val MAX_TOP_LEVEL_CLASSES_PER_CACHE = 4_096
+    private const val CLIENT_THREAD_WAIT_TIMEOUT_SECONDS = 60L
 
     private data class CompiledScriptArtifact(
         val compiledScript: CompiledScript,
@@ -69,11 +76,17 @@ object ScriptEngine {
     private data class SourceCompilationPlan(
         val sourcePacks: List<ScriptPack>,
         val binaryPacks: List<ScriptPack>,
-        val scriptPaths: List<String>,
+        val scriptSnapshots: List<ScriptSourceSnapshot>,
         val classpathJars: List<Path>,
         val cacheKey: String,
         val classPacks: Map<String, ScriptPack>,
         val baseClassLoader: ClassLoader
+    )
+
+    @Suppress("ArrayInDataClass")
+    private data class ScriptSourceSnapshot(
+        val stagedRelativePath: String,
+        val bytes: ByteArray
     )
 
     @Suppress("ArrayInDataClass")
@@ -92,12 +105,18 @@ object ScriptEngine {
 
     private val compiler = JvmScriptCompiler()
 
-    private val externalClasspathJars = mutableListOf<File>()
+    private val externalClasspathJars = linkedSetOf<File>()
+    private val hostClasspathLock = Any()
+
+    @Volatile
+    private var hostClasspathCache: List<File>? = null
 
     @JvmStatic
     fun addHostClasspathJar(file: File) {
         if (file.exists() && file.isFile) {
-            externalClasspathJars.add(file.absoluteFile)
+            synchronized(hostClasspathLock) {
+                if (externalClasspathJars.add(file.absoluteFile)) hostClasspathCache = null
+            }
         }
     }
 
@@ -209,8 +228,7 @@ object ScriptEngine {
         return enabledPacks.asSequence()
             .filter { it.kind == ScriptPackKind.JAR }
             .all { pack ->
-                val jar = pack.compiledJar
-                jar != null && Files.isRegularFile(jar) &&
+                ScriptPackJarSnapshots.materialize(pack) != null &&
                     runCatching { loadJarPack(pack, baseLoader, dependencySelection.fingerprints) }.isSuccess
             }
     }
@@ -266,7 +284,7 @@ object ScriptEngine {
         LOGGER.info(
             "Preparing {} {} script packs in scope {} (source={}, jar={})",
             packs.size,
-            environment.name.lowercase(),
+            environment.name.lowercase(Locale.ROOT),
             packs.first().scope,
             sourcePackCount,
             jarPackCount
@@ -286,7 +304,7 @@ object ScriptEngine {
                 "Compiling {} source packs together with {} jar dependencies for {}",
                 sourcePlan.sourcePacks.size,
                 sourcePlan.binaryPacks.size,
-                environment.name.lowercase()
+                environment.name.lowercase(Locale.ROOT)
             )
             val artifact = loadCompiledSourceArtifact(sourcePlan, environment, progressReporter)
             if (artifact != null) {
@@ -362,7 +380,7 @@ object ScriptEngine {
 
             // For jar packs: pre-scan compiled jar for FQCN mappings
             if (pack.kind == ScriptPackKind.JAR) {
-                pack.compiledJar?.let { registerJarFqcnMappings(it, pack.manifest.id) }
+                ScriptPackJarSnapshots.materialize(pack)?.let { registerJarFqcnMappings(it, pack.manifest.id) }
             }
         }
     }
@@ -399,24 +417,47 @@ object ScriptEngine {
         val binaryPacks = (packs.filter { it.kind == ScriptPackKind.JAR && it.compiledJar != null } + extraClasspathJars)
             .distinctBy { it.syncId }
             .sortedBy { it.syncId }
-        val classpathJars = binaryPacks.mapNotNull { it.compiledJar?.toAbsolutePath()?.normalize() }.toMutableList()
+        val classpathJars = binaryPacks.mapNotNull(ScriptPackJarSnapshots::materialize).toMutableList()
+        if (classpathJars.size != binaryPacks.size) {
+            LOGGER.warn("Unable to materialize every binary script pack for immutable compilation")
+            return null
+        }
         classpathJars += dependencySelection.resolved.flatMap { it.classpath }
 
-        val scriptPaths = sourcePacks
-            .flatMap { pack -> pack.scripts.sortedBy { it.relativePath }.map { it.absolutePath.toAbsolutePath().normalize().toString() } }
+        // Compile the immutable bytes captured by ScriptPackManager. Reading the
+        // original paths again would create a TOCTOU gap: an editor could save a
+        // file after hashing but before compilation, poisoning the old cache key
+        // with different bytecode.
+        val scriptSnapshots = sourcePacks.flatMapIndexed { packIndex, pack ->
+            pack.scripts.sortedBy { it.relativePath }.map { script ->
+                ScriptSourceSnapshot(
+                    stagedRelativePath = "pack-$packIndex/${script.relativePath}",
+                    bytes = script.bytes
+                )
+            }
+        }
 
-        val cacheKey = buildSourceCacheKey(sourcePacks, binaryPacks, dependencySelection.fingerprints)
         val classPacks = buildScriptClassPackMap(sourcePacks)
         val baseClassLoader = createBaseClassLoader(dependencySelection)
 
         // Compile .java files from enabled directory packs (independent of script collection)
-        val classpathFromJava = compileJavaFromPacks(packs, classpathJars, dependencySelection.fingerprints, progressReporter)
+        val javaFingerprints = dependencySelection.fingerprints + binaryPacks.map { pack ->
+            "script-pack:${pack.syncId}@${pack.codeHash}"
+        }
+        val classpathFromJava = compileJavaFromPacks(packs, classpathJars, javaFingerprints, progressReporter)
         if (classpathFromJava != null) classpathJars.add(classpathFromJava)
+        // The Java cache jar name contains its source/dependency hash. Including
+        // it here prevents reuse of Kotlin bytecode compiled against an older
+        // version of helper Java classes.
+        val sourceFingerprints = dependencySelection.fingerprints + listOfNotNull(
+            classpathFromJava?.fileName?.toString()?.let { "compiled-java:$it" }
+        )
+        val cacheKey = buildSourceCacheKey(sourcePacks, binaryPacks, sourceFingerprints)
 
         return SourceCompilationPlan(
             sourcePacks = sourcePacks,
             binaryPacks = binaryPacks,
-            scriptPaths = scriptPaths,
+            scriptSnapshots = scriptSnapshots,
             classpathJars = classpathJars,
             cacheKey = cacheKey,
             classPacks = classPacks,
@@ -437,8 +478,12 @@ object ScriptEngine {
     }
 
     /**
-     * Scans enabled directory packs for `.java` files, compiles them with
-     * javac, and returns the path to the resulting jar (or null if none).
+     * Compiles the `.java` files captured in the immutable pack snapshots and
+     * returns the resulting jar (or null if none).
+     *
+     * Reusing [ScriptPack.contentFiles] is both faster than walking every pack
+     * a second time and security-sensitive: compilation must consume exactly
+     * the bytes that were bounded, hashed, and (for remote packs) verified.
      */
     private fun compileJavaFromPacks(
         packs: Collection<ScriptPack>,
@@ -446,28 +491,21 @@ object ScriptEngine {
         dependencyFingerprints: List<String>,
         progressReporter: ((String) -> Unit)?
     ): Path? {
-        val javaFiles = mutableListOf<ScriptPackScriptFile>()
-        for (pack in packs) {
-            if (pack.kind != ScriptPackKind.DIRECTORY) continue
-            //collect all java files in a pack
-            runCatching {
-                Files.walk(pack.location).use { stream ->
-                    stream.filter { f: Path -> Files.isRegularFile(f) && f.fileName.toString().endsWith(".java") }
-                        .forEach { file: Path ->
-                            val relative = pack.location.relativize(file).toString().replace('\\', '/')
-                            javaFiles.add(
-                                ScriptPackScriptFile(
-                                    relativePath = relative,
-                                    absolutePath = file,
-                                    bytes = Files.readAllBytes(file)
-                                )
-                            )
-                        }
-                }
+        val javaFiles = packs
+            .asSequence()
+            .filter { it.kind == ScriptPackKind.DIRECTORY }
+            .flatMap { pack -> pack.contentFiles.asSequence() }
+            .filter { file ->
+                file.relativePath.endsWith(".java", ignoreCase = true) &&
+                    !file.relativePath.startsWith("assets/") &&
+                    !file.relativePath.startsWith("data/")
             }
-        }
+            .map { file ->
+                ScriptPackScriptFile(file.relativePath, file.absolutePath, file.bytes)
+            }
+            .toList()
         if (javaFiles.isEmpty()) {
-            LOGGER.info("No .java files found in packs")
+            LOGGER.debug("No .java files found in packs")
             return null
         }
         LOGGER.info("Compiling {} .java files from {} packs", javaFiles.size, packs.size)
@@ -496,21 +534,29 @@ object ScriptEngine {
         // On game restart, recompilation is sub-second and unavoidable.
 
         val dummyScript = "".toScriptSource()
-        val compilationConfig = createCompilationConfiguration(
-            orderedScriptPaths = plan.scriptPaths,
-            classpathJars = plan.classpathJars,
-            cacheJar = cacheJar
-        )
-        reportProgress(progressReporter, "katton.reload.common.compile_source_scripts")
-        val compileResult = runBlocking {
-            compiler(dummyScript, compilationConfig)
+        val stagedSources = runCatching { stageScriptSnapshots(plan.scriptSnapshots) }
+            .getOrElse { failure ->
+                LOGGER.warn("Failed to stage immutable Kotlin source snapshots", failure)
+                return null
+            }
+        val compileResult = try {
+            val compilationConfig = createCompilationConfiguration(
+                orderedScriptPaths = stagedSources.second,
+                classpathJars = plan.classpathJars
+            )
+            reportProgress(progressReporter, "katton.reload.common.compile_source_scripts")
+            runBlocking {
+                compiler(dummyScript, compilationConfig)
+            }
+        } finally {
+            deleteTemporaryTree(stagedSources.first)
         }
         logCompileResult(plan.sourcePacks, compileResult)
         if (compileResult is ResultWithDiagnostics.Failure) {
             ScriptIssueReporter.report(
                 title = "Katton script compilation failed",
                 detail = buildString {
-                    appendLine("Environment: ${environment.name.lowercase()}")
+                    appendLine("Environment: ${environment.name.lowercase(Locale.ROOT)}")
                     appendLine("Packs: ${plan.sourcePacks.joinToString(", ") { it.manifest.name }}")
                     appendLine()
                     append(formatDiagnostics(compileResult.reports))
@@ -553,15 +599,15 @@ object ScriptEngine {
         baseClassLoader: ClassLoader,
         dependencyFingerprints: List<String>
     ): CompiledScriptArtifact? {
-        val cacheKey = listOf(pack.syncId, pack.codeHash, dependencyFingerprints.joinToString("|")).joinToString(":")
+        val cacheKey = buildJarLoadCacheKey(pack, dependencyFingerprints)
         if (jarLoadCache.containsKey(cacheKey)) {
             LOGGER.info("Reusing jar load cache for {}", pack.manifest.name)
             return jarLoadCache[cacheKey]?.getOrNull()
         }
 
-        val jarPath = pack.compiledJar
+        val jarPath = ScriptPackJarSnapshots.materialize(pack)
         if (jarPath == null || !Files.isRegularFile(jarPath)) {
-            LOGGER.warn("Skipping jar pack {} because compiled jar is missing", pack.manifest.name)
+            LOGGER.warn("Skipping jar pack {} because its immutable snapshot is unavailable", pack.manifest.name)
             jarLoadCache[cacheKey] = Optional.empty()
             trimCache(jarLoadCache, cacheKey, MAX_JAR_LOAD_CACHE_ENTRIES)
             return null
@@ -583,6 +629,18 @@ object ScriptEngine {
         jarLoadCache[cacheKey] = Optional.ofNullable(artifact)
         trimCache(jarLoadCache, cacheKey, MAX_JAR_LOAD_CACHE_ENTRIES)
         return artifact
+    }
+
+    private fun buildJarLoadCacheKey(pack: ScriptPack, dependencyFingerprints: List<String>): String {
+        val digest = MessageDigest.getInstance("SHA-256")
+        digest.updateFramed("katton-jar-load-cache-v2".toByteArray(StandardCharsets.UTF_8))
+        digest.updateFramed(pack.syncId.toByteArray(StandardCharsets.UTF_8))
+        digest.updateFramed(pack.codeHash.toByteArray(StandardCharsets.UTF_8))
+        digest.updateInt(dependencyFingerprints.size)
+        dependencyFingerprints.sorted().forEach { fingerprint ->
+            digest.updateFramed(fingerprint.toByteArray(StandardCharsets.UTF_8))
+        }
+        return digest.digest().joinToString("") { "%02x".format(it) }
     }
 
     private fun logCompileResult(sourcePacks: List<ScriptPack>, compileResult: ResultWithDiagnostics<CompiledScript>) {
@@ -620,7 +678,7 @@ object ScriptEngine {
                         ScriptIssueReporter.report(
                             title = "Katton script execution failed",
                             detail = buildString {
-                                appendLine("Environment: ${environment.name.lowercase()}")
+                                appendLine("Environment: ${environment.name.lowercase(Locale.ROOT)}")
                                 appendLine("Target: $label")
                                 appendLine()
                                 append(errorMessages.joinToString("\n") { it.toString() })
@@ -639,7 +697,7 @@ object ScriptEngine {
                 ScriptIssueReporter.report(
                     title = "Katton script execution failed",
                     detail = buildString {
-                        appendLine("Environment: ${environment.name.lowercase()}")
+                        appendLine("Environment: ${environment.name.lowercase(Locale.ROOT)}")
                         appendLine("Target: $label")
                         appendLine()
                         append(formatDiagnostics(executionResult.reports))
@@ -709,7 +767,7 @@ object ScriptEngine {
             "Discovered {} top-level compiled classes for {} in {} environment",
             entrypointsByClass.size,
             label,
-            environment.name.lowercase()
+            environment.name.lowercase(Locale.ROOT)
         )
         var successCount = 0
         var failureCount = 0
@@ -791,18 +849,17 @@ object ScriptEngine {
         environment: ScriptEnvironment
     ): String? {
         val valid = ScriptLifecyclePolicy.isValid(scope, environment, entrypoint.phaseName)
-        return if (valid) null else "phase ${entrypoint.phaseName} is not valid for ${scope.serializedName} ${environment.name.lowercase()} packs"
+        return if (valid) null else "phase ${entrypoint.phaseName} is not valid for ${scope.serializedName} ${environment.name.lowercase(Locale.ROOT)} packs"
     }
 
     private fun createCompilationConfiguration(
-        orderedScriptPaths: List<String>,
-        classpathJars: List<Path>,
-        cacheJar: Path?
+        orderedScriptPaths: List<Path>,
+        classpathJars: List<Path>
     ): ScriptCompilationConfiguration {
         // Source packs are compiled as one unit so Kotlin symbols can be referenced across pack boundaries.
         val currentHostClasspath = resolveHostClasspath()
         return ScriptCompilationConfiguration {
-            importScripts(orderedScriptPaths.map { File(it).toScriptSource() })
+            importScripts(orderedScriptPaths.map { path -> path.toFile().toScriptSource() })
             jvm {
                 jvmTarget("25")
                 dependenciesFromCurrentContext(wholeClasspath = true)
@@ -814,6 +871,40 @@ object ScriptEngine {
         }
     }
 
+    /**
+     * Kotlin's importScripts compiler currently requires file-backed sources.
+     * Stage the already scanned bytes in a fresh tree so compilation cannot
+     * reopen mutable or remotely cached pack paths after hash verification.
+     */
+    private fun stageScriptSnapshots(snapshots: List<ScriptSourceSnapshot>): Pair<Path, List<Path>> {
+        val root = Files.createTempDirectory("katton-kotlin-sources-")
+        return try {
+            val paths = snapshots.map { snapshot ->
+                val target = root.resolve(snapshot.stagedRelativePath).normalize()
+                require(target.startsWith(root) && target != root) {
+                    "Kotlin source snapshot escaped its staging root: ${snapshot.stagedRelativePath}"
+                }
+                Files.createDirectories(target.parent)
+                Files.write(target, snapshot.bytes, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE)
+                target
+            }
+            root to paths
+        } catch (failure: Throwable) {
+            deleteTemporaryTree(root)
+            throw failure
+        }
+    }
+
+    private fun deleteTemporaryTree(root: Path) {
+        runCatching {
+            Files.walk(root).use { paths ->
+                paths.sorted(Comparator.reverseOrder()).forEach(Files::deleteIfExists)
+            }
+        }.onFailure { failure ->
+            LOGGER.debug("Failed to clean temporary Kotlin source snapshots at {}", root, failure)
+        }
+    }
+
     private fun createBaseClassLoader(selection: ScriptDependencySelection): ClassLoader {
         val parent = Thread.currentThread().contextClassLoader ?: ScriptEngine::class.java.classLoader
         val delegates = selection.resolved.mapNotNull { it.classLoader }.filter { it !== parent }.distinct()
@@ -821,89 +912,94 @@ object ScriptEngine {
     }
 
     private fun resolveHostClasspath(): List<File> {
-        val files = LinkedHashSet<File>()
+        hostClasspathCache?.let { return it }
+        return synchronized(hostClasspathLock) {
+            hostClasspathCache?.let { return@synchronized it }
+            val files = LinkedHashSet<File>()
 
-        fun addFile(file: File?) {
-            if (file == null || !file.exists()) return
-            files += runCatching { file.canonicalFile }.getOrElse { file.absoluteFile }
-        }
+            fun addFile(file: File?) {
+                if (file == null || !file.exists()) return
+                files += runCatching { file.canonicalFile }.getOrElse { file.absoluteFile }
+            }
 
-        fun addUrl(url: URL?) {
-            if (url == null) return
-            when (url.protocol) {
-                "file" -> runCatching { addFile(Paths.get(url.toURI()).toFile()) }
-                "jar" -> {
-                    val spec = url.file.substringBefore("!/")
-                    runCatching { addUrl(URI.create(spec).toURL()) }
+            fun addUrl(url: URL?) {
+                if (url == null) return
+                when (url.protocol) {
+                    "file" -> runCatching { addFile(Paths.get(url.toURI()).toFile()) }
+                    "jar" -> {
+                        val spec = url.file.substringBefore("!/")
+                        runCatching { addUrl(URI.create(spec).toURL()) }
+                    }
                 }
             }
-        }
 
-        fun addClassSource(clazz: Class<*>) {
-            val codeUrl = clazz.protectionDomain?.codeSource?.location
-            if (codeUrl != null) {
-                addUrl(codeUrl)
-                return
-            }
-            val resourcePath = "/${clazz.name.replace('.', '/')}.class"
-            val resourceUrl = runCatching { clazz.getResource(resourcePath) }.getOrNull()
-            if (resourceUrl != null) {
-                addUrl(resourceUrl)
-            }
-        }
-
-        fun addClassLoader(classLoader: ClassLoader?) {
-            val seen = Collections.newSetFromMap(IdentityHashMap<ClassLoader, Boolean>())
-            var current = classLoader
-            while (current != null && seen.add(current)) {
-                if (current is URLClassLoader) {
-                    current.urLs.forEach(::addUrl)
+            fun addClassSource(clazz: Class<*>) {
+                val codeUrl = clazz.protectionDomain?.codeSource?.location
+                if (codeUrl != null) {
+                    addUrl(codeUrl)
+                    return
                 }
-                current = current.parent
+                val resourcePath = "/${clazz.name.replace('.', '/')}.class"
+                val resourceUrl = runCatching { clazz.getResource(resourcePath) }.getOrNull()
+                if (resourceUrl != null) {
+                    addUrl(resourceUrl)
+                }
             }
-        }
 
-        ManagementFactory.getRuntimeMXBean().classPath
-            .split(File.pathSeparatorChar)
-            .asSequence()
-            .filter { it.isNotBlank() }
-            .map(::File)
-            .forEach(::addFile)
+            fun addClassLoader(classLoader: ClassLoader?) {
+                val seen = Collections.newSetFromMap(IdentityHashMap<ClassLoader, Boolean>())
+                var current = classLoader
+                while (current != null && seen.add(current)) {
+                    if (current is URLClassLoader) {
+                        current.urLs.forEach(::addUrl)
+                    }
+                    current = current.parent
+                }
+            }
 
-        val contextLoader = Thread.currentThread().contextClassLoader
-        val scriptEngineLoader = ScriptEngine::class.java.classLoader
-        addClassLoader(contextLoader)
-        addClassLoader(scriptEngineLoader)
+            ManagementFactory.getRuntimeMXBean().classPath
+                .split(File.pathSeparatorChar)
+                .asSequence()
+                .filter { it.isNotBlank() }
+                .map(::File)
+                .forEach(::addFile)
 
-        listOf(
-            ScriptEngine::class.java,
-            KattonRegistry::class.java,
-            Unit::class.java,
-            Suppress::class.java,
-            JvmScriptCompiler::class.java,
-            CompiledScript::class.java
-        ).forEach(::addClassSource)
+            val contextLoader = Thread.currentThread().contextClassLoader
+            val scriptEngineLoader = ScriptEngine::class.java.classLoader
+            addClassLoader(contextLoader)
+            addClassLoader(scriptEngineLoader)
 
-        val preferredLoader = contextLoader ?: scriptEngineLoader
-        listOf(
-            "top.katton.Katton",
-            "top.katton.paper.KattonPaperPlugin",
-            "kotlin.collections.CollectionsKt",
-            "org.jetbrains.kotlin.cli.jvm.K2JVMCompiler",
-            "org.bukkit.Bukkit",
-            "org.bukkit.event.Event",
-            "net.minecraft.server.MinecraftServer"
-        ).forEach { className ->
-            runCatching { Class.forName(className, false, preferredLoader) }
-                .recoverCatching { Class.forName(className, false, scriptEngineLoader) }
-                .getOrNull()
-                ?.let(::addClassSource)
-        }
+            listOf(
+                ScriptEngine::class.java,
+                KattonRegistry::class.java,
+                Unit::class.java,
+                Suppress::class.java,
+                JvmScriptCompiler::class.java,
+                CompiledScript::class.java
+            ).forEach(::addClassSource)
 
-        externalClasspathJars.forEach(::addFile)
+            val preferredLoader = contextLoader ?: scriptEngineLoader
+            listOf(
+                "top.katton.Katton",
+                "top.katton.paper.KattonPaperPlugin",
+                "kotlin.collections.CollectionsKt",
+                "org.jetbrains.kotlin.cli.jvm.K2JVMCompiler",
+                "org.bukkit.Bukkit",
+                "org.bukkit.event.Event",
+                "net.minecraft.server.MinecraftServer"
+            ).forEach { className ->
+                runCatching { Class.forName(className, false, preferredLoader) }
+                    .recoverCatching { Class.forName(className, false, scriptEngineLoader) }
+                    .getOrNull()
+                    ?.let(::addClassSource)
+            }
 
-        return files.toList().also {
-            LOGGER.info("Resolved {} host classpath entries for script compilation", it.size)
+            externalClasspathJars.forEach(::addFile)
+
+            files.toList().also {
+                hostClasspathCache = it
+                LOGGER.info("Resolved {} host classpath entries for script compilation", it.size)
+            }
         }
     }
 
@@ -925,24 +1021,34 @@ object ScriptEngine {
     ): String {
         // Both source pack content and binary jar hashes affect the combined compilation result.
         val digest = MessageDigest.getInstance("SHA-256")
-        digest.update("katton-source-pack-cache-v2".toByteArray(StandardCharsets.UTF_8))
+        digest.updateFramed("katton-source-pack-cache-v3".toByteArray(StandardCharsets.UTF_8))
+        digest.updateInt(sourcePacks.size)
         sourcePacks.forEach { pack ->
-            digest.update(pack.syncId.toByteArray(StandardCharsets.UTF_8))
-            digest.update(0)
-            digest.update(pack.codeHash.toByteArray(StandardCharsets.UTF_8))
-            digest.update(0)
+            digest.updateFramed(pack.syncId.toByteArray(StandardCharsets.UTF_8))
+            digest.updateFramed(pack.codeHash.toByteArray(StandardCharsets.UTF_8))
         }
+        digest.updateInt(binaryPacks.size)
         binaryPacks.forEach { pack ->
-            digest.update(pack.syncId.toByteArray(StandardCharsets.UTF_8))
-            digest.update(0)
-            digest.update(pack.codeHash.toByteArray(StandardCharsets.UTF_8))
-            digest.update(0)
+            digest.updateFramed(pack.syncId.toByteArray(StandardCharsets.UTF_8))
+            digest.updateFramed(pack.codeHash.toByteArray(StandardCharsets.UTF_8))
         }
+        digest.updateInt(dependencyFingerprints.size)
         dependencyFingerprints.sorted().forEach { fingerprint ->
-            digest.update(fingerprint.toByteArray(StandardCharsets.UTF_8))
-            digest.update(0)
+            digest.updateFramed(fingerprint.toByteArray(StandardCharsets.UTF_8))
         }
         return digest.digest().joinToString("") { "%02x".format(it) }
+    }
+
+    private fun MessageDigest.updateFramed(bytes: ByteArray) {
+        updateInt(bytes.size)
+        update(bytes)
+    }
+
+    private fun MessageDigest.updateInt(value: Int) {
+        update((value ushr 24).toByte())
+        update((value ushr 16).toByte())
+        update((value ushr 8).toByte())
+        update(value.toByte())
     }
 
     private fun collectTopLevelClassFiles(script: CompiledScript, cacheJar: Path?): List<ClassFileEntry> {
@@ -963,17 +1069,31 @@ object ScriptEngine {
         if (cacheJar != null && Files.isRegularFile(cacheJar)) {
             return runCatching {
                 JarFile(cacheJar.toFile()).use { jar ->
-                    jar.entries().asSequence()
+                    val entries = jar.entries().asSequence()
                         .filter { !it.isDirectory && it.name.endsWith(".class") && !it.name.contains("$") }
-                        .map { entry ->
-                            jar.getInputStream(entry).use { input ->
-                                ClassFileEntry(
-                                    className = entry.name.removeSuffix(".class").replace('/', '.'),
-                                    bytes = input.readAllBytes()
-                                )
-                            }
-                        }
+                        .take(MAX_TOP_LEVEL_CLASSES_PER_CACHE + 1)
                         .toList()
+                    require(entries.size <= MAX_TOP_LEVEL_CLASSES_PER_CACHE) {
+                        "Compiled script cache contains too many top-level classes"
+                    }
+                    var retainedBytes = 0L
+                    entries.map { entry ->
+                        val bytes = jar.getInputStream(entry).use { input ->
+                            val content = input.readNBytes(ScriptPackFileLimits.MAX_FILE_BYTES + 1)
+                            require(content.size <= ScriptPackFileLimits.MAX_FILE_BYTES) {
+                                "Compiled class '${entry.name}' is too large"
+                            }
+                            content
+                        }
+                        retainedBytes += bytes.size
+                        require(retainedBytes <= ScriptPackFileLimits.MAX_PACK_CONTENT_BYTES) {
+                            "Compiled script cache exceeds the class byte budget"
+                        }
+                        ClassFileEntry(
+                            className = entry.name.removeSuffix(".class").replace('/', '.'),
+                            bytes = bytes
+                        )
+                    }
                 }
             }.getOrElse {
                 LOGGER.warn("Failed to read compiled script jar {}", cacheJar, it)
@@ -1100,24 +1220,60 @@ object ScriptEngine {
         }
 
         val latch = CountDownLatch(1)
+        // Do not let a timeout return while an action that already started is
+        // still mutating client state. Only queued work can be cancelled.
+        val executionState = AtomicInteger(0) // queued, running, cancelled, finished
         var failure: Throwable? = null
-        minecraft.execute {
-            try {
-                contextualAction()
-            } catch (t: Throwable) {
-                failure = t
-            } finally {
-                latch.countDown()
+        try {
+            minecraft.execute {
+                if (!executionState.compareAndSet(0, 1)) {
+                    latch.countDown()
+                    return@execute
+                }
+                try {
+                    contextualAction()
+                } catch (t: Throwable) {
+                    failure = t
+                } finally {
+                    executionState.set(3)
+                    latch.countDown()
+                }
             }
+        } catch (rejected: RuntimeException) {
+            executionState.compareAndSet(0, 2)
+            throw IllegalStateException("Client executor rejected script execution", rejected)
         }
 
         try {
-            latch.await()
+            if (!latch.await(CLIENT_THREAD_WAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
+                if (executionState.compareAndSet(0, 2)) {
+                    throw IllegalStateException(
+                        "Timed out waiting for client main-thread script execution after " +
+                            "$CLIENT_THREAD_WAIT_TIMEOUT_SECONDS seconds"
+                    )
+                }
+                latch.await()
+            }
         } catch (interrupted: InterruptedException) {
+            val cancelledBeforeStart = executionState.compareAndSet(0, 2)
+            if (!cancelledBeforeStart) awaitLatchUninterruptibly(latch)
             Thread.currentThread().interrupt()
             throw RuntimeException("Interrupted while waiting for client main-thread script execution", interrupted)
         }
 
         failure?.let { throw it }
+    }
+
+    private fun awaitLatchUninterruptibly(latch: CountDownLatch) {
+        var interrupted = false
+        while (true) {
+            try {
+                latch.await()
+                break
+            } catch (_: InterruptedException) {
+                interrupted = true
+            }
+        }
+        if (interrupted) Thread.currentThread().interrupt()
     }
 }

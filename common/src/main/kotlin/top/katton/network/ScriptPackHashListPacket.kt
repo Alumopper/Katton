@@ -18,25 +18,39 @@ data class ScriptPackHashListPacket(
         val name: String
     ) {
         fun write(buf: FriendlyByteBuf) {
-            buf.writeUtf(syncId)
-            buf.writeUtf(scope)
-            buf.writeUtf(hash)
-            buf.writeUtf(name)
+            ScriptPackPacketLimits.requireScopeForEncoding(scope)
+            ScriptPackPacketLimits.requireSyncIdMatchesScopeForEncoding(syncId, scope)
+            ScriptPackPacketLimits.requireContentHashForEncoding(hash)
+            buf.writeUtf(syncId, ScriptPackPacketLimits.MAX_SYNC_ID_CHARS)
+            buf.writeUtf(scope, ScriptPackPacketLimits.MAX_SCOPE_CHARS)
+            buf.writeUtf(hash, ScriptPackPacketLimits.MAX_HASH_CHARS)
+            buf.writeUtf(name, ScriptPackPacketLimits.MAX_PACK_NAME_CHARS)
         }
 
         companion object {
             fun read(buf: FriendlyByteBuf): HashEntry {
+                val syncId = buf.readUtf(ScriptPackPacketLimits.MAX_SYNC_ID_CHARS)
+                val scope = buf.readUtf(ScriptPackPacketLimits.MAX_SCOPE_CHARS)
+                ScriptPackPacketLimits.requireScopeForDecoding(scope)
+                ScriptPackPacketLimits.requireSyncIdMatchesScopeForDecoding(syncId, scope)
+                val hash = buf.readUtf(ScriptPackPacketLimits.MAX_HASH_CHARS)
+                ScriptPackPacketLimits.requireContentHashForDecoding(hash)
                 return HashEntry(
-                    syncId = buf.readUtf(),
-                    scope = buf.readUtf(),
-                    hash = buf.readUtf(),
-                    name = buf.readUtf()
+                    syncId = syncId,
+                    scope = scope,
+                    hash = hash,
+                    name = buf.readUtf(ScriptPackPacketLimits.MAX_PACK_NAME_CHARS)
                 )
             }
         }
     }
 
     fun write(buf: FriendlyByteBuf) {
+        ScriptPackPacketLimits.requireCount(entries.size, ScriptPackPacketLimits.MAX_PACKS, "script pack hashes")
+        val syncIds = HashSet<String>(entries.size)
+        entries.forEach { entry ->
+            ScriptPackPacketLimits.requireUniqueForEncoding(entry.syncId, syncIds, "script pack id")
+        }
         buf.writeVarLong(revision)
         buf.writeVarInt(entries.size)
         entries.forEach { it.write(buf) }
@@ -53,10 +67,13 @@ data class ScriptPackHashListPacket(
 
         fun read(buf: FriendlyByteBuf): ScriptPackHashListPacket {
             val revision = buf.readVarLong()
-            val count = buf.readVarInt()
+            val count = ScriptPackPacketLimits.readCount(buf, ScriptPackPacketLimits.MAX_PACKS, "script pack hashes")
             val entries = ArrayList<HashEntry>(count)
+            val syncIds = HashSet<String>(count)
             repeat(count) {
-                entries.add(HashEntry.read(buf))
+                val entry = HashEntry.read(buf)
+                ScriptPackPacketLimits.requireUnique(entry.syncId, syncIds, "script pack id")
+                entries.add(entry)
             }
             return ScriptPackHashListPacket(entries, revision)
         }

@@ -1,9 +1,11 @@
 package top.katton.engine
 
 import java.nio.file.Path
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import top.katton.pack.DependencyEnvironment
 import top.katton.pack.ScriptDependency
@@ -59,6 +61,54 @@ class ScriptDependencyManagerTest {
 
         assertEquals(3, result.validPacks.size)
         assertTrue(result.errors.isEmpty())
+    }
+
+    @Test
+    fun `failed and incompatible dependencies do not leak into compiler classpath`() {
+        val lookups = AtomicInteger()
+        ScriptDependencyManager.install(ScriptPlatform.FABRIC) { id ->
+            lookups.incrementAndGet()
+            when (id) {
+                "old-api" -> ResolvedScriptDependency(id, "1.0.0", listOf(Path.of("old-api.jar")), null)
+                else -> null
+            }
+        }
+        val incompatibleOptional = pack(
+            "optional",
+            dependency("old-api", version = ">=2.0", required = false)
+        )
+        val missingOne = pack("missing-one", dependency("absent"))
+        val missingTwo = pack("missing-two", dependency("absent"))
+
+        val result = ScriptDependencyManager.resolve(
+            listOf(incompatibleOptional, missingOne, missingTwo),
+            ScriptEnvironment.SERVER,
+            "READY"
+        )
+
+        assertEquals(listOf(incompatibleOptional), result.validPacks)
+        assertTrue(result.resolved.isEmpty())
+        assertTrue(result.fingerprints.isEmpty())
+        assertEquals(2, lookups.get(), "each distinct dependency id should be resolved once per pass")
+    }
+
+    @Test
+    fun `delegated classes are cached after their first lookup`() {
+        val lookups = AtomicInteger()
+        val delegate = object : ClassLoader(null) {
+            override fun loadClass(name: String): Class<*> {
+                if (name == "plugin.ExampleApi") {
+                    lookups.incrementAndGet()
+                    return String::class.java
+                }
+                return super.loadClass(name)
+            }
+        }
+        val loader = DependencyDelegatingClassLoader(javaClass.classLoader, listOf(delegate))
+
+        assertSame(String::class.java, loader.loadClass("plugin.ExampleApi"))
+        assertSame(String::class.java, loader.loadClass("plugin.ExampleApi"))
+        assertEquals(1, lookups.get())
     }
 
     private fun dependency(

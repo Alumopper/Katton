@@ -4,13 +4,17 @@ package top.katton.engine
 
 import org.slf4j.LoggerFactory
 import top.katton.pack.ScriptPackScriptFile
-import java.io.ByteArrayOutputStream
 import java.lang.management.ManagementFactory
 import java.nio.charset.StandardCharsets
-import java.nio.file.FileSystems
+import java.nio.file.AtomicMoveNotSupportedException
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.StandardCopyOption
+import java.nio.file.StandardOpenOption
 import java.security.MessageDigest
+import java.util.jar.JarEntry
+import java.util.jar.JarFile
+import java.util.jar.JarOutputStream
 import javax.tools.DiagnosticCollector
 import javax.tools.JavaCompiler
 import javax.tools.JavaFileObject
@@ -62,9 +66,13 @@ object JavaCompilationUtil {
 
         val hash = computeJavaHash(javaFiles, dependencyFingerprints)
         val cachedJar = cacheDir?.resolve("java-$hash.jar")
-        if (cachedJar != null && Files.isRegularFile(cachedJar)) {
+        if (cachedJar != null && isValidJar(cachedJar)) {
             LOGGER.info("Reusing cached Java compilation jar {}", cachedJar)
             return cachedJar
+        }
+        cachedJar?.takeIf(Files::exists)?.let { corruptJar ->
+            LOGGER.warn("Discarding corrupt Java compilation cache {}", corruptJar)
+            runCatching { Files.deleteIfExists(corruptJar) }
         }
 
         val tempDir = runCatching { createTempDirectory("katton-java-") }.getOrElse {
@@ -73,49 +81,52 @@ object JavaCompilationUtil {
         }
 
         val result = try {
-            val fileManager = compiler.getStandardFileManager(null, null, StandardCharsets.UTF_8)
             val diagnostics = DiagnosticCollector<JavaFileObject>()
+            compiler.getStandardFileManager(null, null, StandardCharsets.UTF_8).use { fileManager ->
+                val sourceRoot = tempDir.resolve("sources")
+                val sources = javaFiles.mapIndexed { index, file ->
+                    // Each pack source gets a distinct staging root. Two packs may
+                    // legitimately use the same relative path; silently overwriting
+                    // one here would compile different code from the scanned snapshot.
+                    val target = sourceRoot.resolve(index.toString()).resolve(file.relativePath).normalize()
+                    require(target.startsWith(sourceRoot)) { "Java source path escaped staging root: ${file.relativePath}" }
+                    Files.createDirectories(target.parent)
+                    Files.write(target, file.bytes)
+                    target.toFile()
+                }
+                val units = fileManager.getJavaFileObjectsFromFiles(sources)
 
-            // Write .java files to temp dir so javac can resolve package dirs
-            for (file in javaFiles) {
-                val target = tempDir.resolve(file.relativePath)
-                Files.createDirectories(target.parent)
-                Files.write(target, file.bytes)
-            }
+                val classOutput = tempDir.resolve("classes")
+                Files.createDirectories(classOutput)
 
-            val sources = javaFiles.map { tempDir.resolve(it.relativePath).toFile() }
-            val units = fileManager.getJavaFileObjectsFromFiles(sources)
-
-            val classOutput = tempDir.resolve("classes")
-            Files.createDirectories(classOutput)
-
-            val effectiveClasspath = buildList {
-                add(runtimeClasspath)
-                addAll(additionalClasspath.map(Path::toString))
-            }.filter(String::isNotBlank).joinToString(java.io.File.pathSeparator)
-            val options = listOf(
-                "-classpath", effectiveClasspath,
-                "-d", classOutput.toString(),
-                "-source", System.getProperty("java.specification.version", "25")
-            )
-
-            val task = compiler.getTask(null, fileManager, diagnostics, options, null, units)
-            task.setLocale(java.util.Locale.ROOT)
-
-            if (!task.call()) {
-                LOGGER.warn("Java compilation failed for {} source files", javaFiles.size)
-                ScriptIssueReporter.report(
-                    title = "Katton Java script compilation failed",
-                    detail = buildString {
-                        appendLine("Files:")
-                        javaFiles.sortedBy { it.relativePath }.forEach { appendLine("- ${it.relativePath}") }
-                        appendLine()
-                        append(formatJavaDiagnostics(diagnostics))
-                    }
+                val effectiveClasspath = buildList {
+                    add(runtimeClasspath)
+                    addAll(additionalClasspath.map(Path::toString))
+                }.filter(String::isNotBlank).joinToString(java.io.File.pathSeparator)
+                val options = listOf(
+                    "-classpath", effectiveClasspath,
+                    "-d", classOutput.toString(),
+                    "-source", System.getProperty("java.specification.version", "25")
                 )
-                null
-            } else {
-                packToJar(classOutput, cacheDir?.resolve("java-$hash.jar"))
+
+                val task = compiler.getTask(null, fileManager, diagnostics, options, null, units)
+                task.setLocale(java.util.Locale.ROOT)
+
+                if (!task.call()) {
+                    LOGGER.warn("Java compilation failed for {} source files", javaFiles.size)
+                    ScriptIssueReporter.report(
+                        title = "Katton Java script compilation failed",
+                        detail = buildString {
+                            appendLine("Files:")
+                            javaFiles.sortedBy { it.relativePath }.forEach { appendLine("- ${it.relativePath}") }
+                            appendLine()
+                            append(formatJavaDiagnostics(diagnostics))
+                        }
+                    )
+                    null
+                } else {
+                    packToJar(classOutput, cacheDir?.resolve("java-$hash.jar"))
+                }
             }
         } catch (e: Exception) {
             LOGGER.warn("Java compilation exception", e)
@@ -126,7 +137,11 @@ object JavaCompilationUtil {
             null
         } finally {
             // Cleanup temp dir
-            runCatching { Files.walk(tempDir).sorted(Comparator.reverseOrder()).forEach { Files.deleteIfExists(it) } }
+            runCatching {
+                Files.walk(tempDir).use { files ->
+                    files.sorted(Comparator.reverseOrder()).forEach(Files::deleteIfExists)
+                }
+            }
         }
 
         return result
@@ -149,45 +164,76 @@ object JavaCompilationUtil {
         dependencyFingerprints: List<String>
     ): String {
         val digest = MessageDigest.getInstance("SHA-256")
+        digest.updateFramed("katton-java-cache-v2".toByteArray(StandardCharsets.UTF_8))
+        digest.updateInt(javaFiles.size)
         javaFiles.sortedBy { it.relativePath }.forEach { f ->
-            digest.update(f.relativePath.toByteArray(StandardCharsets.UTF_8))
-            digest.update(0)
-            digest.update(f.bytes)
-            digest.update(0)
+            digest.updateFramed(f.relativePath.toByteArray(StandardCharsets.UTF_8))
+            digest.updateFramed(f.bytes)
         }
+        digest.updateInt(dependencyFingerprints.size)
         dependencyFingerprints.sorted().forEach { fingerprint ->
-            digest.update(fingerprint.toByteArray(StandardCharsets.UTF_8))
-            digest.update(0)
+            digest.updateFramed(fingerprint.toByteArray(StandardCharsets.UTF_8))
         }
         return digest.digest().joinToString("") { "%02x".format(it) }
+    }
+
+    private fun MessageDigest.updateFramed(bytes: ByteArray) {
+        updateInt(bytes.size)
+        update(bytes)
+    }
+
+    private fun MessageDigest.updateInt(value: Int) {
+        update((value ushr 24).toByte())
+        update((value ushr 16).toByte())
+        update((value ushr 8).toByte())
+        update(value.toByte())
     }
 
     /**
      * Packs compiled `.class` files into a `.jar`.
      */
+    @Synchronized
     private fun packToJar(classDir: Path, outputPath: Path?): Path? {
         if (outputPath == null) return null
+        if (isValidJar(outputPath)) return outputPath
+
+        var temporaryJar: Path? = null
         runCatching {
             Files.createDirectories(outputPath.parent)
-            val jarFs = FileSystems.newFileSystem(
-                java.net.URI.create("jar:${outputPath.toUri()}"),
-                mapOf("create" to "true")
-            )
-            jarFs.use { fs ->
+            val temp = Files.createTempFile(outputPath.parent, ".katton-java-", ".jar.tmp")
+            temporaryJar = temp
+            JarOutputStream(
+                Files.newOutputStream(
+                    temp,
+                    StandardOpenOption.TRUNCATE_EXISTING,
+                    StandardOpenOption.WRITE
+                )
+            ).use { jar ->
                 Files.walk(classDir).use { stream ->
                     stream.filter { Files.isRegularFile(it) && it.toString().endsWith(".class") }
+                        .sorted()
                         .forEach { classFile ->
-                            val relative = "classDir".let { classDir.relativize(classFile).toString().replace('\\', '/') }
-                            val target = fs.getPath(relative)
-                            Files.createDirectories(target.parent)
-                            Files.copy(classFile, target, java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+                            val relative = classDir.relativize(classFile).toString().replace('\\', '/')
+                            jar.putNextEntry(JarEntry(relative))
+                            Files.copy(classFile, jar)
+                            jar.closeEntry()
                         }
                 }
+            }
+            try {
+                Files.move(temp, outputPath, StandardCopyOption.ATOMIC_MOVE)
+            } catch (_: AtomicMoveNotSupportedException) {
+                Files.move(temp, outputPath)
             }
             LOGGER.info("Packed Java classes into {}", outputPath)
         }.onFailure {
             LOGGER.warn("Failed to pack Java jar", it)
+        }.also {
+            temporaryJar?.let { path -> runCatching { Files.deleteIfExists(path) } }
         }
-        return if (Files.isRegularFile(outputPath)) outputPath else null
+        return outputPath.takeIf(::isValidJar)
     }
+
+    private fun isValidJar(path: Path): Boolean =
+        Files.isRegularFile(path) && runCatching { JarFile(path.toFile()).use { it.size() } }.isSuccess
 }

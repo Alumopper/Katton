@@ -5,11 +5,13 @@ import com.google.gson.JsonParser
 import com.google.gson.JsonPrimitive
 import top.katton.api.LOGGER
 import top.katton.pack.ScriptPack
+import top.katton.pack.SafePackFileIo
+import top.katton.pack.ScriptPackFileLimits
 import top.katton.pack.ScriptPackKind
 import top.katton.pack.ScriptPackScope
 import top.katton.util.ScriptExecutionContext
-import java.nio.charset.StandardCharsets
 import java.nio.file.Files
+import java.nio.file.LinkOption
 import java.nio.file.Path
 import java.util.concurrent.ConcurrentHashMap
 
@@ -65,18 +67,26 @@ object KattonConfigManager {
         return packConfigs[packId]?.get(key)
     }
 
+    @Synchronized
     fun set(packId: String, key: String, value: Any): Boolean {
+        if (value !is String && value !is Number && value !is Boolean) return false
         val config = packConfigs[packId] ?: return false
-        config[key] = value
-        persistPackConfig(packId)
-        return true
+        val previous = config.put(key, value)
+        if (persistPackConfig(packId)) return true
+
+        // Keep the in-memory view consistent with disk if persistence was
+        // rejected (for example, because the manifest is signed).
+        if (previous == null) config.remove(key) else config[key] = previous
+        return false
     }
 
+    @Synchronized
     fun remove(packId: String, key: String): Boolean {
         val config = packConfigs[packId] ?: return false
-        val removed = config.remove(key) != null
-        if (removed) persistPackConfig(packId)
-        return removed
+        val previous = config.remove(key) ?: return false
+        if (persistPackConfig(packId)) return true
+        config[key] = previous
+        return false
     }
 
     fun all(packId: String): Map<String, Any> {
@@ -115,17 +125,28 @@ object KattonConfigManager {
 
     // ── Persistence ────────────────────────────────────────────────
 
-    private fun persistPackConfig(packId: String) {
-        val meta = packMeta[packId] ?: return
-        if (meta.kind != ScriptPackKind.DIRECTORY) return
+    private fun persistPackConfig(packId: String): Boolean {
+        val meta = packMeta[packId] ?: return false
+        // JAR manifests cannot be rewritten; retaining the value in memory is
+        // still useful for the current session and preserves previous behavior.
+        if (meta.kind != ScriptPackKind.DIRECTORY) return true
 
-        val config = packConfigs[packId] ?: return
+        val config = packConfigs[packId] ?: return false
         val manifestFile = meta.location.resolve(MANIFEST_FILE_NAME)
-        if (!Files.isRegularFile(manifestFile)) return
+        if (!Files.isRegularFile(manifestFile, LinkOption.NOFOLLOW_LINKS) || Files.isSymbolicLink(manifestFile)) {
+            return false
+        }
 
-        runCatching {
-            val raw = Files.readString(manifestFile, StandardCharsets.UTF_8)
+        return runCatching {
+            val raw = SafePackFileIo.readUtf8(
+                manifestFile,
+                ScriptPackFileLimits.MAX_MANIFEST_BYTES,
+                "script pack manifest"
+            )
             val root = JsonParser.parseString(raw).asJsonObject
+            require(!root.has("signature")) {
+                "signed manifest cannot be modified; change config and run signKattonPack again"
+            }
 
             val configJson = JsonObject()
             for ((key, value) in config) {
@@ -137,11 +158,17 @@ object KattonConfigManager {
             }
             root.add("config", configJson)
 
-            Files.writeString(manifestFile, root.toString(), StandardCharsets.UTF_8)
+            SafePackFileIo.writeUtf8Atomically(
+                manifestFile,
+                root.toString(),
+                ScriptPackFileLimits.MAX_MANIFEST_BYTES,
+                "script pack manifest"
+            )
             LOGGER.info("Persisted config for pack '{}' to {}", packId, manifestFile)
+            true
         }.onFailure {
             LOGGER.warn("Failed to persist config for pack '{}'", packId, it)
-        }
+        }.getOrDefault(false)
     }
 
     // ── FQCN derivation ────────────────────────────────────────────

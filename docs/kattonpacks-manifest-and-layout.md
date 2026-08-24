@@ -69,6 +69,7 @@ kattonpacks/example_pack/data/example_pack/tags/item/magic_tools.json
   "dependencies": [],
   "signature": {
     "algorithm": "Ed25519",
+    "payloadVersion": 2,
     "keyId": "example-server-key",
     "publicKey": "base64-x509-public-key",
     "signature": "base64-signature"
@@ -86,7 +87,7 @@ kattonpacks/example_pack/data/example_pack/tags/item/magic_tools.json
 - `enabled`: default enabled state if no local state file exists.
 - `clientSync`: whether this pack should be sent to multiplayer clients during Katton server sync. Defaults to `true` for compatibility.
 - `dependencies`: required array of external Fabric mods, NeoForge mods, or Paper plugins. Use `[]` when the pack has none.
-- `signature`: recommended for remote client-synced packs. Uses Ed25519 and signs the pack's canonical content digest.
+- `signature`: recommended for remote client-synced packs. Uses Ed25519 payload format v2 and signs the pack's canonical content digest.
 
 Side behavior:
 - Runtime side-specific execution is still decided by function annotations (`@ServerScriptEntrypoint`, `@ClientScriptEntrypoint`).
@@ -123,10 +124,17 @@ Dependency example:
 Signature behavior:
 - Signed client-synced packs are verified before they are written to the client's `serverpacks` cache.
 - Unsigned client-synced packs remain compatible, but they rely only on the blocking trust prompt and do not have tamper-evident author verification.
-- The signed payload includes a Katton signature format version, the pack `syncId`, pack scope, the manifest JSON with `signature` removed, and all synced file relative paths plus bytes in sorted order.
+- Signature payload v2 length-prefixes the pack `syncId`, scope, manifest JSON with `signature` removed, file count, and every sorted relative path/content pair. The framing is unambiguous even when binary assets contain zero bytes.
 - Synced `assets/**` and `data/**` files are included in the hash, bundle payload, and signature payload.
+- Legacy payload v1 (including signature objects without `payloadVersion`) is rejected; run `signKattonPack` again to migrate it.
 - `publicKey` is an X.509-encoded Ed25519 public key in Base64. After the user trusts a server/key, Katton stores the trusted public key in `<gameDir>/.katton/remote-script-trust.json`.
 - If a trusted `keyId` later presents a different embedded public key, verification fails and the remote scripts are rejected.
+
+Pack input safety:
+
+- Directory packs may contain at most 4,096 synchronized files, 16 MiB per file, and 64 MiB total including the manifest; `manifest.json` itself is limited to 1 MiB.
+- Symbolic links inside a directory pack are rejected. JAR packs are checked for unsafe paths, duplicate entries, excessive expansion, and the same per-entry/content limits before loading.
+- Synchronized paths must be portable: traversal segments, Windows-reserved names/characters, and case- or Unicode-normalization collisions are rejected before a Linux server sends a pack to other clients.
 
 ## 4. State File
 
@@ -157,4 +165,4 @@ Current hash calculation uses:
 - sorted `data/**` relative path bytes
 - data file bytes
 
-Algorithm: SHA-256 (hex lowercase).
+Algorithm: SHA-256 (hex lowercase). Hash format v2 gives every variable field a length prefix and records each file-category count, so binary content cannot be reinterpreted as a path or an extra file. Upgrading invalidates an old cache entry once; Katton rebuilds it automatically.

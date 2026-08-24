@@ -7,8 +7,9 @@ import java.util.Optional
  * A performant Result type holding either a value of type [T] or a failure message.
  *
  * Uses [String] instead of [Throwable] for failures — no stack trace overhead.
- * Regular class (not value class) for seamless Java interop while keeping
- * the same zero-heap-overhead-on-success semantics via lazy [isSuccess] derivation.
+ * Regular class (not value class) for seamless Java interop. Common immutable
+ * success values are shared so hot event and reflection paths avoid repeatedly
+ * allocating wrappers for `Unit`, booleans, and `null`.
  */
 @Suppress("unused")
 class Result<out T> private constructor(
@@ -134,11 +135,22 @@ class Result<out T> private constructor(
     // ── factories ────────────────────────────────────────────────────
 
     companion object {
+        private val NULL_SUCCESS = Result<Any?>(null, null)
+        private val UNIT_SUCCESS = Result<Unit>(Unit, null)
+        private val TRUE_SUCCESS = Result<Boolean>(true, null)
+        private val FALSE_SUCCESS = Result<Boolean>(false, null)
+
+        @Suppress("UNCHECKED_CAST")
         @JvmStatic
-        fun <T> success(value: T?): Result<T> = Result(value, null)
+        fun <T> success(value: T?): Result<T> = when {
+            value == null -> NULL_SUCCESS
+            value === Unit -> UNIT_SUCCESS
+            value is Boolean -> if (value) TRUE_SUCCESS else FALSE_SUCCESS
+            else -> Result<T>(value, null)
+        } as Result<T>
 
         @JvmStatic
-        fun success(): Result<Unit> = Result(Unit, null)
+        fun success(): Result<Unit> = UNIT_SUCCESS
 
         @JvmStatic
         fun <T> failure(message: String): Result<T> = Result(null, message)

@@ -8,6 +8,9 @@ import org.slf4j.LoggerFactory
 import top.katton.engine.ScriptEnvironment
 import top.katton.pack.ScriptPackScope
 import top.katton.util.ScriptExecutionContext
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 import java.util.function.Consumer
 
 /**
@@ -27,9 +30,9 @@ import java.util.function.Consumer
  */
 object NeoForgeManagedEvents {
     private val LOGGER = LoggerFactory.getLogger(NeoForgeManagedEvents::class.java)
-    private var nextId = 0L
-    private val registrations = mutableMapOf<Long, ManagedRegistration>()
-    private val scopeRegistrations = mutableMapOf<ScriptPackScope, MutableSet<Long>>()
+    private val nextId = AtomicLong()
+    private val registrationLock = Any()
+    private val registrations = ConcurrentHashMap<Long, ManagedRegistration>()
 
     /**
      * %en
@@ -52,13 +55,15 @@ object NeoForgeManagedEvents {
                 ignoreCancelled: Boolean,
                 handler: (Any) -> Unit
             ): ManagedEventHandle {
-                val id = nextId++
+                val id = nextId.getAndIncrement()
                 val environment = ScriptExecutionContext.currentScriptEnvironment()
 
                 @Suppress("UNCHECKED_CAST")
                 val eventType = eventClass as Class<Event>
+                val active = AtomicBoolean(true)
 
                 val listener = Consumer<Event> { event ->
+                    if (!active.get()) return@Consumer
                     try {
                         ScriptExecutionContext.withEnvironment(environment) {
                             ScriptExecutionContext.withScope(scope) {
@@ -72,58 +77,49 @@ object NeoForgeManagedEvents {
                     }
                 }
 
-                NeoForge.EVENT_BUS.addListener(
-                    EventPriority.entries.toTypedArray().getOrElse(priority) { EventPriority.NORMAL },
-                    ignoreCancelled,
-                    eventType,
-                    listener
-                )
-
-                val registration = ManagedRegistration(id, eventClass, listener, owner, scope, environment)
-                registrations[id] = registration
-                if (scope != null) {
-                    scopeRegistrations.getOrPut(scope) { mutableSetOf() }.add(id)
+                val registration = ManagedRegistration(id, eventClass, listener, owner, scope, environment, active)
+                synchronized(registrationLock) {
+                    try {
+                        NeoForge.EVENT_BUS.addListener(
+                            toNeoForgePriority(priority),
+                            ignoreCancelled,
+                            eventType,
+                            listener
+                        )
+                        registrations[id] = registration
+                    } catch (failure: Throwable) {
+                        active.set(false)
+                        runCatching { NeoForge.EVENT_BUS.unregister(listener) }
+                        throw failure
+                    }
                 }
 
                 return ManagedEventHandle(id, eventClass)
             }
 
             override fun unregister(handle: ManagedEventHandle) {
-                val reg = registrations.remove(handle.id) ?: return
+                val reg = synchronized(registrationLock) {
+                    registrations.remove(handle.id)?.also { it.active.set(false) }
+                } ?: return
                 NeoForge.EVENT_BUS.unregister(reg.listener)
-                reg.scope?.let { scopeRegistrations[it]?.remove(handle.id) }
             }
 
             override fun clearByScope(scope: ScriptPackScope) {
-                val ids = scopeRegistrations.remove(scope) ?: return
-                ids.forEach { id ->
-                    registrations.remove(id)?.let { NeoForge.EVENT_BUS.unregister(it.listener) }
-                }
+                removeMatching { it.scope == scope }.forEach { NeoForge.EVENT_BUS.unregister(it.listener) }
             }
 
             override fun clearByScopeAndEnvironment(scope: ScriptPackScope, environment: ScriptEnvironment) {
-                val ids = scopeRegistrations[scope] ?: return
-                val matchingIds = ids.filter { id -> registrations[id]?.environment == environment }
-                matchingIds.forEach { id ->
-                    registrations.remove(id)?.let { NeoForge.EVENT_BUS.unregister(it.listener) }
-                    ids.remove(id)
-                }
-                if (ids.isEmpty()) {
-                    scopeRegistrations.remove(scope)
-                }
+                removeMatching { it.scope == scope && it.environment == environment }
+                    .forEach { NeoForge.EVENT_BUS.unregister(it.listener) }
             }
 
             override fun clearByOwnerPrefix(ownerPrefix: String) {
-                registrations.values
-                    .filter { it.owner.startsWith(ownerPrefix) }
-                    .map { ManagedEventHandle(it.id, it.eventClass) }
-                    .forEach(::unregister)
+                removeMatching { it.owner.startsWith(ownerPrefix) }
+                    .forEach { NeoForge.EVENT_BUS.unregister(it.listener) }
             }
 
             override fun clearAll() {
-                registrations.values.forEach { NeoForge.EVENT_BUS.unregister(it.listener) }
-                registrations.clear()
-                scopeRegistrations.clear()
+                removeMatching { true }.forEach { NeoForge.EVENT_BUS.unregister(it.listener) }
             }
         }
     }
@@ -131,8 +127,25 @@ object NeoForgeManagedEvents {
     @JvmStatic
     fun shutdown() {
         provider?.clearAll()
-        registrations.clear()
-        scopeRegistrations.clear()
+        synchronized(registrationLock) { registrations.clear() }
+    }
+
+    /** Deactivate under the map lock, then let the caller unregister natively. */
+    private fun removeMatching(predicate: (ManagedRegistration) -> Boolean): List<ManagedRegistration> =
+        synchronized(registrationLock) {
+            registrations.values.filter(predicate).onEach { registration ->
+                registration.active.set(false)
+                registrations.remove(registration.id)
+            }
+        }
+
+    /** Keep the script API's LOWEST..HIGHEST numbering independent of enum declaration order. */
+    private fun toNeoForgePriority(priority: Int): EventPriority = when (priority) {
+        0 -> EventPriority.LOWEST
+        1 -> EventPriority.LOW
+        3 -> EventPriority.HIGH
+        4, 5 -> EventPriority.HIGHEST // NeoForge has no Bukkit-style MONITOR priority.
+        else -> EventPriority.NORMAL
     }
 
     private data class ManagedRegistration(
@@ -141,6 +154,7 @@ object NeoForgeManagedEvents {
         val listener: Any,
         val owner: String,
         val scope: ScriptPackScope?,
-        val environment: ScriptEnvironment?
+        val environment: ScriptEnvironment?,
+        val active: AtomicBoolean
     )
 }

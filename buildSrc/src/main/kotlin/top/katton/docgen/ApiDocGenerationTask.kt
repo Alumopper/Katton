@@ -796,7 +796,7 @@ private data class ApiDeclaration(
 ) {
     fun anchor(): String = path.joinToString("-") { segment ->
         segment.slugify()
-    }.ifBlank { name.lowercase() }
+    }.ifBlank { name.lowercase(Locale.ROOT) }
 
     fun flattenedChildren(): List<ApiDeclaration> = children.flatMap { child ->
         listOf(child) + child.flattenedChildren()

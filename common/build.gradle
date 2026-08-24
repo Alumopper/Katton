@@ -42,6 +42,10 @@ dependencies {
 
     testImplementation 'org.jetbrains.kotlin:kotlin-test-junit5:2.3.10'
     testImplementation 'org.junit.jupiter:junit-jupiter:5.12.2'
+    // ScriptEngine integration tests execute the same embedded compiler used at runtime.
+    testRuntimeOnly 'org.jetbrains.kotlin:kotlin-scripting-jvm-host'
+    testRuntimeOnly 'org.ow2.asm:asm:9.9.1'
+    testRuntimeOnly 'org.ow2.asm:asm-commons:9.9.1'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher:1.12.2'
 
     // To change the versions see the gradle.properties file

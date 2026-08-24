@@ -28,6 +28,7 @@ import top.katton.registry.KattonRegistry
 import top.katton.api.clearItemRenderMarkersInRange
 import top.katton.api.itemRenderMarker
 import top.katton.api.showItemRenderMarker
+import java.util.Locale
 
 object ScriptCommand {
 
@@ -433,7 +434,7 @@ object ScriptCommand {
             }
         }
 
-        return when (name.lowercase()) {
+        return when (name.lowercase(Locale.ROOT)) {
             "still" -> emptyMap()
             "spin" -> mapOf(spin)
             "float" -> mapOf(float)
@@ -447,7 +448,7 @@ object ScriptCommand {
 
     private fun parseConfigValue(raw: String): Any {
         // Boolean
-        when (raw.lowercase()) {
+        when (raw.lowercase(Locale.ROOT)) {
             "true" -> return true
             "false" -> return false
         }

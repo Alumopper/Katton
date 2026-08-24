@@ -18,40 +18,50 @@ object ClientNetworkingFabric {
     fun initialize() {
         ClientConfigurationNetworking.registerGlobalReceiver(ScriptPackHashListPacket.TYPE) { packet, context ->
             if (context.client().isLocalServer) return@registerGlobalReceiver
-            ServerPackCacheManager.prepareMainThreadSync()
-            context.client().execute {
-                var completedImmediately = true
-                try {
-                    completedImmediately = ServerPackCacheManager.handleHashListWithCompletion(packet, { request ->
-                        ClientConfigurationNetworking.send(request)
-                    }) {
-                        ServerPackCacheManager.completeMainThreadSync()
-                    }
-                } finally {
-                    if (completedImmediately) {
-                        ServerPackCacheManager.completeMainThreadSync()
+            val sync = ServerPackCacheManager.beginMainThreadSync()
+            try {
+                context.client().execute {
+                    var completedImmediately = true
+                    try {
+                        completedImmediately = ServerPackCacheManager.handleHashListWithCompletion(packet, { request ->
+                            ClientConfigurationNetworking.send(request)
+                        }) {
+                            ServerPackCacheManager.completeMainThreadSync(sync)
+                        }
+                    } finally {
+                        if (completedImmediately) {
+                            ServerPackCacheManager.completeMainThreadSync(sync)
+                        }
                     }
                 }
+                ServerPackCacheManager.awaitMainThreadSync(sync)
+            } catch (failure: Throwable) {
+                ServerPackCacheManager.completeMainThreadSync(sync)
+                throw failure
             }
-            ServerPackCacheManager.awaitMainThreadSync()
         }
 
         ClientConfigurationNetworking.registerGlobalReceiver(ScriptPackBundlePacket.TYPE) { packet, context ->
             if (context.client().isLocalServer) return@registerGlobalReceiver
-            ServerPackCacheManager.prepareMainThreadSync()
-            context.client().execute {
-                var completedImmediately = true
-                try {
-                    completedImmediately = ServerPackCacheManager.handleBundleWithTrustPrompt(packet) {
-                        ServerPackCacheManager.completeMainThreadSync()
-                    }
-                } finally {
-                    if (completedImmediately) {
-                        ServerPackCacheManager.completeMainThreadSync()
+            val sync = ServerPackCacheManager.beginMainThreadSync()
+            try {
+                context.client().execute {
+                    var completedImmediately = true
+                    try {
+                        completedImmediately = ServerPackCacheManager.handleBundleWithTrustPrompt(packet) {
+                            ServerPackCacheManager.completeMainThreadSync(sync)
+                        }
+                    } finally {
+                        if (completedImmediately) {
+                            ServerPackCacheManager.completeMainThreadSync(sync)
+                        }
                     }
                 }
+                ServerPackCacheManager.awaitMainThreadSync(sync)
+            } catch (failure: Throwable) {
+                ServerPackCacheManager.completeMainThreadSync(sync)
+                throw failure
             }
-            ServerPackCacheManager.awaitMainThreadSync()
         }
 
         ClientPlayNetworking.registerGlobalReceiver(ClientDataSyncPacket.TYPE) { packet, context ->

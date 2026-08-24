@@ -18,6 +18,7 @@ import top.katton.pack.ScriptPackScope
 import top.katton.pack.ScriptPackView
 import top.katton.pack.RemoteScriptSignatureVerifier
 import top.katton.pack.ServerPackCacheManager
+import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.max
 
@@ -59,7 +60,10 @@ object ScriptPackUi {
     @JvmStatic
     fun openRemoteScriptTrustScreen(serverAddress: String, packs: List<top.katton.pack.ScriptPack>, callback: (Boolean) -> Unit) {
         val mc = Minecraft.getInstance()
-        val sortedPacks = packs.sortedWith(compareBy<top.katton.pack.ScriptPack> { it.manifest.name.lowercase() }.thenBy { it.manifest.id.lowercase() })
+        val sortedPacks = packs.sortedWith(
+            compareBy<top.katton.pack.ScriptPack> { it.manifest.name.lowercase(Locale.ROOT) }
+                .thenBy { it.manifest.id.lowercase(Locale.ROOT) }
+        )
         val views = sortedPacks
                 .map { pack ->
                     ScriptPackView(

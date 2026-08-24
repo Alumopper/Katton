@@ -24,41 +24,51 @@ object ServerNetworkingNeoForge {
         // Server → Client: script pack hash list
         registrar.configurationToClient(ScriptPackHashListPacket.TYPE, ScriptPackHashListPacket.STREAM_CODEC) { packet, context ->
             if (context.connection().isMemoryConnection) return@configurationToClient
-            ServerPackCacheManager.prepareMainThreadSync()
-            context.enqueueWork {
-                var completedImmediately = true
-                try {
-                    completedImmediately = ServerPackCacheManager.handleHashListWithCompletion(packet, { request ->
-                        context.reply(request)
-                    }) {
-                        ServerPackCacheManager.completeMainThreadSync()
-                    }
-                } finally {
-                    if (completedImmediately) {
-                        ServerPackCacheManager.completeMainThreadSync()
+            val sync = ServerPackCacheManager.beginMainThreadSync()
+            try {
+                context.enqueueWork {
+                    var completedImmediately = true
+                    try {
+                        completedImmediately = ServerPackCacheManager.handleHashListWithCompletion(packet, { request ->
+                            context.reply(request)
+                        }) {
+                            ServerPackCacheManager.completeMainThreadSync(sync)
+                        }
+                    } finally {
+                        if (completedImmediately) {
+                            ServerPackCacheManager.completeMainThreadSync(sync)
+                        }
                     }
                 }
+                ServerPackCacheManager.awaitMainThreadSync(sync)
+            } catch (failure: Throwable) {
+                ServerPackCacheManager.completeMainThreadSync(sync)
+                throw failure
             }
-            ServerPackCacheManager.awaitMainThreadSync()
         }
 
         // Server → Client: script pack bundle
         registrar.configurationToClient(ScriptPackBundlePacket.TYPE, ScriptPackBundlePacket.STREAM_CODEC) { packet, context ->
             if (context.connection().isMemoryConnection) return@configurationToClient
-            ServerPackCacheManager.prepareMainThreadSync()
-            context.enqueueWork {
-                var completedImmediately = true
-                try {
-                    completedImmediately = ServerPackCacheManager.handleBundleWithTrustPrompt(packet) {
-                        ServerPackCacheManager.completeMainThreadSync()
-                    }
-                } finally {
-                    if (completedImmediately) {
-                        ServerPackCacheManager.completeMainThreadSync()
+            val sync = ServerPackCacheManager.beginMainThreadSync()
+            try {
+                context.enqueueWork {
+                    var completedImmediately = true
+                    try {
+                        completedImmediately = ServerPackCacheManager.handleBundleWithTrustPrompt(packet) {
+                            ServerPackCacheManager.completeMainThreadSync(sync)
+                        }
+                    } finally {
+                        if (completedImmediately) {
+                            ServerPackCacheManager.completeMainThreadSync(sync)
+                        }
                     }
                 }
+                ServerPackCacheManager.awaitMainThreadSync(sync)
+            } catch (failure: Throwable) {
+                ServerPackCacheManager.completeMainThreadSync(sync)
+                throw failure
             }
-            ServerPackCacheManager.awaitMainThreadSync()
         }
 
         // Client → Server: script pack request

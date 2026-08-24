@@ -11,26 +11,48 @@ import java.util.concurrent.ConcurrentHashMap
 object ClientDataManager {
 
     private val data = ConcurrentHashMap<String, Any?>()
+    private var retainedStringCharacters = 0
 
     fun get(key: String): Any? = data[key]
 
     fun getAll(): Map<String, Any?> = data.toMap()
 
+    @Synchronized
     fun put(key: String, value: Any?) {
+        // Keep direct in-process callers under the same limits as network data;
+        // otherwise a client script could bypass the packet codec's bounds.
+        if (key.length > ClientPacketLimits.MAX_DATA_KEY_CHARS) return
+        if (value is String && value.length > ClientPacketLimits.MAX_DATA_STRING_CHARS) return
         if (value == null) {
-            data.remove(key)
-        } else {
-            data[key] = value
+            remove(key)
+            return
         }
+        val previous = data[key]
+        val previousCharacters = (previous as? String)?.length ?: 0
+        val valueCharacters = (value as? String)?.length ?: 0
+        val nextCharacters = retainedStringCharacters - previousCharacters + valueCharacters
+        if (previous == null && data.size >= ClientPacketLimits.MAX_DATA_ENTRIES) return
+        if (nextCharacters > ClientPacketLimits.MAX_TOTAL_DATA_STRING_CHARS) return
+        data[key] = value
+        retainedStringCharacters = nextCharacters
     }
 
+    @Synchronized
     fun putAll(entries: List<ClientDataSyncPacket.DataEntry>) {
-        for (entry in entries) {
-            put(entry.key, entry.value)
-        }
+        // Keys are unique within a packet, so removals can safely release space
+        // before additions regardless of their serialized order.
+        entries.asSequence().filter { it.value == null }.forEach { put(it.key, null) }
+        entries.asSequence().filter { it.value != null }.forEach { put(it.key, it.value) }
     }
 
-    fun remove(key: String): Any? = data.remove(key)
+    @Synchronized
+    fun remove(key: String): Any? = data.remove(key).also { removed ->
+        retainedStringCharacters -= (removed as? String)?.length ?: 0
+    }
 
-    fun clear() = data.clear()
+    @Synchronized
+    fun clear() {
+        data.clear()
+        retainedStringCharacters = 0
+    }
 }

@@ -4,16 +4,29 @@ import net.neoforged.fml.ModList
 import top.katton.engine.PlatformDependencyResolver
 import top.katton.engine.ResolvedScriptDependency
 import java.nio.file.Files
+import java.util.Locale
+import java.util.concurrent.ConcurrentHashMap
 
 object NeoForgeScriptDependencyResolver : PlatformDependencyResolver {
+    private val modsById by lazy(LazyThreadSafetyMode.PUBLICATION) {
+        ModList.get().mods.associateBy { it.modId.lowercase(Locale.ROOT) }
+    }
+    private val resolved = ConcurrentHashMap<String, ResolvedScriptDependency>()
+    private val missing = ConcurrentHashMap.newKeySet<String>()
+
     override fun resolve(id: String): ResolvedScriptDependency? {
-        val info = ModList.get().mods.firstOrNull { it.modId.equals(id, ignoreCase = true) } ?: return null
-        val modsById = ModList.get().mods.associateBy { it.modId.lowercase() }
+        val key = id.lowercase(Locale.ROOT)
+        resolved[key]?.let { return it }
+        if (key in missing) return null
+        val info = modsById[key] ?: run {
+            missing += key
+            return null
+        }
         val visited = linkedSetOf<String>()
         val paths = buildList {
             fun collect(modId: String) {
-                if (!visited.add(modId.lowercase())) return
-                val current = modsById[modId.lowercase()] ?: return
+                if (!visited.add(modId.lowercase(Locale.ROOT))) return
+                val current = modsById[modId.lowercase(Locale.ROOT)] ?: return
                 add(current.owningFile.file.filePath.toAbsolutePath().normalize())
                 requiredDependencyIds(current).forEach(::collect)
             }
@@ -25,7 +38,7 @@ object NeoForgeScriptDependencyResolver : PlatformDependencyResolver {
             classpath = paths.filter(Files::exists).distinct(),
             classLoader = NeoForgeScriptDependencyResolver::class.java.classLoader,
             enabled = true
-        )
+        ).also { resolved[key] = it }
     }
 
     /** NeoForge has changed its dependency metadata interfaces across loader releases. */

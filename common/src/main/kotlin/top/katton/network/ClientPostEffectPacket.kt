@@ -35,14 +35,29 @@ data class ClientPostEffectPacket(
             ClientPostEffectPacket(Action.TOGGLE)
 
         fun write(buf: FriendlyByteBuf, packet: ClientPostEffectPacket) {
+            validate(packet, decoding = false)
             buf.writeEnum(packet.action)
-            buf.writeNullable(packet.effectId) { b, value -> b.writeUtf(value) }
+            buf.writeNullable(packet.effectId) { b, value ->
+                b.writeUtf(value, ClientPacketLimits.MAX_RESOURCE_ID_CHARS)
+            }
         }
 
         fun read(buf: FriendlyByteBuf): ClientPostEffectPacket {
             val action = buf.readEnum(Action::class.java)
-            val effectId = buf.readNullable { it.readUtf() }
-            return ClientPostEffectPacket(action, effectId)
+            val effectId = buf.readNullable { it.readUtf(ClientPacketLimits.MAX_RESOURCE_ID_CHARS) }
+            return ClientPostEffectPacket(action, effectId).also { validate(it, decoding = true) }
+        }
+
+        private fun validate(packet: ClientPostEffectPacket, decoding: Boolean) {
+            val valid = when (packet.action) {
+                Action.SET -> packet.effectId?.let(Identifier::tryParse) != null
+                Action.CLEAR, Action.TOGGLE -> packet.effectId == null
+            }
+            if (decoding) {
+                ClientPacketLimits.requireDecoded(valid) { "Invalid post-effect payload for ${packet.action}" }
+            } else {
+                ClientPacketLimits.requireEncoding(valid) { "Invalid post-effect payload for ${packet.action}" }
+            }
         }
     }
 
