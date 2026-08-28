@@ -118,11 +118,68 @@ sourceSets.main.resources { srcDir 'src/generated/resources' }
 // "optional", meaning it will not be pulled by dependents of this mod.
 configurations {
     runtimeClasspath.extendsFrom localRuntime
+
+    // Kotlin's compiler jar contains an optional JLine provider declaration
+    // whose implementation is intentionally absent from the embeddable jar.
+    // FML validates service providers while scanning production Jar-in-Jar
+    // dependencies, so package a sanitized local copy for NeoForge only.
+    kotlinCompilerForPackaging {
+        canBeConsumed = false
+        canBeResolved = true
+        transitive = false
+    }
+}
+
+def sanitizedKotlinCompilerJar = tasks.register('sanitizedKotlinCompilerJar', Jar) {
+    group = 'build'
+    description = 'Removes unavailable optional JLine provider declarations before NeoForge Jar-in-Jar packaging.'
+    archiveFileName = 'kotlin-compiler-embeddable-2.3.10-katton.jar'
+    destinationDirectory = layout.buildDirectory.dir('sanitized-libraries')
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    preserveFileTimestamps = false
+    reproducibleFileOrder = true
+
+    from({ zipTree(configurations.kotlinCompilerForPackaging.singleFile) }) {
+        exclude 'META-INF/MANIFEST.MF'
+        exclude 'META-INF/services/org/jline/terminal/provider/**'
+    }
+    manifest {
+        attributes(
+            'Implementation-Vendor': 'JetBrains',
+            'Implementation-Title': 'kotlin-compiler-embeddable',
+            'Implementation-Version': '2.3.10-release-465',
+            'Automatic-Module-Name': 'org.jetbrains.kotlin.compiler.embeddable.katton'
+        )
+    }
+
+    doLast {
+        def output = archiveFile.get().asFile
+        new java.util.jar.JarFile(output).withCloseable { jar ->
+            def unavailableProvider = jar.entries().find {
+                !it.directory && it.name.startsWith('META-INF/services/org/jline/terminal/provider/')
+            }
+            if (unavailableProvider != null) {
+                throw new GradleException(
+                    "${output.name} still contains unavailable JLine provider declaration ${unavailableProvider.name}"
+                )
+            }
+            if (jar.getJarEntry('org/jetbrains/kotlin/cli/jvm/K2JVMCompiler.class') == null) {
+                throw new GradleException("${output.name} is missing the Kotlin compiler entrypoint")
+            }
+        }
+    }
 }
 
 dependencies {
     // Embed runtime libraries into the NeoForge mod jar.
-    jarJar(implementation('org.jetbrains.kotlin:kotlin-compiler-embeddable'))
+    kotlinCompilerForPackaging 'org.jetbrains.kotlin:kotlin-compiler-embeddable:2.3.10'
+    implementation 'org.jetbrains.kotlin:kotlin-compiler-embeddable'
+
+    // ModDevGradle supports Jar-in-Jar files produced by local tasks. Keeping
+    // the original dependency on implementation preserves compile/runtime and
+    // Maven metadata while the sanitized artifact is the deployed copy.
+    // Source: https://docs.neoforged.net/toolchain/docs/plugins/mdg/#local-files
+    jarJar files(sanitizedKotlinCompilerJar)
     jarJar(implementation('org.jetbrains.kotlin:kotlin-daemon-embeddable'))
     jarJar(implementation('org.jetbrains.kotlin:kotlin-reflect'))
     jarJar(implementation('org.jetbrains.kotlin:kotlin-script-runtime'))

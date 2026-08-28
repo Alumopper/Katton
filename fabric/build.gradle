@@ -51,6 +51,28 @@ loom {
     }
 }
 
+def productionServerMods = configurations.detachedConfiguration(
+    dependencies.create("net.fabricmc.fabric-api:fabric-api:${project.property('fabric_api_version')}")
+)
+
+// Runs the remapped deployment jar with Fabric's production server launcher.
+// Source: https://docs.fabricmc.net/develop/loom/production-run-tasks
+tasks.register('runProductionServer', net.fabricmc.loom.task.prod.ServerProductionRunTask) {
+    group = 'run'
+    description = 'Runs the final Katton deployment jar in a production-like Fabric server.'
+    dependsOn tasks.named('jar')
+    installerVersion = '1.0.1'
+    loaderVersion = project.property('loader_version')
+    minecraftVersion = targetMinecraftVersion
+    mods.from(tasks.named('jar'))
+    mods.from(productionServerMods)
+    runDir = project.file('run')
+    programArgs.add('nogui')
+    javaLauncher = javaToolchains.launcherFor {
+        languageVersion = JavaLanguageVersion.of(25)
+    }
+}
+
 dependencies {
     include(implementation('org.jetbrains.kotlin:kotlin-compiler-embeddable'))
     include(implementation('org.jetbrains.kotlin:kotlin-daemon-embeddable'))

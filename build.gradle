@@ -6,6 +6,7 @@ import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 import java.security.MessageDigest
 import java.util.jar.JarFile
+import java.util.jar.JarInputStream
 
 plugins {
 	id 'maven-publish'
@@ -370,6 +371,47 @@ tasks.register('verifyReleaseArtifacts') {
                         if (!descriptorText.contains('modId="minecraft"') ||
                             !descriptorText.contains("versionRange=\"${expectedMinecraftVersionRange}\"")) {
                             throw new GradleException("${artifact.name} does not declare its supported Minecraft range")
+                        }
+
+                        def compilerEntry = jar.entries().find {
+                            it.name.startsWith('META-INF/jarjar/') &&
+                                it.name.endsWith('kotlin-compiler-embeddable-2.3.10-katton.jar')
+                        }
+                        if (compilerEntry == null) {
+                            throw new GradleException("${artifact.name} is missing the sanitized Kotlin compiler Jar-in-Jar")
+                        }
+
+                        def hasCompilerEntrypoint = false
+                        def unavailableJlineProvider = null
+                        jar.getInputStream(compilerEntry).withCloseable { compilerStream ->
+                            new JarInputStream(compilerStream).withCloseable { nestedJar ->
+                                def moduleName = nestedJar.manifest?.mainAttributes?.getValue('Automatic-Module-Name')
+                                if (moduleName != 'org.jetbrains.kotlin.compiler.embeddable.katton') {
+                                    throw new GradleException(
+                                        "${artifact.name} embeds a Kotlin compiler jar without the expected module name"
+                                    )
+                                }
+
+                                def nestedEntry
+                                while ((nestedEntry = nestedJar.nextJarEntry) != null) {
+                                    if (nestedEntry.name == 'org/jetbrains/kotlin/cli/jvm/K2JVMCompiler.class') {
+                                        hasCompilerEntrypoint = true
+                                    }
+                                    if (!nestedEntry.directory && nestedEntry.name.startsWith(
+                                        'META-INF/services/org/jline/terminal/provider/'
+                                    )) {
+                                        unavailableJlineProvider = nestedEntry.name
+                                    }
+                                }
+                            }
+                        }
+                        if (!hasCompilerEntrypoint) {
+                            throw new GradleException("${artifact.name} embeds a Kotlin compiler jar without K2JVMCompiler")
+                        }
+                        if (unavailableJlineProvider != null) {
+                            throw new GradleException(
+                                "${artifact.name} embeds unavailable JLine provider ${unavailableJlineProvider}"
+                            )
                         }
                     } else {
                         if (!descriptorText.contains('main: top.katton.paper.KattonPaperPlugin')) {

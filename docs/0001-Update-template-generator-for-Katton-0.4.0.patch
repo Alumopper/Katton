@@ -867,7 +867,7 @@ index 3982584..37ba0a1 100644
 +    mavenVersion: '0.4.0+mc26.2',
 +    minecraftVersion: '26.2',
 +    loaders: ['fabric', 'neoforge', 'paper'],
-+    prerelease: true,
++    prerelease: false,
 +    legacyMavenCoordinate: false,
 +  },
 +  {
@@ -875,7 +875,7 @@ index 3982584..37ba0a1 100644
 +    mavenVersion: '0.4.0+mc26.1.2',
 +    minecraftVersion: '26.1.2',
 +    loaders: ['fabric', 'neoforge', 'paper'],
-+    prerelease: true,
++    prerelease: false,
 +    legacyMavenCoordinate: false,
 +  },
    {
@@ -949,4 +949,3 @@ index b82e282..71c28d2 100644
  
 -- 
 2.31.1.windows.1
-

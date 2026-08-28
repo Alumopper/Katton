@@ -16,7 +16,7 @@ artifact is loadable.
 - [x] Add an automated release-artifact gate for all six deployment jars.
 - [x] Confirm every deployment jar contains exactly the descriptor for its
   platform and that the descriptor version matches the filename.
-- [ ] Confirm all six deployment jars load and stop cleanly on their target
+- [x] Confirm all six deployment jars load and stop cleanly on their target
   server/runtime.
 
 ## Compatibility and migration
@@ -105,16 +105,17 @@ artifact is loadable.
 - [x] Verify local Maven publication for the 26.1.2 common, Fabric, NeoForge,
   Paper, and signing-plugin artifacts. This caught and fixed a duplicate
   `sign-plugin` publication that previously broke Gradle module metadata.
-- [x] Prepare and verify the katton-api 0.4.0 template update locally as commit
-  `e5c377a` on branch `release/0.4.0-template`. Its six generated platform/MC
+- [x] Prepare and verify the katton-api 0.4.0 template update locally through
+  commit `01b3887` on branch `release/0.4.0-template`. Its six generated platform/MC
   combinations pass `pnpm verify:template`, the full VitePress site passes
   `pnpm docs:build`, and the durable export is
   `docs/0001-Update-template-generator-for-Katton-0.4.0.patch`.
 - [ ] Apply/push the katton-api template update after the 0.4.0 Maven artifacts
   are published, so the public generator never points at unavailable coordinates.
 - [x] Produce SHA-256 checksums for the six deployment jars.
-- [ ] Create the GitHub `v0.4.0` pre-release with all six jars, checksums,
-  migration notes, supported-version matrix, and known limitations.
+- [ ] Create the stable GitHub `v0.4.0` Release (not a pre-release) with all six
+  jars, checksums, migration notes, supported-version matrix, and known
+  limitations.
 
 ## Recorded partial runtime evidence
 
@@ -137,6 +138,11 @@ artifact is loadable.
   final release task passed again in 1m 5s (69 tasks: 28 executed and 41
   up-to-date). A separate uncached run passed all 76 tests on each MC target, and
   an independent SHA-256 comparison matched every regenerated staged jar.
+- After the NeoForge production Jar-in-Jar fix, `prepareReleaseArtifacts` passed
+  all descriptor, embedded-compiler, and startup-agent gates (71 tasks). A forced
+  uncached rerun then passed all 76 tests on each MC target with zero failures,
+  errors, or skips; an independent SHA-256 comparison matched all six staged
+  jars (2026-08-29).
 - Fabric dedicated clients used opt-in isolated run directories so local packs
   could not contaminate remote-sync evidence. Both targets downloaded and
   executed the world pack from the server cache. Fabric 26.2 then applied a live
@@ -162,6 +168,18 @@ artifact is loadable.
 - The release-agent gate used each of the four final Fabric/NeoForge deployment
   jars as `-javaagent`, modified an already-loaded method, and rolled the
   injection back successfully on 2026-08-28.
+- The exact Fabric deployment jars were loaded by Loom's production server task
+  with Fabric Loader 0.18.4 and the matching Fabric API. Both `0.4.0+mc26.1.2`
+  and `0.4.0+mc26.2` reached `Done`, accepted an isolated RCON `stop`, saved all
+  dimensions, and returned `BUILD SUCCESSFUL` on ports 25570 and 25571
+  (2026-08-28/29). The local run directories were restored to online mode,
+  RCON disabled, and port 25565 afterward.
+- The exact NeoForge deployment jars were tested in isolated servers installed
+  with the official NeoForge installers (`26.1.2.30-beta` and `26.2.0.7-beta`).
+  This production scan found and fixed invalid optional JLine provider metadata
+  in the embedded Kotlin compiler. The rebuilt jars loaded as Katton
+  `0.4.0+mc26.1.2` and `0.4.0+mc26.2`, reached `Done` on ports 25572 and 25573,
+  then accepted RCON `stop` and shut down cleanly (2026-08-29).
 - The four Fabric/NeoForge client runs used a 3 GiB maximum heap, entered an
   integrated-server world, published Katton script-pack revision 1, rendered a
   local player, saved every dimension, and exited through the game window with
