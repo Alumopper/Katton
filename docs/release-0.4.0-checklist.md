@@ -103,7 +103,9 @@ artifact is loadable.
   repository (2026-08-29).
 - [x] Verify local Maven publication for the 26.1.2 common, Fabric, NeoForge,
   Paper, and signing-plugin artifacts. This caught and fixed a duplicate
-  `sign-plugin` publication that previously broke Gradle module metadata.
+  `sign-plugin` publication that previously broke Gradle module metadata. The
+  signing plugin marker, implementation POM, JAR, and Gradle module metadata
+  also resolve publicly with HTTP 200 (2026-08-29).
 - [x] Prepare and verify the katton-api 0.4.0 template update locally through
   commit `01b3887` on branch `release/0.4.0-template`. Its six generated platform/MC
   combinations pass `pnpm verify:template`, the full VitePress site passes
