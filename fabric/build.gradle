@@ -38,6 +38,17 @@ loom {
         }
     }
     accessWidenerPath = project.parent.file("src/main/resources/katton.accesswidener")
+
+    // Keep dedicated-server/client synchronization smokes from sharing the
+    // default run directory. The override is opt-in and has no release effect.
+    def clientRunDirectory = providers.gradleProperty('kattonClientRunDir').orNull
+    if (clientRunDirectory) {
+        runs {
+            client {
+                runDir clientRunDirectory
+            }
+        }
+    }
 }
 
 dependencies {

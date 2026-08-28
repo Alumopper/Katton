@@ -39,7 +39,7 @@ artifact is loadable.
 
 ## Automated verification
 
-- [x] Run the common test suite for MC 26.1.2 and 26.2 (70 tests per target,
+- [x] Run the common test suite for MC 26.1.2 and 26.2 (76 tests per target,
   zero failures on 2026-08-28).
 - [x] Run startup-agent capability and real injection verification for both MC
   targets (zero failures on 2026-08-28).
@@ -60,8 +60,10 @@ artifact is loadable.
   exits 0 (2026-08-28).
 - [x] Fabric 26.2: client/integrated server smoke test with the same startup,
   player-join, save, and exit-0 evidence (2026-08-28).
-- [ ] Fabric dedicated server/client: initial sync, live revision, failed
-  compilation rollback, and removed-pack deactivation.
+- [x] Fabric dedicated server/client: initial sync on both 26.1.2 and 26.2; on
+  26.2, live revision success/ACK, failed candidate activation rollback and
+  disconnect, removed-pack deactivation/ACK, and clean client/server stops
+  (2026-08-28).
 - [x] NeoForge 26.1.2: client/integrated server smoke test; Katton publishes its
   script-pack revision, the local player joins, all dimensions save, and Gradle
   exits 0 (2026-08-28).
@@ -74,12 +76,23 @@ artifact is loadable.
 - [x] NeoForge dedicated server/client: initial sync on both 26.1.2 and 26.2;
   on 26.2, live revision success/ACK, failed candidate activation rollback,
   removed-pack deactivation/ACK, and clean server stop (2026-08-28).
-- [ ] Paper 26.1.2: start, `/katton status`, reload, listener cleanup, stop.
-- [ ] Paper 26.2: start, `/katton status`, reload, listener cleanup, stop.
-- [ ] Folia: scheduling and reload smoke test.
-- [ ] Fabric and NeoForge: dynamic Attach injection smoke test.
-- [ ] FCL/Android or equivalent: startup-agent injection smoke test if advertised
-  as a 0.4.0 feature.
+- [x] Paper 26.1.2: start, typed READY context, `/katton status`, global scheduler,
+  reload, managed-listener cleanup, and clean stop (Paper build 74, 2026-08-28).
+- [x] Paper 26.2: the same READY, status, scheduler, reload, listener-cleanup, and
+  clean-stop flow (Paper build 119, 2026-08-28).
+- [x] Standard Paper script-pack data: 26.1.2 loaded and executed a generated
+  load function; 26.2 did the same and applied a live `data/**` revision before
+  stopping cleanly (2026-08-28).
+- [x] Folia 26.2 build 7: startup, typed READY context, immediate/delayed global
+  scheduler callbacks, live reload, managed-listener cleanup, and region-aware
+  clean stop (2026-08-28). Cold compiler initialization emitted one five-second
+  watchdog diagnostic; the pack still activated and the live reload took under
+  one second.
+- [x] Fabric and NeoForge: dynamic Attach injection and rollback smoke tests on
+  both supported MC targets (covered by the real-injection gate, 2026-08-28).
+- [x] Keep FCL/Android explicitly experimental rather than claim unverified
+  on-device support; the desktop FCL-equivalent startup-agent path passed through
+  every final Fabric/NeoForge jar (2026-08-28).
 
 ## Release preparation
 
@@ -116,6 +129,36 @@ artifact is loadable.
 - After the dedicated synchronization fixes, the same release task passed again
   in 1m 6s (69 tasks: 22 executed and 47 up-to-date). An independent SHA-256
   comparison confirmed that all six staged jars match `SHA256SUMS`.
+- After the Paper classloader and Folia scheduler fixes, the current source ran
+  the release task again in 59s (69 tasks: 31 executed and 38 up-to-date), then
+  passed a separate uncached 72-test run on each MC target. A second independent
+  SHA-256 comparison matched all six regenerated staged jars.
+- After the Paper data-pack compatibility and Folia capability-guard fixes, the
+  final release task passed again in 1m 5s (69 tasks: 28 executed and 41
+  up-to-date). A separate uncached run passed all 76 tests on each MC target, and
+  an independent SHA-256 comparison matched every regenerated staged jar.
+- Fabric dedicated clients used opt-in isolated run directories so local packs
+  could not contaminate remote-sync evidence. Both targets downloaded and
+  executed the world pack from the server cache. Fabric 26.2 then applied a live
+  v2 revision, rejected and rolled back an intentionally failing v3 client
+  activation, and acknowledged an empty v5 revision after pack removal. Both
+  client and server tasks exited with `BUILD SUCCESSFUL` after clean shutdown.
+- Paper runtime verification found and fixed a plugin classloader identity bug:
+  asynchronous reload workers previously caused a second copy of
+  `ServerReadyContext`, rejecting valid typed entrypoints. Both Paper targets now
+  execute the typed context and preserve only the new managed listener after a
+  reload.
+- The first real Folia run found and fixed direct use of Minecraft's
+  `server.execute`, which Folia rejects. Paper now injects the Global Region
+  Scheduler for serialized Katton server mutations, and the build exposes a
+  repeatable `:paper:<mc>:runFolia` task.
+- Data-bearing Paper smoke packs found a second runtime mapping difference:
+  Paper's `PackRepository.setSelected` adds a required-pack flag absent from the
+  Mojang runtime. The compatibility bridge now handles both signatures. Standard
+  Paper 26.1.2 loaded the generated function and 26.2 loaded it, applied a live
+  revision, and stopped cleanly. Folia 26.2 rejects Minecraft's resource-reload
+  operation itself, so Katton now rejects `data/**` packs there with a precise
+  capability message instead of attempting a partial activation.
 - The release-agent gate used each of the four final Fabric/NeoForge deployment
   jars as `-javaagent`, modified an already-loaded method, and rolled the
   injection back successfully on 2026-08-28.
@@ -147,14 +190,10 @@ artifact is loadable.
 - NeoForge 26.1.2 logged repeated NVIDIA/OpenGL framebuffer-completeness debug
   errors during early display initialization on this machine, but continued to
   load resources, enter and render the world, save cleanly, and exit 0.
-- Fabric 26.1.2 reaches Fabric Loader 0.18.4 with Katton
-  `0.4.0+mc26.1.2`, then stops at the unaccepted local Minecraft EULA.
-- Fabric 26.2 reaches Fabric Loader with Katton `0.4.0+mc26.2`, then stops at
-  the unaccepted local Minecraft EULA.
-- Paper 26.1.2 reaches Paper build 74 and discovers Katton
-  `0.4.0+mc26.1.2`, then stops at the unaccepted local Minecraft EULA.
-- Paper 26.2 reaches Paper build 119 and discovers Katton
-  `0.4.0+mc26.2`, then stops at the unaccepted local Minecraft EULA.
+- The user accepted the Minecraft EULA for the four local Fabric/Paper target
+  run directories on 2026-08-28. All four `eula.txt` files remain `true`; the
+  temporary offline-mode ports used for isolated smokes were restored to their
+  original `online-mode=true`, port-25565 configurations afterward.
 - NeoForge 26.2 loads Katton `0.4.0+mc26.2`, initializes its networking and
   mixins, creates a world, reaches `Done`, and stops cleanly after saving all
   dimensions. The test used port 25576 because port 25565 belongs to a separate
@@ -174,3 +213,10 @@ scope changes:
 - Strongly typed Paper enchanting bridge arguments.
 - Entity tick event and NeoForge client block-entity lifecycle callbacks.
 - Gradle 10 migration and removal of the Kotlin compiler build-classpath warning.
+- Eliminating the one-time Folia global-region watchdog diagnostic during a cold
+  embedded-compiler initialization; verified hot reloads do not reproduce it.
+- Runtime mounting of script-pack `data/**` on Folia; Folia 26.2 does not support
+  the underlying server resource-reload operation. Native datapacks remain the
+  workaround.
+- Physical-device FCL/Android verification; 0.4.0 only claims the verified
+  desktop-equivalent startup-agent path.

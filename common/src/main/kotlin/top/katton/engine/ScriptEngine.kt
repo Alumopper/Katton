@@ -1063,9 +1063,27 @@ object ScriptEngine {
     }
 
     private fun createBaseClassLoader(selection: ScriptDependencySelection): ClassLoader {
-        val parent = Thread.currentThread().contextClassLoader ?: ScriptEngine::class.java.classLoader
+        val parent = selectScriptHostClassLoader()
         val delegates = selection.resolved.mapNotNull { it.classLoader }.filter { it !== parent }.distinct()
         return if (delegates.isEmpty()) parent else DependencyDelegatingClassLoader(parent, delegates)
+    }
+
+    /**
+     * Keep compiled scripts parented to the loader that owns Katton's runtime
+     * classes. Paper performs the asynchronous initial reload on a worker whose
+     * context loader can be the application loader; using it directly causes the
+     * script loader to define a second copy of entrypoint context classes from the
+     * plugin jar, making otherwise valid parameters fail identity checks.
+     */
+    internal fun selectScriptHostClassLoader(
+        contextLoader: ClassLoader? = Thread.currentThread().contextClassLoader
+    ): ClassLoader {
+        val hostClass = ScriptEngine::class.java
+        val hostLoader = hostClass.classLoader ?: return contextLoader ?: ClassLoader.getSystemClassLoader()
+        val contextOwnsHostIdentity = contextLoader != null && runCatching {
+            Class.forName(hostClass.name, false, contextLoader) === hostClass
+        }.getOrDefault(false)
+        return if (contextOwnsHostIdentity) contextLoader else hostLoader
     }
 
     private fun resolveHostClasspath(): List<File> {

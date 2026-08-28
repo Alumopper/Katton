@@ -18,6 +18,8 @@ import top.katton.engine.ScriptDependencyManager;
 import top.katton.engine.ScriptReloadManager;
 import top.katton.pack.ScriptPlatform;
 import top.katton.pack.ScriptPackManager;
+import top.katton.platform.ServerRuntimeCapabilities;
+import top.katton.platform.ServerTaskScheduler;
 import top.katton.registry.KattonRegistry;
 
 import java.io.File;
@@ -96,6 +98,12 @@ public class KattonPaperPlugin extends JavaPlugin implements Listener {
         }
 
         Katton.setGameDirectory(getDataFolder().getParentFile().toPath());
+        ServerRuntimeCapabilities.configureScriptPackDataReload(
+            !getServer().getName().equalsIgnoreCase("Folia")
+        );
+        ServerTaskScheduler.install((server, task) ->
+            getServer().getGlobalRegionScheduler().run(this, scheduledTask -> task.run())
+        );
         PaperManagedEvents.initialize(this);
         Katton.paperInitialize();
 
@@ -131,6 +139,8 @@ public class KattonPaperPlugin extends JavaPlugin implements Listener {
         KattonRegistry.clearWorldRegistrations();
         Katton.clearWorldAndServerEvents();
         ScriptPackManager.INSTANCE.clearWorldDirectory();
+        ServerTaskScheduler.reset();
+        ServerRuntimeCapabilities.reset();
     }
 
     /**

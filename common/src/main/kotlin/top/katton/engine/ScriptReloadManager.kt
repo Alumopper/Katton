@@ -27,6 +27,7 @@ import top.katton.pack.ScriptPackManager
 import top.katton.pack.ScriptPackScope
 import top.katton.pack.ServerPackCacheManager
 import top.katton.network.ServerNetworking
+import top.katton.platform.ServerTaskScheduler
 import top.katton.registry.KattonRegistry
 import top.katton.registry.ScriptCommandRegistry
 import top.katton.util.Event
@@ -862,9 +863,10 @@ object ScriptReloadManager {
     }
 
     private fun scheduleServerReload(request: ServerReloadRequest) {
-        // Registry, event, command, and datapack mutations must stay on the server thread.
+        // Registry, event, command, and datapack mutations must stay on the
+        // platform's server-wide mutation thread (the global region on Folia).
         try {
-            request.server.execute {
+            ServerTaskScheduler.execute(request.server, Runnable {
                 var completedSuccessfully = false
                 try {
                     // Calling this on every pass is cheap once initialized and
@@ -900,8 +902,9 @@ object ScriptReloadManager {
                     }
                     startPendingServerReloadOrFinish()
                 }
-            }
+            })
         } catch (rejected: RuntimeException) {
+            logger.error("Server scheduler rejected script reload setup", rejected)
             request.future.completeExceptionally(rejected)
             request.callbacks.forEach { callback ->
                 runCatching { callback(false) }

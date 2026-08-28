@@ -13,7 +13,8 @@ It supports Minecraft 26.1.2 and 26.2 on Fabric, NeoForge, and Paper with Java
 - Added live Fabric/NeoForge server-pack revisions with staged compilation,
   acknowledgement, timeout handling, and removed-pack deactivation.
 - Added external mod/plugin dependency validation and pack dependency ordering.
-- Added script-pack `assets/**` and `data/**` mounting.
+- Added script-pack `assets/**` and `data/**` mounting; runtime `data/**`
+  mounting is supported on Fabric, NeoForge, and standard Paper.
 - Hardened directory, JAR, manifest, packet, hash, and signature input limits.
 - Upgraded remote Ed25519 signatures to unambiguous payload format v2.
 - Added Minecraft 26.2 alongside 26.1.2 through Stonecutter builds.
@@ -42,7 +43,10 @@ See [Migrating Script Packs from 0.3.x to 0.4.0](migrating-to-0.4.0.md).
   rendering, and experimental unsafe injection.
 - Paper remains server-only and deliberately disables client APIs, registry
   mutation, networking, and unsafe injection.
-- Paper supports standard Paper scheduling and the Folia-aware scheduling API.
+- Paper supports standard Paper scheduling and the Folia-aware scheduling API;
+  the 26.2 plugin was verified on Folia build 7.
+- Standard Paper 26.1.2 and 26.2 both passed real script-pack `data/**` loading;
+  26.2 also passed a live data-resource revision.
 
 ## Known Alpha limitations
 
@@ -53,6 +57,17 @@ See [Migrating Script Packs from 0.3.x to 0.4.0](migrating-to-0.4.0.md).
   deferred.
 - The embedded Kotlin compiler emits a build-classpath warning during Gradle
   configuration; release verification treats it as a known non-fatal warning.
+- A Folia cold start with an uncached source pack can exceed the five-second
+  global-region watchdog reporting threshold while the embedded Kotlin compiler
+  initializes. The verified pack still activated successfully, and its live
+  reload completed in under one second.
+- Folia does not expose a working server resource-reload operation, so Katton
+  rejects script packs containing `data/**` on Folia 26.2. Use a native server
+  datapack for those resources; scripts, managed events, and scheduler APIs remain
+  supported.
+- FCL/Android has not been verified on a physical device for this release. The
+  startup-agent path passed the desktop FCL-equivalent final-jar verification and
+  remains experimental on Android runtimes.
 
 ## Release artifacts
 

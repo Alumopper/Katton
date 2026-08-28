@@ -23,6 +23,7 @@ import top.katton.pack.ScriptPackKind
 import top.katton.pack.ScriptPackJarSnapshots
 import top.katton.pack.ScriptPackScope
 import top.katton.engine.InternalDatapackReloads
+import top.katton.platform.ServerRuntimeCapabilities
 import top.katton.util.ReflectUtil
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
@@ -78,6 +79,13 @@ object ScriptPackDataManager {
         val entries = runCatching { packs.mapIndexedNotNull { index, pack -> createEntry(index, pack) } }
             .onFailure { logger.warn("Failed to materialize candidate Katton script data", it) }
             .getOrNull() ?: return false
+        if (entries.isNotEmpty() && !ServerRuntimeCapabilities.supportsScriptPackDataReload()) {
+            logger.warn(
+                "This server runtime does not support live data-resource reloads; rejecting {} Katton script data packs",
+                entries.size
+            )
+            return false
+        }
         val nextSignature = signatureOf(entries)
         val changed = (repositoryChanged && nextSignature.isNotEmpty()) || nextSignature != previousSignature
         if (!installRepositorySource(repository)) return false
@@ -179,7 +187,7 @@ object ScriptPackDataManager {
                 addAll(repository.selectedIds.filterNot(::isKattonDataPackId))
                 addAll(activeEntries.map { it.packId })
             }
-            repository.setSelected(requestedIds)
+            PackRepositoryCompat.setSelected(repository, requestedIds)
             val selectedIds = repository.selectedIds.toList()
 
             logger.info("Reloading server data resources for {} Katton script data packs", activeEntries.size)

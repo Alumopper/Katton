@@ -25,6 +25,12 @@ Write script packs in `.kt`, reload with a command, and extend server/game behav
 > [!NOTE]
 > On Paper, Katton runs as a server plugin and intentionally disables custom game registry mutation (items/blocks/entity types) because there is no matching client mod to sync custom registries.
 
+> [!IMPORTANT]
+> Folia supports Katton scripts, managed events, hot reload, and the region-aware
+> scheduler API. Folia does not support Katton's runtime `data/**` mounting in
+> 0.4.0 because its server resource-reload operation is unavailable; Katton
+> rejects data-bearing script packs there instead of partially activating them.
+
 ## Requirements
 
 - **Java 25**
@@ -42,6 +48,7 @@ Run targets:
 ./gradlew :fabric:runClient
 ./gradlew :neoforge:runClient
 ./gradlew :paper:runServer
+./gradlew :paper:runFolia
 ```
 
 ## Script Pack Layout
@@ -103,6 +110,10 @@ Reload performs:
 1. Re-scan enabled script packs
 2. Re-compile and execute scripts
 3. Refresh event hooks and script-managed runtime state
+
+On standard Paper, Fabric, and NeoForge, a changed script-pack `data/**` tree is
+also reloaded transactionally. This data-resource step is unavailable on Folia
+in Alpha 0.4.0 as noted above.
 
 ## `/katton` Command Overview
 
