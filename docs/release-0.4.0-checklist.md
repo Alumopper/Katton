@@ -100,8 +100,12 @@ artifact is loadable.
   `--no-build-cache` on 2026-08-28. It rebuilt and tested both targets,
   regenerated 95 bilingual API pages, audited all six descriptors, exercised
   both startup-agent paths, and staged the verified jars plus `SHA256SUMS`.
+- Fabric 26.1.2 reaches Fabric Loader 0.18.4 with Katton
+  `0.4.0+mc26.1.2`, then stops at the unaccepted local Minecraft EULA.
 - Fabric 26.2 reaches Fabric Loader with Katton `0.4.0+mc26.2`, then stops at
   the unaccepted local Minecraft EULA.
+- Paper 26.1.2 reaches Paper build 74 and discovers Katton
+  `0.4.0+mc26.1.2`, then stops at the unaccepted local Minecraft EULA.
 - Paper 26.2 reaches Paper build 119 and discovers Katton
   `0.4.0+mc26.2`, then stops at the unaccepted local Minecraft EULA.
 - NeoForge 26.2 loads Katton `0.4.0+mc26.2`, initializes its networking and
