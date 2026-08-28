@@ -14,6 +14,7 @@
   ],
   "client": [
     "ClientRegistrySyncHandlerMixin",
+    "ConnectScreenMixin",
     "EntityRenderDispatcherMixin",
     "EntityRenderersMixin",
     "GuiRenderMixin",

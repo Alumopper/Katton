@@ -28,6 +28,7 @@
   ],
   "client": [
     "ClientConfigurationPacketListenerImplMixin",
+    "ConnectScreenMixin",
     "EntityRenderDispatcherMixin",
     "EntityRenderersMixin",
     "GuiRenderMixin",

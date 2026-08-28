@@ -71,8 +71,9 @@ artifact is loadable.
   (port 25577, 2026-08-28).
 - [x] NeoForge 26.2: dedicated server reaches `Done` with Katton 0.4.0 loaded
   (port 25576, 2026-08-28).
-- [ ] NeoForge dedicated server/client: initial sync, live revision, failed
-  compilation rollback, and removed-pack deactivation.
+- [x] NeoForge dedicated server/client: initial sync on both 26.1.2 and 26.2;
+  on 26.2, live revision success/ACK, failed candidate activation rollback,
+  removed-pack deactivation/ACK, and clean server stop (2026-08-28).
 - [ ] Paper 26.1.2: start, `/katton status`, reload, listener cleanup, stop.
 - [ ] Paper 26.2: start, `/katton status`, reload, listener cleanup, stop.
 - [ ] Folia: scheduling and reload smoke test.
@@ -112,6 +113,9 @@ artifact is loadable.
   --no-build-cache --max-workers=1` passed again (69 tasks: 22 executed and 47
   up-to-date), re-audited all six descriptors, reran the four final-jar startup
   agent probes, and regenerated the staged jars and checksums on 2026-08-28.
+- After the dedicated synchronization fixes, the same release task passed again
+  in 1m 6s (69 tasks: 22 executed and 47 up-to-date). An independent SHA-256
+  comparison confirmed that all six staged jars match `SHA256SUMS`.
 - The release-agent gate used each of the four final Fabric/NeoForge deployment
   jars as `-javaagent`, modified an already-loaded method, and rolled the
   injection back successfully on 2026-08-28.
@@ -125,6 +129,21 @@ artifact is loadable.
   compilation alone could not detect: the 26.1.2 `LevelRenderer` callback needs
   `ChunkSectionsToRender`, while 26.2 uses `render` without it; NeoForge 26.2's
   HUD target is `Hud` rather than `Gui`.
+- NeoForge dedicated synchronization found and fixed two additional blockers:
+  configuration packets arrived before Minecraft exposed `currentServer`, and
+  NeoForge dispatched the configuration handler on the render thread. Katton
+  now captures the logical `ServerData.ip` before connecting and uses Minecraft's
+  managed task pump while waiting for the async configuration reload.
+- NeoForge 26.1.2 and 26.2 both downloaded, compiled, and executed an unsigned
+  pre-trusted localhost test pack during initial configuration. The repeatable
+  client command is `runClient -PkattonQuickPlayServer=<host:port>`.
+- The NeoForge 26.2 live test published revision 2 to one remote player, executed
+  the new client entrypoint, and received a success ACK. An intentionally failing
+  client candidate at revision 3 restored and re-executed the previous v3
+  snapshot, returned a failure ACK, and was rejected by the server. Removing the
+  pack then published an empty revision 5 and received a success ACK. A temporary
+  localhost-only RCON endpoint triggered the reloads and performed a clean
+  `stop`; it was disabled again after the test.
 - NeoForge 26.1.2 logged repeated NVIDIA/OpenGL framebuffer-completeness debug
   errors during early display initialization on this machine, but continued to
   load resources, enter and render the world, save cleanly, and exit 0.
@@ -137,9 +156,9 @@ artifact is loadable.
 - Paper 26.2 reaches Paper build 119 and discovers Katton
   `0.4.0+mc26.2`, then stops at the unaccepted local Minecraft EULA.
 - NeoForge 26.2 loads Katton `0.4.0+mc26.2`, initializes its networking and
-  mixins, creates a world, and reaches `Done`. The test used port 25576 because
-  port 25565 belongs to a separate vanilla server and was deliberately left
-  untouched.
+  mixins, creates a world, reaches `Done`, and stops cleanly after saving all
+  dimensions. The test used port 25576 because port 25565 belongs to a separate
+  vanilla server and was deliberately left untouched.
 - NeoForge 26.1.2 loads Katton `0.4.0+mc26.1.2`, initializes its networking and
   mixins, creates a world, and reaches `Done` on port 25577. ModDevGradle did not
   forward console input to the server, so this records startup compatibility but

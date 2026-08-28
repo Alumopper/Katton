@@ -60,6 +60,10 @@ object ServerPackCacheManager {
     @Volatile
     private var activeServerBucket: String? = null
 
+    /** Address selected by the user, captured before configuration networking starts. */
+    @Volatile
+    private var connectingServerAddress: String? = null
+
     @Volatile
     private var expectedHashes: Map<String, String> = emptyMap()
 
@@ -138,8 +142,21 @@ object ServerPackCacheManager {
      * enqueued main-thread task has finished processing.
      */
     fun awaitMainThreadSync(handle: MainThreadSyncHandle): Boolean {
+        val minecraft = runCatching { Minecraft.getInstance() }.getOrNull()
         val completed = try {
-            handle.latch.await(CONFIGURATION_SYNC_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+            if (minecraft != null && minecraft.isSameThread) {
+                // NeoForge dispatches configuration payload handlers on the render
+                // thread. Pump its task queue while waiting so the async compiler
+                // can schedule the main-thread activation work that releases us.
+                val deadline = System.nanoTime() +
+                    TimeUnit.SECONDS.toNanos(CONFIGURATION_SYNC_TIMEOUT_SECONDS)
+                minecraft.managedBlock {
+                    handle.latch.count == 0L || System.nanoTime() >= deadline
+                }
+                handle.latch.count == 0L
+            } else {
+                handle.latch.await(CONFIGURATION_SYNC_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+            }
         } catch (_: InterruptedException) {
             Thread.currentThread().interrupt()
             false
@@ -178,6 +195,7 @@ object ServerPackCacheManager {
         ScriptPackResourceManager.clearServerCacheResources()
         activeServerBucket?.let { bucket -> cleanupRevisionDirectories(bucket, keepRevision = null) }
         activeServerBucket = null
+        connectingServerAddress = null
         expectedHashes = emptyMap()
         activeRevision = 0L
         pendingRevision = 0L
@@ -187,6 +205,17 @@ object ServerPackCacheManager {
         activePacks = emptyList()
         pendingPacks = emptyList()
         syncState = RemoteSyncState.IDLE
+    }
+
+    /**
+     * Captures the logical server address before Minecraft creates its play-phase
+     * packet listener. During configuration, `Minecraft.currentServer` and
+     * `Minecraft.connection` may both still be unavailable.
+     */
+    @JvmStatic
+    @Synchronized
+    fun beginRemoteConnection(address: String?) {
+        connectingServerAddress = normalizeAddress(address)
     }
 
     @Suppress("unused")
@@ -858,6 +887,7 @@ object ServerPackCacheManager {
     private fun resolveCurrentServerIdentity(bucketOverride: String? = null): RemoteServerIdentity? {
         val mc = Minecraft.getInstance()
         val address = normalizeAddress(mc.currentServer?.ip)
+            ?: connectingServerAddress
             ?: resolveConnectionAddress(mc)
             ?: return null
         return RemoteServerIdentity(bucketOverride ?: sha256(address), address)
