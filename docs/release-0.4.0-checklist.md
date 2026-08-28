@@ -23,10 +23,10 @@ artifact is loadable.
 
 - [x] Update the repository README quick start to use `ServerPhase.READY`, a
   valid world-pack manifest, and both supported Minecraft versions.
-- [ ] Update all Katton-Example world entrypoints to declare an appropriate
+- [x] Update all Katton-Example world entrypoints to declare an appropriate
   server/client phase.
-- [ ] Add `dependencies` to every Katton-Example manifest.
-- [ ] Re-sign every signed Katton-Example pack with signature payload v2.
+- [x] Add `dependencies` to every Katton-Example manifest.
+- [x] Re-sign every signed Katton-Example pack with signature payload v2.
 - [x] Prepare and verify the Katton-Example 0.4.0 migration locally as commit
   `c11949c` on branch `release/0.4.0-migration` (all three subprojects build;
   all three manifests are re-signed with payload v2). The clone is under
