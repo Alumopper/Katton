@@ -42,6 +42,14 @@ neoForge {
         client {
             client()
 
+            // ModDev owns the leading launch arguments, so Gradle's generic
+            // --args option cannot be used without replacing its main class.
+            // Keep quick-play smoke tests opt-in through a project property.
+            def quickPlayWorld = providers.gradleProperty('kattonQuickPlayWorld').orNull
+            if (quickPlayWorld) {
+                programArguments.addAll '--quickPlaySingleplayer', quickPlayWorld
+            }
+
             // Comma-separated list of namespaces to load gametests from. Empty = all namespaces.
             systemProperty 'neoforge.enabledGameTestNamespaces', project.mod_id
         }

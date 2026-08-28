@@ -55,12 +55,18 @@ artifact is loadable.
 
 ## Runtime matrix
 
-- [ ] Fabric 26.1.2: client/integrated server smoke test.
-- [ ] Fabric 26.2: client/integrated server smoke test.
+- [x] Fabric 26.1.2: client/integrated server smoke test; Katton publishes its
+  script-pack revision, the local player joins, all dimensions save, and Gradle
+  exits 0 (2026-08-28).
+- [x] Fabric 26.2: client/integrated server smoke test with the same startup,
+  player-join, save, and exit-0 evidence (2026-08-28).
 - [ ] Fabric dedicated server/client: initial sync, live revision, failed
   compilation rollback, and removed-pack deactivation.
-- [ ] NeoForge 26.1.2: client/integrated server smoke test.
-- [ ] NeoForge 26.2: client/integrated server smoke test.
+- [x] NeoForge 26.1.2: client/integrated server smoke test; Katton publishes its
+  script-pack revision, the local player joins, all dimensions save, and Gradle
+  exits 0 (2026-08-28).
+- [x] NeoForge 26.2: client/integrated server smoke test with the same startup,
+  player-join, save, and exit-0 evidence (2026-08-28).
 - [x] NeoForge 26.1.2: dedicated server reaches `Done` with Katton 0.4.0 loaded
   (port 25577, 2026-08-28).
 - [x] NeoForge 26.2: dedicated server reaches `Done` with Katton 0.4.0 loaded
@@ -102,9 +108,26 @@ artifact is loadable.
   `--no-build-cache` on 2026-08-28. It rebuilt and tested both targets,
   regenerated 95 bilingual API pages, audited all six descriptors, exercised
   both startup-agent paths, and staged the verified jars plus `SHA256SUMS`.
+- After the client-runtime mixin fixes, `prepareReleaseArtifacts
+  --no-build-cache --max-workers=1` passed again (69 tasks: 22 executed and 47
+  up-to-date), re-audited all six descriptors, reran the four final-jar startup
+  agent probes, and regenerated the staged jars and checksums on 2026-08-28.
 - The release-agent gate used each of the four final Fabric/NeoForge deployment
   jars as `-javaagent`, modified an already-loaded method, and rolled the
   injection back successfully on 2026-08-28.
+- The four Fabric/NeoForge client runs used a 3 GiB maximum heap, entered an
+  integrated-server world, published Katton script-pack revision 1, rendered a
+  local player, saved every dimension, and exited through the game window with
+  Gradle status 0. The repeatable commands are Fabric `runClient` with
+  `--args=--quickPlaySingleplayer <world>` and NeoForge `runClient` with
+  `-PkattonQuickPlayWorld=<world>`.
+- These client runs caught and fixed two release-blocking mixin regressions that
+  compilation alone could not detect: the 26.1.2 `LevelRenderer` callback needs
+  `ChunkSectionsToRender`, while 26.2 uses `render` without it; NeoForge 26.2's
+  HUD target is `Hud` rather than `Gui`.
+- NeoForge 26.1.2 logged repeated NVIDIA/OpenGL framebuffer-completeness debug
+  errors during early display initialization on this machine, but continued to
+  load resources, enter and render the world, save cleanly, and exit 0.
 - Fabric 26.1.2 reaches Fabric Loader 0.18.4 with Katton
   `0.4.0+mc26.1.2`, then stops at the unaccepted local Minecraft EULA.
 - Fabric 26.2 reaches Fabric Loader with Katton `0.4.0+mc26.2`, then stops at

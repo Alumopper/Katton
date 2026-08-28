@@ -30,7 +30,7 @@ public class LevelRendererMixin {
     /*?} else {*/
     /*@Inject(method = "renderLevel", at = @At("HEAD"))*/
     /*?}*/
-    private void katton$captureTickDelta(GraphicsResourceAllocator resourceAllocator, DeltaTracker deltaTracker, boolean renderOutline, CameraRenderState cameraState, Matrix4fc modelViewMatrix, GpuBufferSlice terrainFog, Vector4f fogColor, boolean shouldRenderSky, CallbackInfo ci) {
+    private void katton$captureTickDelta(GraphicsResourceAllocator resourceAllocator, DeltaTracker deltaTracker, boolean renderOutline, CameraRenderState cameraState, Matrix4fc modelViewMatrix, GpuBufferSlice terrainFog, Vector4f fogColor, boolean shouldRenderSky, /*? if mc_26_1_2 {*//*ChunkSectionsToRender chunkSectionsToRender, *//*?}*/CallbackInfo ci) {
         this.katton$tickDelta = deltaTracker.getGameTimeDeltaPartialTick(false);
     }
 
@@ -39,7 +39,7 @@ public class LevelRendererMixin {
     /*?} else {*/
     /*@Inject(method = "renderLevel", at = @At("TAIL"))*/
     /*?}*/
-    private void katton$renderWorld(GraphicsResourceAllocator resourceAllocator, DeltaTracker deltaTracker, boolean renderOutline, CameraRenderState cameraState, Matrix4fc modelViewMatrix, GpuBufferSlice terrainFog, Vector4f fogColor, boolean shouldRenderSky, CallbackInfo ci) {
+    private void katton$renderWorld(GraphicsResourceAllocator resourceAllocator, DeltaTracker deltaTracker, boolean renderOutline, CameraRenderState cameraState, Matrix4fc modelViewMatrix, GpuBufferSlice terrainFog, Vector4f fogColor, boolean shouldRenderSky, /*? if mc_26_1_2 {*//*ChunkSectionsToRender chunkSectionsToRender, *//*?}*/CallbackInfo ci) {
         KattonClientRenderApiKt.dispatchWorldRender(cameraState, this.katton$tickDelta);
     }
 
