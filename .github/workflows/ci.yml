@@ -37,6 +37,7 @@ jobs:
           ./gradlew
           build
           verifyReleaseArtifacts
+          verifyReleaseAgentArtifacts
           verifyLocalMavenPublications
           :common:26.1.2:verifyKattonStartupAgent
           :common:26.2:verifyKattonStartupAgent

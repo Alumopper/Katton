@@ -400,10 +400,40 @@ tasks.register('verifyReleaseArtifacts') {
     }
 }
 
+def releaseAgentVerificationTasks = releaseMinecraftVersions.collectMany { minecraftVersion ->
+    ['fabric', 'neoforge'].collect { platform ->
+        def commonTarget = project(":common:${minecraftVersion}")
+        commonTarget.tasks.register("verify${platform.capitalize()}ReleaseAgent", Test) {
+            group = 'verification'
+            description = "Verify the ${platform} ${minecraftVersion} deployment jar performs startup-agent injection."
+
+            dependsOn rootProject.tasks.named('verifyReleaseArtifacts')
+            dependsOn commonTarget.tasks.named('testClasses')
+            testClassesDirs = commonTarget.sourceSets.test.output.classesDirs
+            classpath = commonTarget.sourceSets.test.runtimeClasspath
+            useJUnitPlatform()
+            filter {
+                includeTestsMatching 'top.katton.engine.StartupAgentInjectionTest'
+            }
+            def agentJar = releaseArtifactFile(platform, minecraftVersion)
+            inputs.file(agentJar).withPropertyName('agentJar')
+            systemProperty 'katton.probe.expectAgent', 'true'
+            systemProperty 'katton.probe.agentJar', agentJar.absolutePath
+            jvmArgs "-javaagent:${agentJar.absolutePath}"
+        }
+    }
+}.flatten()
+
+tasks.register('verifyReleaseAgentArtifacts') {
+    group = 'verification'
+    description = 'Exercise startup-agent injection through all four Fabric and NeoForge deployment jars.'
+    dependsOn releaseAgentVerificationTasks
+}
+
 tasks.register('prepareReleaseArtifacts') {
     group = 'distribution'
     description = 'Verify and stage the six deployment jars with a SHA-256 checksum file.'
-    dependsOn tasks.named('verifyReleaseArtifacts')
+    dependsOn tasks.named('verifyReleaseAgentArtifacts')
 
     doLast {
         def releaseDirectory = rootProject.layout.buildDirectory

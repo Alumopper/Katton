@@ -45,6 +45,8 @@ artifact is loadable.
   targets (zero failures on 2026-08-28).
 - [x] Run dynamic-Attach real injection and rollback verification for both MC
   targets (zero failures on 2026-08-28).
+- [x] Run startup-agent real injection and rollback through all four final
+  Fabric/NeoForge deployment jars (zero failures on 2026-08-28).
 - [x] Generate bilingual API documentation (95 pages for two locales on
   2026-08-28).
 - [x] Run a clean, uncached build after setting `mod_version=0.4.0`.
@@ -100,6 +102,9 @@ artifact is loadable.
   `--no-build-cache` on 2026-08-28. It rebuilt and tested both targets,
   regenerated 95 bilingual API pages, audited all six descriptors, exercised
   both startup-agent paths, and staged the verified jars plus `SHA256SUMS`.
+- The release-agent gate used each of the four final Fabric/NeoForge deployment
+  jars as `-javaagent`, modified an already-loaded method, and rolled the
+  injection back successfully on 2026-08-28.
 - Fabric 26.1.2 reaches Fabric Loader 0.18.4 with Katton
   `0.4.0+mc26.1.2`, then stops at the unaccepted local Minecraft EULA.
 - Fabric 26.2 reaches Fabric Loader with Katton `0.4.0+mc26.2`, then stops at
