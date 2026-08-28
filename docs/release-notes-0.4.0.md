@@ -38,7 +38,7 @@ Before loading a 0.3.x pack:
 4. Update development dependencies to `0.4.0+mc26.1.2` or
    `0.4.0+mc26.2`.
 
-See [Migrating Script Packs from 0.3.x to 0.4.0](migrating-to-0.4.0.md).
+See [Migrating Script Packs from 0.3.x to 0.4.0](https://github.com/Alumopper/Katton/blob/v0.4.0/docs/migrating-to-0.4.0.md).
 
 ## Platform notes
 
