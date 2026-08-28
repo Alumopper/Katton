@@ -112,9 +112,10 @@ artifact is loadable.
 - [x] Apply/push the stable katton-api template update through commit `01b3887`
   to `main` after the 0.4.0 Maven artifacts became publicly resolvable.
 - [x] Produce SHA-256 checksums for the six deployment jars.
-- [ ] Create the stable GitHub `v0.4.0` Release (not a pre-release) with all six
+- [x] Create the stable GitHub `v0.4.0` Release (not a pre-release) with all six
   jars, checksums, migration notes, supported-version matrix, and known
-  limitations.
+  limitations. The public release targets `3965de5`; all seven uploaded assets
+  match their local SHA-256 digests (2026-08-29).
 
 ## Recorded partial runtime evidence
 
