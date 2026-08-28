@@ -8,7 +8,12 @@ import net.bytebuddy.dynamic.ClassFileLocator
 import net.bytebuddy.dynamic.loading.ClassReloadingStrategy
 import net.bytebuddy.implementation.bytecode.assign.Assigner
 import net.bytebuddy.matcher.ElementMatchers
+import top.katton.Katton
+import top.katton.api.inject.InjectionAcquisitionMode
+import top.katton.api.inject.InjectionCapabilityReport
+import top.katton.api.inject.InjectionCapabilityStatus
 import java.lang.instrument.ClassDefinition
+import java.lang.instrument.Instrumentation
 import java.lang.reflect.Constructor
 import java.lang.reflect.Method
 import java.util.UUID
@@ -239,6 +244,16 @@ internal object InjectionManager {
     private val constructorBeforeHandlers = ConcurrentHashMap<String, CopyOnWriteArrayList<ConstructorBeforeEntry>>()
     private val constructorAfterHandlers = ConcurrentHashMap<String, CopyOnWriteArrayList<ConstructorAfterEntry>>()
     private val handles = ConcurrentHashMap<String, HandleMeta>()
+    private val instrumentationLock = Any()
+
+    @Volatile
+    private var installedInstrumentation: Instrumentation? = null
+
+    @Volatile
+    private var acquisitionMode: InjectionAcquisitionMode = InjectionAcquisitionMode.NONE
+
+    @Volatile
+    private var lastInstrumentationFailure: Throwable? = null
 
     private fun targetKey(method: Method): String {
         val params = method.parameterTypes.joinToString(",") { it.name }
@@ -386,8 +401,177 @@ internal object InjectionManager {
     @JvmStatic
     fun methodExitThrowable(result: MethodExitResult): Throwable? = result.throwable
 
+    private fun acquireInstrumentation(): Instrumentation {
+        if (!Katton.registrationEnabled && !Katton.hasClient) {
+            throw IllegalStateException(
+                "不支持：Paper 平台不提供运行期字节码注入 / Unsupported on Paper."
+            )
+        }
+
+        installedInstrumentation?.let { return it }
+
+        synchronized(instrumentationLock) {
+            installedInstrumentation?.let { return it }
+
+            KattonAgent.findInstrumentation()?.let { startupInstrumentation ->
+                validateInstrumentation(startupInstrumentation)
+                installedInstrumentation = startupInstrumentation
+                acquisitionMode = InjectionAcquisitionMode.STARTUP_AGENT
+                lastInstrumentationFailure = null
+                return startupInstrumentation
+            }
+
+            // Byte Buddy also exposes instrumentation from its own premain agent across class loaders.
+            // https://github.com/raphw/byte-buddy/blob/byte-buddy-1.17.8/byte-buddy-agent/src/main/java/net/bytebuddy/agent/ByteBuddyAgent.java
+            runCatching(ByteBuddyAgent::getInstrumentation).getOrNull()?.let { startupInstrumentation ->
+                validateInstrumentation(startupInstrumentation)
+                installedInstrumentation = startupInstrumentation
+                acquisitionMode = InjectionAcquisitionMode.STARTUP_AGENT
+                lastInstrumentationFailure = null
+                return startupInstrumentation
+            }
+
+            val environment = InjectionEnvironment.inspect()
+            if (environment.fclDetected() && !environment.attachModulePresent()) {
+                throw injectionUnavailable(unavailableDetail(environment, null))
+            }
+
+            if (System.getProperty(InjectionEnvironment.DYNAMIC_ATTACH_PROPERTY, "true").equals("false", true)) {
+                throw injectionUnavailable(
+                    "不支持：运行期 Attach 已由 -D${InjectionEnvironment.DYNAMIC_ATTACH_PROPERTY}=false 禁用。"
+                )
+            }
+
+            return try {
+                ByteBuddyAgent.install().also { dynamicInstrumentation ->
+                    validateInstrumentation(dynamicInstrumentation)
+                    installedInstrumentation = dynamicInstrumentation
+                    acquisitionMode = InjectionAcquisitionMode.DYNAMIC_ATTACH
+                    lastInstrumentationFailure = null
+                }
+            } catch (failure: Throwable) {
+                lastInstrumentationFailure = failure
+                throw injectionUnavailable(unavailableDetail(InjectionEnvironment.inspect(), failure), failure)
+            }
+        }
+    }
+
+    private fun validateInstrumentation(instrumentation: Instrumentation) {
+        if (!instrumentation.isRedefineClassesSupported) {
+            throw injectionUnavailable(
+                "不支持：当前 JVM 的 Instrumentation 未启用类重定义 / Class redefinition is unavailable."
+            )
+        }
+    }
+
+    private fun injectionUnavailable(message: String, cause: Throwable? = null): IllegalStateException {
+        val suffix = " 请重启游戏并添加 JVM 参数 ${InjectionEnvironment.inspect().startupAgentArgument()}，" +
+            "然后运行 /katton capabilities injection。"
+        return IllegalStateException(message + suffix, cause)
+    }
+
+    private fun unavailableDetail(environment: InjectionEnvironment.Snapshot, failure: Throwable?): String {
+        val reason = when {
+            !environment.instrumentationModulePresent() ->
+                "当前 JVM 缺少 java.instrument 模块"
+            environment.startupAgentLoaded() && environment.redefineClassesSupported() == false ->
+                "Katton 启动期 agent 已加载，但 JVM 未授予类重定义能力"
+            !environment.dynamicAttachAllowed() ->
+                "运行期 Attach 已由 -D${InjectionEnvironment.DYNAMIC_ATTACH_PROPERTY}=false 禁用"
+            environment.fclDetected() && !environment.attachModulePresent() ->
+                "FCL 当前 Java 运行时缺少 jdk.attach 模块，Byte Buddy 无法在游戏启动后安装 agent"
+            !environment.attachModulePresent() ->
+                "当前 JVM 缺少 jdk.attach 模块，无法进行运行期 agent 安装"
+            environment.attachProviderCount() == 0 ->
+                "当前 JVM 没有可用的 AttachProvider"
+            else ->
+                "运行期 agent 安装失败${failureSummary(failure)?.let { "：$it" } ?: ""}"
+        }
+        return "不支持：$reason / Runtime injection unavailable."
+    }
+
+    private fun failureSummary(failure: Throwable?): String? {
+        var current: Throwable = failure ?: return null
+        var depth = 0
+        while (current.cause != null && current.cause !== current && depth++ < 16) {
+            current = current.cause!!
+        }
+        val message = current.message?.takeIf { it.isNotBlank() }
+        return if (message == null) current.javaClass.simpleName else "${current.javaClass.simpleName}: $message"
+    }
+
+    @JvmStatic
+    fun capabilityReport(): InjectionCapabilityReport {
+        val paper = !Katton.registrationEnabled && !Katton.hasClient
+        val instrumentationResult = if (paper) {
+            Result.failure(
+                IllegalStateException("不支持：Paper 平台不提供运行期字节码注入 / Unsupported on Paper.")
+            )
+        } else {
+            runCatching(::acquireInstrumentation)
+        }
+        val instrumentation = instrumentationResult.getOrNull()
+        val refreshedEnvironment = InjectionEnvironment.inspect()
+        val failure = instrumentationResult.exceptionOrNull() ?: lastInstrumentationFailure
+        val supported = instrumentation != null && instrumentation.isRedefineClassesSupported
+        val detail = if (supported) {
+            when (acquisitionMode) {
+                InjectionAcquisitionMode.STARTUP_AGENT ->
+                    "支持：已通过启动期 Katton agent 获取 Instrumentation。"
+                InjectionAcquisitionMode.DYNAMIC_ATTACH ->
+                    "支持：已通过 Byte Buddy 运行期 Attach 获取 Instrumentation。"
+                InjectionAcquisitionMode.NONE ->
+                    "支持：Instrumentation 可用。"
+            }
+        } else if (paper) {
+            "不支持：Paper 平台不提供运行期字节码注入 / Unsupported on Paper."
+        } else {
+            unavailableDetail(refreshedEnvironment, failure)
+        }
+        val remediation = when {
+            supported -> null
+            paper -> "Paper 不支持此能力；请改用受支持的事件或 Bukkit/Paper API。"
+            refreshedEnvironment.fclDetected() ->
+                "重启游戏，并在 FCL 版本设置 → 高级设置 → JVM 参数中添加 " +
+                    refreshedEnvironment.startupAgentArgument()
+            else -> "重启 JVM 并添加 ${refreshedEnvironment.startupAgentArgument()}"
+        }
+
+        return InjectionCapabilityReport(
+            status = if (supported) InjectionCapabilityStatus.SUPPORTED else InjectionCapabilityStatus.UNSUPPORTED,
+            mode = if (supported) acquisitionMode else InjectionAcquisitionMode.NONE,
+            platform = when {
+                paper -> "PAPER"
+                refreshedEnvironment.fclDetected() -> "FCL"
+                else -> "JVM"
+            },
+            fclDetected = refreshedEnvironment.fclDetected(),
+            androidDetected = refreshedEnvironment.androidDetected(),
+            javaVersion = refreshedEnvironment.javaVersion(),
+            javaVendor = refreshedEnvironment.javaVendor(),
+            vmName = refreshedEnvironment.vmName(),
+            os = "${refreshedEnvironment.osName()} ${refreshedEnvironment.osVersion()}",
+            architecture = refreshedEnvironment.osArchitecture(),
+            instrumentationModulePresent = refreshedEnvironment.instrumentationModulePresent(),
+            attachModulePresent = refreshedEnvironment.attachModulePresent(),
+            attachProviderCount = refreshedEnvironment.attachProviderCount(),
+            redefineClassesSupported = instrumentation?.isRedefineClassesSupported
+                ?: refreshedEnvironment.redefineClassesSupported(),
+            retransformClassesSupported = instrumentation?.isRetransformClassesSupported
+                ?: refreshedEnvironment.retransformClassesSupported(),
+            detail = detail,
+            remediation = remediation,
+            startupAgentArgument = refreshedEnvironment.startupAgentArgument(),
+            relevantJvmArguments = refreshedEnvironment.relevantJvmArguments()
+        )
+    }
+
     private fun ensureInstrumented(targetClass: Class<*>, method: Method) {
         val key = targetKey(method)
+        val instrumentation = acquireInstrumentation()
+        if (!instrumentation.isModifiableClass(targetClass)) {
+            error("不支持：目标类不可重定义 / Target class is not modifiable: ${targetClass.name}")
+        }
         if (!instrumentedTargets.add(key)) return
 
         val className = targetClass.name
@@ -395,27 +579,42 @@ internal object InjectionManager {
         methods.add(method)
         instrumentedMethodRegistry[key] = method
 
-        // Install agent lazily (reuses existing installation if present).
-        val instrumentation = ByteBuddyAgent.install()
-        val locator = ClassFileLocator.ForClassLoader.of(targetClass.classLoader)
-        val originalBytes = locator.locate(targetClass.name).resolve()
-        val transformedBytes = MethodInjectionTransformer.transform(originalBytes, methods)
-        instrumentation.redefineClasses(ClassDefinition(targetClass, transformedBytes))
+        try {
+            val locator = ClassFileLocator.ForClassLoader.of(targetClass.classLoader)
+            val originalBytes = locator.locate(targetClass.name).resolve()
+            val transformedBytes = MethodInjectionTransformer.transform(originalBytes, methods)
+            instrumentation.redefineClasses(ClassDefinition(targetClass, transformedBytes))
+        } catch (failure: Throwable) {
+            methods.remove(method)
+            if (methods.isEmpty()) {
+                instrumentedMethodsByClass.remove(className, methods)
+            }
+            instrumentedMethodRegistry.remove(key, method)
+            instrumentedTargets.remove(key)
+            throw failure
+        }
     }
 
     private fun ensureConstructorInstrumented(targetClass: Class<*>, constructor: Constructor<*>) {
         val key = constructorKey(constructor)
+        val instrumentation = acquireInstrumentation()
+        if (!instrumentation.isModifiableClass(targetClass)) {
+            error("不支持：目标类不可重定义 / Target class is not modifiable: ${targetClass.name}")
+        }
         if (!instrumentedTargets.add(key)) return
 
-        ByteBuddyAgent.install()
-
-        ByteBuddy()
-            .redefine(targetClass)
-            .visit(
-                Advice.to(UniversalConstructorAdvice::class.java).on(ElementMatchers.isConstructor())
-            )
-            .make()
-            .load(targetClass.classLoader, ClassReloadingStrategy.fromInstalledAgent())
+        try {
+            ByteBuddy()
+                .redefine(targetClass)
+                .visit(
+                    Advice.to(UniversalConstructorAdvice::class.java).on(ElementMatchers.isConstructor())
+                )
+                .make()
+                .load(targetClass.classLoader, ClassReloadingStrategy.of(instrumentation))
+        } catch (failure: Throwable) {
+            instrumentedTargets.remove(key)
+            throw failure
+        }
     }
 
     @JvmStatic

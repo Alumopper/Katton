@@ -44,6 +44,8 @@ dependencies {
     testImplementation 'org.junit.jupiter:junit-jupiter:5.12.2'
     // ScriptEngine integration tests execute the same embedded compiler used at runtime.
     testRuntimeOnly 'org.jetbrains.kotlin:kotlin-scripting-jvm-host'
+    testRuntimeOnly 'net.bytebuddy:byte-buddy:1.17.8'
+    testRuntimeOnly 'net.bytebuddy:byte-buddy-agent:1.17.8'
     testRuntimeOnly 'org.ow2.asm:asm:9.9.1'
     testRuntimeOnly 'org.ow2.asm:asm-commons:9.9.1'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher:1.12.2'
@@ -57,6 +59,95 @@ dependencies {
 
 tasks.withType(Test).configureEach {
     useJUnitPlatform()
+}
+
+def kattonAgentManifest = [
+    'Premain-Class': 'top.katton.engine.KattonAgent',
+    'Agent-Class': 'top.katton.engine.KattonAgent',
+    'Can-Redefine-Classes': 'true',
+    'Can-Retransform-Classes': 'true'
+]
+
+tasks.named('jar', Jar) {
+    manifest.attributes(kattonAgentManifest)
+}
+
+def injectionProbeMainClass = 'top.katton.engine.InjectionEnvironmentProbe'
+def injectionProbeClasspath = files(
+    sourceSets.test.output,
+    tasks.named('jar').flatMap { it.archiveFile }
+)
+
+tasks.register('probeInjectionEnvironment', JavaExec) {
+    group = 'verification'
+    description = 'Print the desktop JVM capabilities used by Katton runtime injection.'
+    dependsOn tasks.named('testClasses'), tasks.named('jar')
+    classpath = injectionProbeClasspath
+    mainClass = injectionProbeMainClass
+}
+
+tasks.register('probeFclLikeInjectionEnvironment', JavaExec) {
+    group = 'verification'
+    description = 'Reproduce an FCL-like Java 25 image without the jdk.attach module.'
+    dependsOn tasks.named('testClasses'), tasks.named('jar')
+    classpath = injectionProbeClasspath
+    mainClass = injectionProbeMainClass
+    jvmArgs '--limit-modules=java.base,java.instrument,java.management'
+    systemProperty 'minecraft.launcher.brand', 'Fold Craft Launcher'
+    systemProperty 'os.version', 'Android-simulated'
+    systemProperty 'katton.probe.expectFcl', 'true'
+    systemProperty 'katton.probe.expectAttach', 'false'
+    systemProperty 'katton.probe.expectAgent', 'false'
+}
+
+tasks.register('verifyKattonStartupAgent', JavaExec) {
+    group = 'verification'
+    description = 'Verify Katton can redefine classes via -javaagent when jdk.attach is absent.'
+    dependsOn tasks.named('testClasses'), tasks.named('jar')
+    classpath = injectionProbeClasspath
+    mainClass = injectionProbeMainClass
+    jvmArgs '--limit-modules=java.base,java.instrument,java.management'
+    systemProperty 'minecraft.launcher.brand', 'Fold Craft Launcher'
+    systemProperty 'os.version', 'Android-simulated'
+    systemProperty 'katton.probe.expectFcl', 'true'
+    systemProperty 'katton.probe.expectAttach', 'false'
+    systemProperty 'katton.probe.expectAgent', 'true'
+    doFirst {
+        def agentJar = tasks.named('jar').get().archiveFile.get().asFile.absolutePath
+        systemProperty 'katton.probe.agentJar', agentJar
+        jvmArgs "-javaagent:${agentJar}"
+    }
+}
+
+tasks.register('verifyKattonStartupInjection', Test) {
+    group = 'verification'
+    description = 'Exercise Katton method injection through startup Instrumentation without dynamic Attach.'
+    dependsOn tasks.named('testClasses'), tasks.named('jar')
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    useJUnitPlatform()
+    filter {
+        includeTestsMatching 'top.katton.engine.StartupAgentInjectionTest'
+    }
+    systemProperty 'katton.probe.expectAgent', 'true'
+    doFirst {
+        def agentJar = tasks.named('jar').get().archiveFile.get().asFile.absolutePath
+        systemProperty 'katton.probe.agentJar', agentJar
+        jvmArgs "-javaagent:${agentJar}"
+    }
+}
+
+tasks.register('verifyKattonDynamicAttachInjection', Test) {
+    group = 'verification'
+    description = 'Exercise Katton method injection through Byte Buddy dynamic Attach.'
+    dependsOn tasks.named('testClasses'), tasks.named('jar')
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    useJUnitPlatform()
+    filter {
+        includeTestsMatching 'top.katton.engine.DynamicAttachInjectionTest'
+    }
+    systemProperty 'katton.probe.expectDynamicAttach', 'true'
 }
 
 

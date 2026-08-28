@@ -88,7 +88,7 @@
   "katton.reload.common.clear_item_modifications": "正在清理物品修改",
   "katton.reload.common.reset_entity_renderers": "正在重置实体渲染器",
 
-  "commands.katton.help": "[Katton] /katton help | status | errors | capabilities events [事件] | packs list|enable|disable | registry | reload | itemrender ... | config ...",
+  "commands.katton.help": "[Katton] /katton help | status | errors | capabilities events [事件] | capabilities injection | packs list|enable|disable | registry | reload | debug injection | itemrender ... | config ...",
   "commands.katton.status": "[Katton] 状态=%s，服务器绑定=%s，重载中=%s",
   "commands.katton.registry.summary": "[Katton] %s",
   "commands.katton.registry.row": "%s：条目=%s，托管=%s，滞留=%s",
@@ -114,7 +114,7 @@
   "commands.katton.config.removed": "[Katton] [%s] 已移除“%s”",
   "commands.katton.config.remove_failed": "[Katton] 无法在脚本包“%2$s”中移除“%1$s”",
   "commands.katton.debug.registry_logging": "[Katton] debugRegistryLogging=%s",
-  "commands.katton.paper.help": "[Katton] /katton help | status | reload | errors | capabilities events [事件] | packs list|enable|disable",
+  "commands.katton.paper.help": "[Katton] /katton help | status | reload | errors | capabilities events [事件] | capabilities injection | packs list|enable|disable",
   "commands.katton.paper.status": "[Katton] 状态=%s，服务器绑定=%s，服务端重载中=%s",
   "commands.katton.paper.reload.no_permission": "[Katton] 你需要 katton.admin 权限才能重载。",
   "commands.katton.paper.server_not_ready": "[Katton] 服务器尚未就绪。",

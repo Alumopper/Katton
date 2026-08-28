@@ -6,11 +6,11 @@ buildscript {
 
 plugins {
     id 'java-library'
-    id 'org.jetbrains.kotlin.jvm' version '2.3.10'
+    id 'org.jetbrains.kotlin.jvm'
     id 'maven-publish'
-    id 'com.gradleup.shadow' version '8.3.10'
-    id("io.papermc.paperweight.userdev") version "2.0.0-beta.21"
-    id("xyz.jpenilla.run-paper") version "3.0.2" // Adds runServer and runMojangMappedServer tasks for testing
+    id 'com.gradleup.shadow'
+    id 'io.papermc.paperweight.userdev'
+    id 'xyz.jpenilla.run-paper' // Adds runServer and runMojangMappedServer tasks for testing
 }
 
 def targetMinecraftVersion = stonecutter.current.version
@@ -99,10 +99,11 @@ tasks.named('jar') {
 
 // Process plugin.yml to expand version
 processResources {
+    inputs.property 'version', project.version
     inputs.property 'apiVersion', project.property('paper_plugin_api_version')
 
     filesMatching('paper-plugin.yml') {
-        expand 'version': project.version,
+        expand 'version': inputs.properties.version,
             'apiVersion': inputs.properties.apiVersion
     }
 }

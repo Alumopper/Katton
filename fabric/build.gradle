@@ -107,6 +107,14 @@ tasks.named('jar', Jar) {
     archiveFileName = "${platformName}-katton-${project.version}.jar"
     destinationDirectory = rootProject.layout.buildDirectory
     from(commonMainSourceSet.output)
+    manifest {
+        attributes(
+            'Premain-Class': 'top.katton.engine.KattonAgent',
+            'Agent-Class': 'top.katton.engine.KattonAgent',
+            'Can-Redefine-Classes': 'true',
+            'Can-Retransform-Classes': 'true'
+        )
+    }
 }
 
 tasks.named('sourcesJar', Jar) {

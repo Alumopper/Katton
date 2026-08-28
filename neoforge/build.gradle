@@ -79,10 +79,9 @@ neoForge {
             // "REGISTRYDUMP": For getting the contents of all registries.
             systemProperty 'forge.logging.markers', 'REGISTRIES'
 
-            // Recommended logging level for the console
-            // You can set various levels here.
-            // Please read: https://stackoverflow.com/questions/2031163/when-to-use-the-different-log-levels
-            logLevel = org.slf4j.event.Level.DEBUG
+            // Keep development servers readable; DEBUG produces several megabytes
+            // of loader internals before Katton's own diagnostics are visible.
+            logLevel = org.slf4j.event.Level.INFO
         }
     }
 
@@ -139,11 +138,14 @@ var generateModMetadata = tasks.register("generateModMetadata", ProcessResources
             mod_id                 : mod_id,
             mod_name               : mod_name,
             mod_license            : mod_license,
-            mod_version            : mod_version,
+            mod_version            : project.version,
     ]
     inputs.properties replaceProperties
     expand replaceProperties
-    from "src/main/templates"
+    // Stonecutter version projects live under versions/<mc>; the templates remain
+    // in the controller project. A project-relative path makes this task NO-SOURCE
+    // and produces a jar that NeoForge cannot discover.
+    from project.parent.file('src/main/templates')
     into "build/generated/sources/modMetadata"
 }
 
@@ -188,6 +190,14 @@ tasks.named('jar', Jar) {
     archiveFileName = "${platformName}-katton-${project.version}.jar"
     destinationDirectory = rootProject.layout.buildDirectory
     from(commonMainSourceSet.output)
+    manifest {
+        attributes(
+            'Premain-Class': 'top.katton.engine.KattonAgent',
+            'Agent-Class': 'top.katton.engine.KattonAgent',
+            'Can-Redefine-Classes': 'true',
+            'Can-Retransform-Classes': 'true'
+        )
+    }
 }
 
 tasks.matching { it.name == 'sourcesJar' }.configureEach {

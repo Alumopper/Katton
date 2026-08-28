@@ -23,6 +23,7 @@ import top.katton.api.ClientItemRenderAnimationMode
 import top.katton.api.ClientItemRenderAnimationSetBuilder
 import top.katton.api.ClientItemRenderEasing
 import top.katton.api.event.EventCapabilities
+import top.katton.api.inject.InjectionCapabilities
 import top.katton.config.KattonConfigManager
 import top.katton.engine.ScriptReloadManager
 import top.katton.engine.ScriptIssueReporter
@@ -148,6 +149,13 @@ object ScriptCommand {
                                             if (capability.supported) 1 else 0
                                         }
                                 )
+                        )
+                        .then(
+                            literal("injection")
+                                .requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS))
+                                .executes {
+                                    sendInjectionReport(it.source)
+                                }
                         )
                 )
                 .then(
@@ -429,6 +437,12 @@ object ScriptCommand {
                                         }
                                 )
                         )
+                        .then(
+                            literal("injection")
+                                .executes {
+                                    sendInjectionReport(it.source)
+                                }
+                        )
                 )
         )
     }
@@ -436,6 +450,13 @@ object ScriptCommand {
     private fun sendHelp(source: CommandSourceStack): Int {
         source.sendSuccess({ tr("commands.katton.help") }, false)
         return 1
+    }
+
+    private fun sendInjectionReport(source: CommandSourceStack): Int {
+        val report = InjectionCapabilities.query()
+        val text = report.diagnosticLines().joinToString("\n") { "[Katton] $it" }
+        source.sendSuccess({ Component.literal(text) }, false)
+        return if (report.supported) 1 else 0
     }
 
     private fun packStateCommand(name: String, enabled: Boolean) =

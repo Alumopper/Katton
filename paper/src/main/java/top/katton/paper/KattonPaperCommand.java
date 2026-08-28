@@ -7,6 +7,7 @@ import org.jspecify.annotations.NonNull;
 import top.katton.Katton;
 import top.katton.command.ScriptCommand;
 import top.katton.api.event.EventCapabilities;
+import top.katton.api.inject.InjectionCapabilities;
 import top.katton.engine.ScriptIssueReporter;
 import top.katton.engine.ScriptReloadManager;
 import top.katton.pack.ScriptPackManager;
@@ -82,8 +83,14 @@ public class KattonPaperCommand implements BasicCommand {
                 }
             }
             case "capabilities" -> {
+                if (args.length >= 2 && "injection".equalsIgnoreCase(args[1])) {
+                    InjectionCapabilities.query().diagnosticLines().forEach(line ->
+                        sender.sendMessage("[Katton] " + line)
+                    );
+                    return;
+                }
                 if (args.length < 2 || !"events".equalsIgnoreCase(args[1])) {
-                    sender.sendMessage("[Katton] Usage: /katton capabilities events [EventObject.onEvent]");
+                    sender.sendMessage("[Katton] Usage: /katton capabilities events [EventObject.onEvent] | injection");
                     return;
                 }
                 if (args.length >= 3) {
@@ -114,7 +121,7 @@ public class KattonPaperCommand implements BasicCommand {
                 .collect(Collectors.toList());
         }
         if (args.length == 2 && "capabilities".equalsIgnoreCase(args[0])) {
-            return List.of("events");
+            return List.of("events", "injection");
         }
         if (args.length == 2 && "packs".equalsIgnoreCase(args[0])) {
             return List.of("list", "enable", "disable");
