@@ -1,0 +1,952 @@
+From e5c377a13db67a44aad17c1b285b3d7a9f2eb1c1 Mon Sep 17 00:00:00 2001
+From: Alumopper <609255325@qq.com>
+Date: Fri, 28 Aug 2026 19:47:53 +0800
+Subject: [PATCH] Update template generator for Katton 0.4.0
+
+---
+ .../theme/components/TemplateGenerator.vue    |   4 +-
+ package.json                                  |   4 +
+ pnpm-lock.yaml                                | 283 ++++++++++++++++++
+ scripts/verify-template-generator.ts          |  97 ++++++
+ src/quickstart/get-started.md                 |   2 +-
+ src/template/generator.ts                     |  86 ++++--
+ src/template/index.md                         |   2 +-
+ src/zh/quickstart/get-started.md              |   2 +-
+ src/zh/template/index.md                      |   2 +-
+ 9 files changed, 458 insertions(+), 24 deletions(-)
+ create mode 100644 scripts/verify-template-generator.ts
+
+diff --git a/.vitepress/theme/components/TemplateGenerator.vue b/.vitepress/theme/components/TemplateGenerator.vue
+index 520a99f..e09e93b 100644
+--- a/.vitepress/theme/components/TemplateGenerator.vue
++++ b/.vitepress/theme/components/TemplateGenerator.vue
+@@ -66,7 +66,7 @@ const t = computed(() => ({
+ 
+ const modLoader = ref<PackInfo['modLoader']>('fabric')
+ const minecraftVersion = ref<SupportedMinecraftVersion>('26.2')
+-const kattonVersion = ref('0.3.1b3+mc26.2')
++const kattonVersion = ref('0.4.0+mc26.2')
+ const packId = ref('my_pack')
+ const packName = ref('My Pack')
+ const packVersion = ref('1.0.0')
+@@ -495,7 +495,7 @@ async function doGenerate() {
+       </button>
+ 
+       <p class="generator-footer">
+-        {{ t.footerBase }}{{ loaderLabel }}{{ t.footerSetup }}<code>build.gradle.kts</code>{{ t.footerPath }}<code>copyGameScripts</code>{{ t.footerRun }}
++        {{ t.footerBase }}{{ loaderLabel }}{{ t.footerSetup }}<code>gradle.properties</code>{{ t.footerPath }}<code>copyGameScripts</code>{{ t.footerRun }}
+       </p>
+     </div>
+   </div>
+diff --git a/package.json b/package.json
+index ded4746..6b02f1f 100644
+--- a/package.json
++++ b/package.json
+@@ -5,6 +5,7 @@
+   "scripts": {
+     "docs:dev": "node scripts/docs-dev.mjs",
+     "docs:build": "vitepress build",
++    "verify:template": "tsx scripts/verify-template-generator.ts",
+     "docs:preview": "vitepress preview"
+   },
+   "dependencies": {
+@@ -14,5 +15,8 @@
+     "vitepress": "^1.4.0",
+     "vitepress-carbon": "^1.5.0"
+   },
++  "devDependencies": {
++    "tsx": "^4.23.12"
++  },
+   "packageManager": "pnpm@10.8.0"
+ }
+diff --git a/pnpm-lock.yaml b/pnpm-lock.yaml
+index c0261ea..999b6be 100644
+--- a/pnpm-lock.yaml
++++ b/pnpm-lock.yaml
+@@ -23,6 +23,10 @@ importers:
+       vitepress-carbon:
+         specifier: ^1.5.0
+         version: 1.5.0(@algolia/client-search@5.49.1)(focus-trap@7.8.0)(search-insights@2.17.3)(typescript@5.9.3)
++    devDependencies:
++      tsx:
++        specifier: ^4.23.12
++        version: 4.23.12
+ 
+ packages:
+ 
+@@ -199,138 +203,294 @@ packages:
+     cpu: [ppc64]
+     os: [aix]
+ 
++  '@esbuild/aix-ppc64@0.28.2':
++    resolution: {integrity: sha512-XExcO+dvLKvVtNTibSTBej1NCAbaGhWn9Ww1ZPx80qsahhPFe/8jgWP0IchNe0F3HwkU7n8ejhH8bjonqht8mQ==}
++    engines: {node: '>=18'}
++    cpu: [ppc64]
++    os: [aix]
++
+   '@esbuild/android-arm64@0.21.5':
+     resolution: {integrity: sha512-c0uX9VAUBQ7dTDCjq+wdyGLowMdtR/GoC2U5IYk/7D1H1JYC0qseD7+11iMP2mRLN9RcCMRcjC4YMclCzGwS/A==}
+     engines: {node: '>=12'}
+     cpu: [arm64]
+     os: [android]
+ 
++  '@esbuild/android-arm64@0.28.2':
++    resolution: {integrity: sha512-5YfKeeI8qWfBZIX+u2xZC3Zlb3Os/gLS2sbEKM+I4ZOcsWmHS2WLysCcQZDAFRslDUU5Oiq44gf6PYN1vGwG5A==}
++    engines: {node: '>=18'}
++    cpu: [arm64]
++    os: [android]
++
+   '@esbuild/android-arm@0.21.5':
+     resolution: {integrity: sha512-vCPvzSjpPHEi1siZdlvAlsPxXl7WbOVUBBAowWug4rJHb68Ox8KualB+1ocNvT5fjv6wpkX6o/iEpbDrf68zcg==}
+     engines: {node: '>=12'}
+     cpu: [arm]
+     os: [android]
+ 
++  '@esbuild/android-arm@0.28.2':
++    resolution: {integrity: sha512-kXXoiPVVGQcnIYGOeaovwOURpniDBpSq4A03qkQ+BMQqtGG6HYap3xne9C1O1yo4TR3qxlCX5IqqmX6fFo2Lqg==}
++    engines: {node: '>=18'}
++    cpu: [arm]
++    os: [android]
++
+   '@esbuild/android-x64@0.21.5':
+     resolution: {integrity: sha512-D7aPRUUNHRBwHxzxRvp856rjUHRFW1SdQATKXH2hqA0kAZb1hKmi02OpYRacl0TxIGz/ZmXWlbZgjwWYaCakTA==}
+     engines: {node: '>=12'}
+     cpu: [x64]
+     os: [android]
+ 
++  '@esbuild/android-x64@0.28.2':
++    resolution: {integrity: sha512-O387ite7SzUyCcy3JQX4P4bLtEA7bLLkx+esve5JHnyYfNTxcVpXZo9jhdB0lTKN44gztELTdU7nS8Nr16Fs1Q==}
++    engines: {node: '>=18'}
++    cpu: [x64]
++    os: [android]
++
+   '@esbuild/darwin-arm64@0.21.5':
+     resolution: {integrity: sha512-DwqXqZyuk5AiWWf3UfLiRDJ5EDd49zg6O9wclZ7kUMv2WRFr4HKjXp/5t8JZ11QbQfUS6/cRCKGwYhtNAY88kQ==}
+     engines: {node: '>=12'}
+     cpu: [arm64]
+     os: [darwin]
+ 
++  '@esbuild/darwin-arm64@0.28.2':
++    resolution: {integrity: sha512-n4KqkOQrraxHJcgjM1RvwbigfQKIKJVpM7xp+KsxiyUSrRdIXnt73VhrPAx0fV44hgfmIVKjxMN9J1t5jySVkw==}
++    engines: {node: '>=18'}
++    cpu: [arm64]
++    os: [darwin]
++
+   '@esbuild/darwin-x64@0.21.5':
+     resolution: {integrity: sha512-se/JjF8NlmKVG4kNIuyWMV/22ZaerB+qaSi5MdrXtd6R08kvs2qCN4C09miupktDitvh8jRFflwGFBQcxZRjbw==}
+     engines: {node: '>=12'}
+     cpu: [x64]
+     os: [darwin]
+ 
++  '@esbuild/darwin-x64@0.28.2':
++    resolution: {integrity: sha512-uq6suIWYP37qzGddBKPw5QEQPi6HiLGsO7UmkpfyaYNQ3D+rN6w6WfwH+nuqcGXWvawGwxOEroO4YGnFh95azw==}
++    engines: {node: '>=18'}
++    cpu: [x64]
++    os: [darwin]
++
+   '@esbuild/freebsd-arm64@0.21.5':
+     resolution: {integrity: sha512-5JcRxxRDUJLX8JXp/wcBCy3pENnCgBR9bN6JsY4OmhfUtIHe3ZW0mawA7+RDAcMLrMIZaf03NlQiX9DGyB8h4g==}
+     engines: {node: '>=12'}
+     cpu: [arm64]
+     os: [freebsd]
+ 
++  '@esbuild/freebsd-arm64@0.28.2':
++    resolution: {integrity: sha512-n+I0BTSRIoy+d6RPKnEVwql5UwBJolytvY4mAOIEJorKlqgPII8ix6slVVrfZ5Tnj7glIZvloylbB/EJPMWEXw==}
++    engines: {node: '>=18'}
++    cpu: [arm64]
++    os: [freebsd]
++
+   '@esbuild/freebsd-x64@0.21.5':
+     resolution: {integrity: sha512-J95kNBj1zkbMXtHVH29bBriQygMXqoVQOQYA+ISs0/2l3T9/kj42ow2mpqerRBxDJnmkUDCaQT/dfNXWX/ZZCQ==}
+     engines: {node: '>=12'}
+     cpu: [x64]
+     os: [freebsd]
+ 
++  '@esbuild/freebsd-x64@0.28.2':
++    resolution: {integrity: sha512-78XJTJkvPs0kz2w61301PJjXl4g7q3JqiYMZ/M/yVI73EHBrCRTgkhu9oqG7vPqq+a/yadEW8aD+agKlk5xrmg==}
++    engines: {node: '>=18'}
++    cpu: [x64]
++    os: [freebsd]
++
+   '@esbuild/linux-arm64@0.21.5':
+     resolution: {integrity: sha512-ibKvmyYzKsBeX8d8I7MH/TMfWDXBF3db4qM6sy+7re0YXya+K1cem3on9XgdT2EQGMu4hQyZhan7TeQ8XkGp4Q==}
+     engines: {node: '>=12'}
+     cpu: [arm64]
+     os: [linux]
+ 
++  '@esbuild/linux-arm64@0.28.2':
++    resolution: {integrity: sha512-pW4AC0P3it8c7do9MVM4p51FzHzdM/TZrerurgRcHJ2WTa1VQ1CIq18xncfpBJw4ojkiZZrKW2yIBWBP92j6Ug==}
++    engines: {node: '>=18'}
++    cpu: [arm64]
++    os: [linux]
++
+   '@esbuild/linux-arm@0.21.5':
+     resolution: {integrity: sha512-bPb5AHZtbeNGjCKVZ9UGqGwo8EUu4cLq68E95A53KlxAPRmUyYv2D6F0uUI65XisGOL1hBP5mTronbgo+0bFcA==}
+     engines: {node: '>=12'}
+     cpu: [arm]
+     os: [linux]
+ 
++  '@esbuild/linux-arm@0.28.2':
++    resolution: {integrity: sha512-XlDnu2q5yoqems+xay6wSAcg9DDD7K9RLKZEBOMZm3ckNpJBvOX20tSfby8KfrrhINDyv9V2YVZKY/SpoGJI8w==}
++    engines: {node: '>=18'}
++    cpu: [arm]
++    os: [linux]
++
+   '@esbuild/linux-ia32@0.21.5':
+     resolution: {integrity: sha512-YvjXDqLRqPDl2dvRODYmmhz4rPeVKYvppfGYKSNGdyZkA01046pLWyRKKI3ax8fbJoK5QbxblURkwK/MWY18Tg==}
+     engines: {node: '>=12'}
+     cpu: [ia32]
+     os: [linux]
+ 
++  '@esbuild/linux-ia32@0.28.2':
++    resolution: {integrity: sha512-CYbnj78HsIeA+DhgUKgFCfvNsTHFhMMrinUrMZpDXJXKN8T3XViTZ/+wtHeVxEWY8ewSzTFN+nRmSwO2tZaLUQ==}
++    engines: {node: '>=18'}
++    cpu: [ia32]
++    os: [linux]
++
+   '@esbuild/linux-loong64@0.21.5':
+     resolution: {integrity: sha512-uHf1BmMG8qEvzdrzAqg2SIG/02+4/DHB6a9Kbya0XDvwDEKCoC8ZRWI5JJvNdUjtciBGFQ5PuBlpEOXQj+JQSg==}
+     engines: {node: '>=12'}
+     cpu: [loong64]
+     os: [linux]
+ 
++  '@esbuild/linux-loong64@0.28.2':
++    resolution: {integrity: sha512-buwkd8nsph4R+ajRvw0qM5Hja/TXQow3ptzWO2EbG/cqcIkHloRrdlBtQlshyYGTNFvfkfJ5tpPLVkY4DtsPfQ==}
++    engines: {node: '>=18'}
++    cpu: [loong64]
++    os: [linux]
++
+   '@esbuild/linux-mips64el@0.21.5':
+     resolution: {integrity: sha512-IajOmO+KJK23bj52dFSNCMsz1QP1DqM6cwLUv3W1QwyxkyIWecfafnI555fvSGqEKwjMXVLokcV5ygHW5b3Jbg==}
+     engines: {node: '>=12'}
+     cpu: [mips64el]
+     os: [linux]
+ 
++  '@esbuild/linux-mips64el@0.28.2':
++    resolution: {integrity: sha512-ZVykbDyk7519VwiNb9Lcj9m8XM6v5V9uKPvrEMkkEedVewf+0itkhahp4HDpgERXhwLRpWFypsGbG/J8s0QjJA==}
++    engines: {node: '>=18'}
++    cpu: [mips64el]
++    os: [linux]
++
+   '@esbuild/linux-ppc64@0.21.5':
+     resolution: {integrity: sha512-1hHV/Z4OEfMwpLO8rp7CvlhBDnjsC3CttJXIhBi+5Aj5r+MBvy4egg7wCbe//hSsT+RvDAG7s81tAvpL2XAE4w==}
+     engines: {node: '>=12'}
+     cpu: [ppc64]
+     os: [linux]
+ 
++  '@esbuild/linux-ppc64@0.28.2':
++    resolution: {integrity: sha512-CAXl+Dtd9UUuJd8pKKdwh6MLm3MUMiqMPmhZ3tTSXPqfyQ3vDl6R5hZdZ/kYojK4ofXtdfSv1tFq8XzWx3heNQ==}
++    engines: {node: '>=18'}
++    cpu: [ppc64]
++    os: [linux]
++
+   '@esbuild/linux-riscv64@0.21.5':
+     resolution: {integrity: sha512-2HdXDMd9GMgTGrPWnJzP2ALSokE/0O5HhTUvWIbD3YdjME8JwvSCnNGBnTThKGEB91OZhzrJ4qIIxk/SBmyDDA==}
+     engines: {node: '>=12'}
+     cpu: [riscv64]
+     os: [linux]
+ 
++  '@esbuild/linux-riscv64@0.28.2':
++    resolution: {integrity: sha512-GeXCej4IQtU1B+QlDV8W/RRvbzI3O/Stss+/bCXv4lZls5WGRtu2a+3JkA3i4qIUlMXpcHebWpF8AkJhATowuA==}
++    engines: {node: '>=18'}
++    cpu: [riscv64]
++    os: [linux]
++
+   '@esbuild/linux-s390x@0.21.5':
+     resolution: {integrity: sha512-zus5sxzqBJD3eXxwvjN1yQkRepANgxE9lgOW2qLnmr8ikMTphkjgXu1HR01K4FJg8h1kEEDAqDcZQtbrRnB41A==}
+     engines: {node: '>=12'}
+     cpu: [s390x]
+     os: [linux]
+ 
++  '@esbuild/linux-s390x@0.28.2':
++    resolution: {integrity: sha512-3H1weTYZPxt/WOhByszQZybS9w5lKzUn1FDMsgEChbHWQwHYQQRfBxgCcZvPhjHfKyJjIievvMmEUawJrdY9Dg==}
++    engines: {node: '>=18'}
++    cpu: [s390x]
++    os: [linux]
++
+   '@esbuild/linux-x64@0.21.5':
+     resolution: {integrity: sha512-1rYdTpyv03iycF1+BhzrzQJCdOuAOtaqHTWJZCWvijKD2N5Xu0TtVC8/+1faWqcP9iBCWOmjmhoH94dH82BxPQ==}
+     engines: {node: '>=12'}
+     cpu: [x64]
+     os: [linux]
+ 
++  '@esbuild/linux-x64@0.28.2':
++    resolution: {integrity: sha512-4xTZr1FUmSoQW4XIWmit3tzQrUTZM+N3P0XV8xROKYF50XfI7xeO90+1bZvNwxIufQ9hDQVRJH5YhgPVF8A/HQ==}
++    engines: {node: '>=18'}
++    cpu: [x64]
++    os: [linux]
++
++  '@esbuild/netbsd-arm64@0.28.2':
++    resolution: {integrity: sha512-sSATRjPeDBg3pdgHoQfoYBob11Kk1FGa9lui5RIHZCoCkJa9QKlvl3/vKz2usCmYYjs7ymJR/2Nnsqe+Hjt5nw==}
++    engines: {node: '>=18'}
++    cpu: [arm64]
++    os: [netbsd]
++
+   '@esbuild/netbsd-x64@0.21.5':
+     resolution: {integrity: sha512-Woi2MXzXjMULccIwMnLciyZH4nCIMpWQAs049KEeMvOcNADVxo0UBIQPfSmxB3CWKedngg7sWZdLvLczpe0tLg==}
+     engines: {node: '>=12'}
+     cpu: [x64]
+     os: [netbsd]
+ 
++  '@esbuild/netbsd-x64@0.28.2':
++    resolution: {integrity: sha512-lqnzCV+mM0gIADaKihiCg6ifgfU2L3h5E33rNQBN1Y4MaVGnzryzmvvf7UHxprpQdE8hpqLolJ9Rl+SkIRDpyw==}
++    engines: {node: '>=18'}
++    cpu: [x64]
++    os: [netbsd]
++
++  '@esbuild/openbsd-arm64@0.28.2':
++    resolution: {integrity: sha512-AL2qJILH7lNjrDmCQDvdxMfAUIv8KMNZOvrwAQ8i8//ntL9FflhOyMJ8OZSMBb8/AWXe3/5v5S20y3zCoZWKoQ==}
++    engines: {node: '>=18'}
++    cpu: [arm64]
++    os: [openbsd]
++
+   '@esbuild/openbsd-x64@0.21.5':
+     resolution: {integrity: sha512-HLNNw99xsvx12lFBUwoT8EVCsSvRNDVxNpjZ7bPn947b8gJPzeHWyNVhFsaerc0n3TsbOINvRP2byTZ5LKezow==}
+     engines: {node: '>=12'}
+     cpu: [x64]
+     os: [openbsd]
+ 
++  '@esbuild/openbsd-x64@0.28.2':
++    resolution: {integrity: sha512-QtiuPytchRyC4rwUKhexJdQKvDuZ6hWloi3igqPQNUJCS1/v9EiO3UTOXR6A3FoMo4fnAKbWJdqaIwhOzh8qEw==}
++    engines: {node: '>=18'}
++    cpu: [x64]
++    os: [openbsd]
++
++  '@esbuild/openharmony-arm64@0.28.2':
++    resolution: {integrity: sha512-WkhYDmpTjLvGlScA1rwjRUmhl4k8oXR3cIbtqWmELgU/dFeHHlEllxDvdWcNJV9rbzCexB5vz8gtNewWLgCT7Q==}
++    engines: {node: '>=18'}
++    cpu: [arm64]
++    os: [openharmony]
++
+   '@esbuild/sunos-x64@0.21.5':
+     resolution: {integrity: sha512-6+gjmFpfy0BHU5Tpptkuh8+uw3mnrvgs+dSPQXQOv3ekbordwnzTVEb4qnIvQcYXq6gzkyTnoZ9dZG+D4garKg==}
+     engines: {node: '>=12'}
+     cpu: [x64]
+     os: [sunos]
+ 
++  '@esbuild/sunos-x64@0.28.2':
++    resolution: {integrity: sha512-GPMSkTOtMnv2U2F8gxe4Io6qmVs+YKyp832Etqqxr0hFngmXQ3rzwytelm3GIn7T4VviRUlf3sOgBOiTdvaf7g==}
++    engines: {node: '>=18'}
++    cpu: [x64]
++    os: [sunos]
++
+   '@esbuild/win32-arm64@0.21.5':
+     resolution: {integrity: sha512-Z0gOTd75VvXqyq7nsl93zwahcTROgqvuAcYDUr+vOv8uHhNSKROyU961kgtCD1e95IqPKSQKH7tBTslnS3tA8A==}
+     engines: {node: '>=12'}
+     cpu: [arm64]
+     os: [win32]
+ 
++  '@esbuild/win32-arm64@0.28.2':
++    resolution: {integrity: sha512-PIhhEkE9uPBleRBrQEJpUn7MBnibZzbGzYWPmY3x+YoVg/95zbjB4CxPPOQ8l5tYYM4mMaCthF8/1DIfBQQyWQ==}
++    engines: {node: '>=18'}
++    cpu: [arm64]
++    os: [win32]
++
+   '@esbuild/win32-ia32@0.21.5':
+     resolution: {integrity: sha512-SWXFF1CL2RVNMaVs+BBClwtfZSvDgtL//G/smwAc5oVK/UPu2Gu9tIaRgFmYFFKrmg3SyAjSrElf0TiJ1v8fYA==}
+     engines: {node: '>=12'}
+     cpu: [ia32]
+     os: [win32]
+ 
++  '@esbuild/win32-ia32@0.28.2':
++    resolution: {integrity: sha512-YmJbfTlvU7Sdn9BB+4PRES4oB6pxgS37MAONj+hBr/cpXS1aBPKXxNnDbu+QCWPj0o9dgyxeq79g6c5P8KeuYA==}
++    engines: {node: '>=18'}
++    cpu: [ia32]
++    os: [win32]
++
+   '@esbuild/win32-x64@0.21.5':
+     resolution: {integrity: sha512-tQd/1efJuzPC6rCFwEvLtci/xNFcTZknmXs98FYDfGE4wP9ClFV98nyKrzJKVPMhdDnjzLhdUyMX4PsQAPjwIw==}
+     engines: {node: '>=12'}
+     cpu: [x64]
+     os: [win32]
+ 
++  '@esbuild/win32-x64@0.28.2':
++    resolution: {integrity: sha512-5ebpxr3nWMzrL/rnUI755Jkuee0bHL/Gq0WTF9lvcpv73wAp5eu8MfBUgWK9bhWvZjj7yX8etf/8tI8Ney695g==}
++    engines: {node: '>=18'}
++    cpu: [x64]
++    os: [win32]
++
+   '@floating-ui/core@1.7.5':
+     resolution: {integrity: sha512-1Ih4WTWyw0+lKyFMcBHGbb5U5FtuHJuujoyyr5zTaWS5EYMeT6Jb2AuDeftsCsEuchO+mM2ij5+q9crhydzLhQ==}
+ 
+@@ -776,6 +936,11 @@ packages:
+     engines: {node: '>=12'}
+     hasBin: true
+ 
++  esbuild@0.28.2:
++    resolution: {integrity: sha512-HKVLS8dvII+xoKW9kmqxbRKrnWEXfJJr/FZhhJmiqIB0e053QNYFqOBouTMO/k5sID4MvCiUCvv8b9M4h32wIA==}
++    engines: {node: '>=18'}
++    hasBin: true
++
+   estree-walker@2.0.2:
+     resolution: {integrity: sha512-Rfkk/Mp/DL7JVje3u18FxFujQlTNR2q6QfMSMB7AvCBx91NGj/ba3kCfza0f6dVDbw7YlRf/nDrn7pQrCCyQ/w==}
+ 
+@@ -1011,6 +1176,11 @@ packages:
+   trim-lines@3.0.1:
+     resolution: {integrity: sha512-kRj8B+YHZCc9kQYdWfJB2/oUl9rA99qbowYYBtr4ui4mZyAQ2JpvVBd/6U2YloATfqBhBTSMhTpgBHtU0Mf3Rg==}
+ 
++  tsx@4.23.12:
++    resolution: {integrity: sha512-FDf4L4sYzKtzWYhU/Xm0AQFdTjdIxNo9ElTf2mxXM6k8YMHXzYUe4yODVaXP4V9uMFbVg8c0qyBccK2OOxb45Q==}
++    engines: {node: '>=18.0.0'}
++    hasBin: true
++
+   typescript@5.9.3:
+     resolution: {integrity: sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw==}
+     engines: {node: '>=14.17'}
+@@ -1346,72 +1516,150 @@ snapshots:
+   '@esbuild/aix-ppc64@0.21.5':
+     optional: true
+ 
++  '@esbuild/aix-ppc64@0.28.2':
++    optional: true
++
+   '@esbuild/android-arm64@0.21.5':
+     optional: true
+ 
++  '@esbuild/android-arm64@0.28.2':
++    optional: true
++
+   '@esbuild/android-arm@0.21.5':
+     optional: true
+ 
++  '@esbuild/android-arm@0.28.2':
++    optional: true
++
+   '@esbuild/android-x64@0.21.5':
+     optional: true
+ 
++  '@esbuild/android-x64@0.28.2':
++    optional: true
++
+   '@esbuild/darwin-arm64@0.21.5':
+     optional: true
+ 
++  '@esbuild/darwin-arm64@0.28.2':
++    optional: true
++
+   '@esbuild/darwin-x64@0.21.5':
+     optional: true
+ 
++  '@esbuild/darwin-x64@0.28.2':
++    optional: true
++
+   '@esbuild/freebsd-arm64@0.21.5':
+     optional: true
+ 
++  '@esbuild/freebsd-arm64@0.28.2':
++    optional: true
++
+   '@esbuild/freebsd-x64@0.21.5':
+     optional: true
+ 
++  '@esbuild/freebsd-x64@0.28.2':
++    optional: true
++
+   '@esbuild/linux-arm64@0.21.5':
+     optional: true
+ 
++  '@esbuild/linux-arm64@0.28.2':
++    optional: true
++
+   '@esbuild/linux-arm@0.21.5':
+     optional: true
+ 
++  '@esbuild/linux-arm@0.28.2':
++    optional: true
++
+   '@esbuild/linux-ia32@0.21.5':
+     optional: true
+ 
++  '@esbuild/linux-ia32@0.28.2':
++    optional: true
++
+   '@esbuild/linux-loong64@0.21.5':
+     optional: true
+ 
++  '@esbuild/linux-loong64@0.28.2':
++    optional: true
++
+   '@esbuild/linux-mips64el@0.21.5':
+     optional: true
+ 
++  '@esbuild/linux-mips64el@0.28.2':
++    optional: true
++
+   '@esbuild/linux-ppc64@0.21.5':
+     optional: true
+ 
++  '@esbuild/linux-ppc64@0.28.2':
++    optional: true
++
+   '@esbuild/linux-riscv64@0.21.5':
+     optional: true
+ 
++  '@esbuild/linux-riscv64@0.28.2':
++    optional: true
++
+   '@esbuild/linux-s390x@0.21.5':
+     optional: true
+ 
++  '@esbuild/linux-s390x@0.28.2':
++    optional: true
++
+   '@esbuild/linux-x64@0.21.5':
+     optional: true
+ 
++  '@esbuild/linux-x64@0.28.2':
++    optional: true
++
++  '@esbuild/netbsd-arm64@0.28.2':
++    optional: true
++
+   '@esbuild/netbsd-x64@0.21.5':
+     optional: true
+ 
++  '@esbuild/netbsd-x64@0.28.2':
++    optional: true
++
++  '@esbuild/openbsd-arm64@0.28.2':
++    optional: true
++
+   '@esbuild/openbsd-x64@0.21.5':
+     optional: true
+ 
++  '@esbuild/openbsd-x64@0.28.2':
++    optional: true
++
++  '@esbuild/openharmony-arm64@0.28.2':
++    optional: true
++
+   '@esbuild/sunos-x64@0.21.5':
+     optional: true
+ 
++  '@esbuild/sunos-x64@0.28.2':
++    optional: true
++
+   '@esbuild/win32-arm64@0.21.5':
+     optional: true
+ 
++  '@esbuild/win32-arm64@0.28.2':
++    optional: true
++
+   '@esbuild/win32-ia32@0.21.5':
+     optional: true
+ 
++  '@esbuild/win32-ia32@0.28.2':
++    optional: true
++
+   '@esbuild/win32-x64@0.21.5':
+     optional: true
+ 
++  '@esbuild/win32-x64@0.28.2':
++    optional: true
++
+   '@floating-ui/core@1.7.5':
+     dependencies:
+       '@floating-ui/utils': 0.2.11
+@@ -1823,6 +2071,35 @@ snapshots:
+       '@esbuild/win32-ia32': 0.21.5
+       '@esbuild/win32-x64': 0.21.5
+ 
++  esbuild@0.28.2:
++    optionalDependencies:
++      '@esbuild/aix-ppc64': 0.28.2
++      '@esbuild/android-arm': 0.28.2
++      '@esbuild/android-arm64': 0.28.2
++      '@esbuild/android-x64': 0.28.2
++      '@esbuild/darwin-arm64': 0.28.2
++      '@esbuild/darwin-x64': 0.28.2
++      '@esbuild/freebsd-arm64': 0.28.2
++      '@esbuild/freebsd-x64': 0.28.2
++      '@esbuild/linux-arm': 0.28.2
++      '@esbuild/linux-arm64': 0.28.2
++      '@esbuild/linux-ia32': 0.28.2
++      '@esbuild/linux-loong64': 0.28.2
++      '@esbuild/linux-mips64el': 0.28.2
++      '@esbuild/linux-ppc64': 0.28.2
++      '@esbuild/linux-riscv64': 0.28.2
++      '@esbuild/linux-s390x': 0.28.2
++      '@esbuild/linux-x64': 0.28.2
++      '@esbuild/netbsd-arm64': 0.28.2
++      '@esbuild/netbsd-x64': 0.28.2
++      '@esbuild/openbsd-arm64': 0.28.2
++      '@esbuild/openbsd-x64': 0.28.2
++      '@esbuild/openharmony-arm64': 0.28.2
++      '@esbuild/sunos-x64': 0.28.2
++      '@esbuild/win32-arm64': 0.28.2
++      '@esbuild/win32-ia32': 0.28.2
++      '@esbuild/win32-x64': 0.28.2
++
+   estree-walker@2.0.2: {}
+ 
+   fdir@6.5.0(picomatch@4.0.3):
+@@ -2095,6 +2372,12 @@ snapshots:
+ 
+   trim-lines@3.0.1: {}
+ 
++  tsx@4.23.12:
++    dependencies:
++      esbuild: 0.28.2
++    optionalDependencies:
++      fsevents: 2.3.3
++
+   typescript@5.9.3: {}
+ 
+   uc.micro@2.1.0: {}
+diff --git a/scripts/verify-template-generator.ts b/scripts/verify-template-generator.ts
+new file mode 100644
+index 0000000..822eb36
+--- /dev/null
++++ b/scripts/verify-template-generator.ts
+@@ -0,0 +1,97 @@
++import assert from 'node:assert/strict'
++
++import JSZip from 'jszip'
++
++import {
++  fetchKattonVersions,
++  generateZip,
++  type PackInfo,
++  type SupportedMinecraftVersion,
++} from '../src/template/generator'
++
++const platformVersions = {
++  '26.1.2': {
++    fabricApi: '0.144.0+26.1',
++    neoForge: '26.1.2.30-beta',
++    paper: '26.1.2.build.71-stable',
++  },
++  '26.2': {
++    fabricApi: '0.154.0+26.2',
++    neoForge: '26.2.0.7-beta',
++    paper: '26.2.build.41-alpha',
++  },
++} satisfies Record<SupportedMinecraftVersion, object>
++
++globalThis.fetch = async () => new Response(new Uint8Array([0x50, 0x4b]))
++
++async function main() {
++  const versions = await fetchKattonVersions()
++  for (const minecraftVersion of Object.keys(platformVersions) as SupportedMinecraftVersion[]) {
++    const mavenVersion = `0.4.0+mc${minecraftVersion}`
++    const release = versions.find(version =>
++      version.mavenVersion === mavenVersion && version.minecraftVersion === minecraftVersion
++    )
++    assert.ok(release, `missing ${mavenVersion}`)
++    assert.deepEqual(release.loaders, ['fabric', 'neoforge', 'paper'])
++
++    for (const modLoader of release.loaders) {
++      const info: PackInfo = {
++        modLoader,
++        minecraftVersion,
++        kattonVersion: mavenVersion,
++        packId: 'verification_pack',
++        packName: 'Verification Pack',
++        packVersion: '1.0.0',
++        authors: 'Katton',
++        description: 'Template verification fixture',
++        signing: modLoader !== 'paper',
++        dependencies: [],
++      }
++      const generated = await generateZip(info)
++      const zip = await JSZip.loadAsync(await generated.arrayBuffer())
++      const root = 'verification_pack/'
++      const read = async (path: string) => {
++        const file = zip.file(`${root}${path}`)
++        assert.ok(file, `missing ${modLoader}/${minecraftVersion} ${path}`)
++        return file.async('string')
++      }
++
++      const build = await read('build.gradle.kts')
++      const moduleName = modLoader === 'paper' ? 'paper' : modLoader
++      assert.ok(build.includes(`katton-${moduleName}:` + '${kattonVersion}'))
++      assert.match(build, /configuredDirectories\("kattonWorldScriptsDir"\)/)
++      assert.match(await read('settings.gradle.kts'), /maven\("https:\/\/nexus\.mcfpp\.top\/repository\/maven-public\/"\)/)
++
++      if (modLoader === 'fabric') {
++        assert.match(build, /id\("net\.fabricmc\.fabric-loom"\) version "1\.15-SNAPSHOT"/)
++        assert.match(build, /minecraft\("com\.mojang:minecraft:\$\{minecraftVersion\}"\)/)
++        assert.match(build, new RegExp(platformVersions[minecraftVersion].fabricApi.replaceAll('.', '\\.').replace('+', '\\+')))
++      } else if (modLoader === 'neoforge') {
++        assert.match(build, /id\("net\.neoforged\.moddev"\) version "2\.0\.141"/)
++        assert.match(build, new RegExp(`version = "${platformVersions[minecraftVersion].neoForge.replaceAll('.', '\\.')}"`))
++      } else {
++        assert.match(build, new RegExp(platformVersions[minecraftVersion].paper.replaceAll('.', '\\.').replace('+', '\\+')))
++      }
++
++      assert.match(await read('world_scripts/Main.kt'), /@ServerScriptEntrypoint\(ServerPhase\.READY\)/)
++      if (modLoader === 'paper') {
++        assert.equal(zip.file(`${root}world_scripts/ClientMain.kt`), null)
++      } else {
++        assert.match(await read('world_scripts/ClientMain.kt'), /@ClientScriptEntrypoint\(ClientPhase\.JOINED\)/)
++      }
++
++      const worldManifest = JSON.parse(await read('world_scripts/manifest.json'))
++      const globalManifest = JSON.parse(await read('global_scripts/manifest.json'))
++      assert.deepEqual(worldManifest.dependencies, [])
++      assert.deepEqual(globalManifest.dependencies, [])
++      assert.match(await read('gradle.properties'), /kattonWorldScriptsDir=/)
++    }
++  }
++
++  console.log('Verified Katton 0.4.0 templates for Fabric, NeoForge, and Paper on both Minecraft targets.')
++}
++
++main().catch(error => {
++  console.error(error)
++  process.exitCode = 1
++})
+diff --git a/src/quickstart/get-started.md b/src/quickstart/get-started.md
+index fb3abee..ae0d578 100644
+--- a/src/quickstart/get-started.md
++++ b/src/quickstart/get-started.md
+@@ -31,7 +31,7 @@ To make things simple, we'll only use `world_scripts/` in this tutorial.
+    figure-width="400px"
+ />
+ 
+-Before we start, we need to include Minecraft classes in our project for IDE code completion. The template generator selects Katton and platform dependencies for the chosen Minecraft version. For Fabric and NeoForge, copy the official game jar for that exact version into the generated project's `lib/` folder. Add external mods or plugins in the generator's dependency section, then provide their API through a Gradle `compileOnly` dependency or another jar in `lib/`.
++Before we start, we need to include Minecraft classes in our project for IDE code completion. The template generator selects Katton and platform dependencies for the chosen Minecraft version. Fabric Loom and NeoForge ModDevGradle supply the matching Minecraft compile classpath automatically. Add external mods or plugins in the generator's dependency section, then provide their API through a Gradle `compileOnly` dependency or another jar in `lib/`.
+ 
+ > [!NOTE]
+ > For Paper, you don't need to manually include Minecraft source code. Paper provides a lightweight plugin development environment, and you can simply add the following to your `build.gradle.kts` to get access to the Paper API and Minecraft source code:
+diff --git a/src/template/generator.ts b/src/template/generator.ts
+index 3982584..37ba0a1 100644
+--- a/src/template/generator.ts
++++ b/src/template/generator.ts
+@@ -23,28 +23,34 @@ export interface PackInfo {
+ }
+ 
+ const WRAPPER_JAR_URL =
+-  'https://raw.githubusercontent.com/FabricMC/fabric-example-mod/refs/heads/master/gradle/wrapper/gradle-wrapper.jar'
++  'https://raw.githubusercontent.com/FabricMC/fabric-example-mod/refs/heads/26.2/gradle/wrapper/gradle-wrapper.jar'
+ 
+ export type SupportedMinecraftVersion = '26.1.2' | '26.2'
+ 
+ interface PlatformVersions {
+   fabricApiVersion: string
++  neoForgeVersion: string
+   paperDevBundleVersion: string
+ }
+ 
+ const PLATFORM_VERSIONS: Record<SupportedMinecraftVersion, PlatformVersions> = {
+   '26.1.2': {
+     fabricApiVersion: '0.144.0+26.1',
++    neoForgeVersion: '26.1.2.30-beta',
+     paperDevBundleVersion: '26.1.2.build.71-stable',
+   },
+   '26.2': {
+     fabricApiVersion: '0.154.0+26.2',
++    neoForgeVersion: '26.2.0.7-beta',
+     paperDevBundleVersion: '26.2.build.41-alpha',
+   },
+ }
+ 
+ const KOTLIN_PLUGIN_VERSION = '2.3.10'
+ const KATTON_SIGN_PLUGIN_VERSION = '1.0.0'
++const FABRIC_LOOM_VERSION = '1.15-SNAPSHOT'
++const FABRIC_LOADER_VERSION = '0.18.4'
++const NEOFORGE_MODDEV_VERSION = '2.0.141'
+ const PAPERWEIGHT_VERSION = '2.0.0-beta.21'
+ 
+ function platformVersions(minecraftVersion: SupportedMinecraftVersion): PlatformVersions {
+@@ -202,16 +208,23 @@ import java.nio.file.Path
+ 
+ plugins {
+     id("org.jetbrains.kotlin.jvm") version "${KOTLIN_PLUGIN_VERSION}"
++    id("net.fabricmc.fabric-loom") version "${FABRIC_LOOM_VERSION}"
+     ${info.signing ? `id("top.katton.sign") version "${KATTON_SIGN_PLUGIN_VERSION}"` : ''}
+ }
+ 
+ val minecraftVersion = "${info.minecraftVersion}"
+ val kattonVersion = "${info.kattonVersion}"
+ val fabricApiVersion = "${versions.fabricApiVersion}"
+-val worldScriptsTargetDir: List<File> = listOf(
+-    file("/path/to/your/world/kattonpacks/${info.packId}/")
+-)
+-val globalScriptsTargetDir: List<File> = listOf()
++val fabricLoaderVersion = "${FABRIC_LOADER_VERSION}"
++fun configuredDirectories(propertyName: String): List<File> =
++    providers.gradleProperty(propertyName).orNull
++        ?.split(File.pathSeparatorChar)
++        ?.filter(String::isNotBlank)
++        ?.map(::file)
++        .orEmpty()
++
++val worldScriptsTargetDir = configuredDirectories("kattonWorldScriptsDir")
++val globalScriptsTargetDir = configuredDirectories("kattonGlobalScriptsDir")
+ 
+ ${info.signing ? signingTasks(info): ''}
+ 
+@@ -224,12 +237,14 @@ repositories {
+ }
+ 
+ dependencies {
++    minecraft("com.mojang:minecraft:\${minecraftVersion}")
++    implementation("net.fabricmc:fabric-loader:\${fabricLoaderVersion}")
+     implementation("top.katton:katton-common:\${kattonVersion}")
+     implementation("top.katton:katton-fabric:\${kattonVersion}")
+     compileOnly(fileTree("lib") {
+         include("*.jar")
+     })
+-    compileOnly("net.fabricmc.fabric-api:fabric-api:\${fabricApiVersion}")
++    implementation("net.fabricmc.fabric-api:fabric-api:\${fabricApiVersion}")
+     compileOnly("com.mojang:brigadier:1.3.10")
+     compileOnly("org.joml:joml:1.10.8")
+     compileOnly("com.google.code.gson:gson:2.13.2")
+@@ -249,20 +264,31 @@ ${info.signing ? SIGN_AND_COPY_TASK : ''}
+ }
+ 
+ function neoforgeBuildGradle(info: PackInfo): string {
++  const versions = platformVersions(info.minecraftVersion)
+   return `import java.nio.file.Files
+ import java.nio.file.Path
+ 
+ plugins {
+     id("org.jetbrains.kotlin.jvm") version "${KOTLIN_PLUGIN_VERSION}"
++    id("net.neoforged.moddev") version "${NEOFORGE_MODDEV_VERSION}"
+     ${info.signing ? `id("top.katton.sign") version "${KATTON_SIGN_PLUGIN_VERSION}"` : ''}
+ }
+ 
+ val minecraftVersion = "${info.minecraftVersion}"
+ val kattonVersion = "${info.kattonVersion}"
+-val worldScriptsTargetDir: List<File> = listOf(
+-    file("/path/to/your/world/kattonpacks/${info.packId}/")
+-)
+-val globalScriptsTargetDir: List<File> = listOf()
++fun configuredDirectories(propertyName: String): List<File> =
++    providers.gradleProperty(propertyName).orNull
++        ?.split(File.pathSeparatorChar)
++        ?.filter(String::isNotBlank)
++        ?.map(::file)
++        .orEmpty()
++
++val worldScriptsTargetDir = configuredDirectories("kattonWorldScriptsDir")
++val globalScriptsTargetDir = configuredDirectories("kattonGlobalScriptsDir")
++
++neoForge {
++    version = "${versions.neoForgeVersion}"
++}
+ 
+ ${info.signing ? signingTasks(info): ''}
+ 
+@@ -309,10 +335,15 @@ plugins {
+ 
+ val minecraftVersion = "${info.minecraftVersion}"
+ val kattonVersion = "${info.kattonVersion}"
+-val worldScriptsTargetDir: List<File> = listOf(
+-    file("/path/to/your/paper/world/kattonpacks/${info.packId}/")
+-)
+-val globalScriptsTargetDir: List<File> = listOf()
++fun configuredDirectories(propertyName: String): List<File> =
++    providers.gradleProperty(propertyName).orNull
++        ?.split(File.pathSeparatorChar)
++        ?.filter(String::isNotBlank)
++        ?.map(::file)
++        .orEmpty()
++
++val worldScriptsTargetDir = configuredDirectories("kattonWorldScriptsDir")
++val globalScriptsTargetDir = configuredDirectories("kattonGlobalScriptsDir")
+ 
+ repositories {
+     mavenLocal()
+@@ -345,6 +376,8 @@ function settingsGradleKts(info: PackInfo): string {
+         mavenLocal()
+         mavenCentral()
+         gradlePluginPortal()
++        maven("https://maven.fabricmc.net/")
++        maven("https://maven.neoforged.net/releases")
+         maven("https://repo.papermc.io/repository/maven-public/")
+         maven("https://nexus.mcfpp.top/repository/maven-public/")
+     }
+@@ -621,6 +654,22 @@ export interface KattonVersion {
+ // New multi-Minecraft publications include +mc<version>; legacy publications
+ // deliberately keep their original unqualified versions.
+ const KATTON_VERSIONS: KattonVersion[] = [
++  {
++    tag: '0.4.0',
++    mavenVersion: '0.4.0+mc26.2',
++    minecraftVersion: '26.2',
++    loaders: ['fabric', 'neoforge', 'paper'],
++    prerelease: true,
++    legacyMavenCoordinate: false,
++  },
++  {
++    tag: '0.4.0',
++    mavenVersion: '0.4.0+mc26.1.2',
++    minecraftVersion: '26.1.2',
++    loaders: ['fabric', 'neoforge', 'paper'],
++    prerelease: true,
++    legacyMavenCoordinate: false,
++  },
+   {
+     tag: '0.3.1b3',
+     mavenVersion: '0.3.1b3+mc26.2',
+@@ -707,6 +756,10 @@ export async function generateZip(
+     `${rootDir}gradle/wrapper/gradle-wrapper.properties`,
+     gradleWrapperProperties()
+   )
++  zip.file(
++    `${rootDir}gradle.properties`,
++    `# Set one target directory, or multiple directories separated by your OS path separator.\nkattonWorldScriptsDir=\nkattonGlobalScriptsDir=\n`
++  )
+ 
+   // 4. Gradlew scripts
+   zip.file(`${rootDir}gradlew`, gradlewScript())
+@@ -767,14 +820,11 @@ function readmeTemplate(info: PackInfo): string {
+         : 'Paper'
+   const copyTask = info.signing ? 'signAndCopyGameScripts' : 'copyGameScripts'
+   const setupInstructions = [
+-    ...(info.modLoader === 'paper'
+-      ? []
+-      : ['Copy the official Minecraft jar for the selected version into `lib/`']),
+     'Open this project in IntelliJ IDEA',
+     ...(info.dependencies.length > 0
+       ? ['Add each declared mod or plugin API to the Gradle compile classpath or place its jar in `lib/`']
+       : []),
+-    'Edit `build.gradle.kts` to configure `worldScriptsTargetDir` and `globalScriptsTargetDir`',
++    'Set `kattonWorldScriptsDir` and `kattonGlobalScriptsDir` in `gradle.properties`',
+     `Run the \`${copyTask}\` Gradle task to link your scripts into the ${info.modLoader === 'paper' ? 'server' : 'game'}`,
+   ]
+   const setupSteps = setupInstructions
+diff --git a/src/template/index.md b/src/template/index.md
+index 69292c8..a3066c0 100644
+--- a/src/template/index.md
++++ b/src/template/index.md
+@@ -8,7 +8,7 @@ layout: page
+ import TemplateGenerator from '../../.vitepress/theme/components/TemplateGenerator.vue'
+ </script>
+ 
+-Choose the exact Minecraft target before choosing Katton. Current Maven builds use a Minecraft-qualified version such as `0.3.1b3+mc26.2`; legacy builds such as `0.3.0` keep their original unqualified Maven version. The generator selects the correct coordinate automatically.
++Choose the exact Minecraft target before choosing Katton. Katton 0.4.0 builds use a Minecraft-qualified version such as `0.4.0+mc26.2`; legacy builds such as `0.3.0` keep their original unqualified Maven version. The generator selects the correct coordinate automatically.
+ 
+ Add every mod or Paper plugin used by your world scripts in the dependency section. The generator writes platform-aware entries to `world_scripts/manifest.json`, leaves the empty global pack with `dependencies: []`, and prepares a `lib/*.jar` compile-only fallback. A manifest declaration validates runtime availability; it does not download the dependency API for your IDE.
+ 
+diff --git a/src/zh/quickstart/get-started.md b/src/zh/quickstart/get-started.md
+index f5dbd34..d2b9561 100644
+--- a/src/zh/quickstart/get-started.md
++++ b/src/zh/quickstart/get-started.md
+@@ -31,7 +31,7 @@ Katton 会从 `kattonpacks/` 目录中加载 Kotlin 脚本包（详见[脚本包
+    figure-width="400px"
+ />
+ 
+-开始前，我们需要把 Minecraft 类引入项目以便 IDE 代码补全。模板生成器会根据选择的 Minecraft 版本配置 Katton 与平台依赖。Fabric 和 NeoForge 项目还需要把该版本的官方游戏 jar 复制到生成项目的 `lib/` 目录。请在生成器的依赖区域添加外部模组或插件，再通过 Gradle `compileOnly` 或 `lib/` 中的额外 JAR 提供其 API。
++开始前，我们需要把 Minecraft 类引入项目以便 IDE 代码补全。模板生成器会根据选择的 Minecraft 版本配置 Katton 与平台依赖；Fabric Loom 和 NeoForge ModDevGradle 会自动提供匹配的 Minecraft 编译类路径。请在生成器的依赖区域添加外部模组或插件，再通过 Gradle `compileOnly` 或 `lib/` 中的额外 JAR 提供其 API。
+ 
+ > [!NOTE]
+ > 对于Paper端，则不需要使用这样的方法引入Minecraft源码。Paper提供了一个轻量级插件开发环境，可以直接在build.gradle.kts中添加
+diff --git a/src/zh/template/index.md b/src/zh/template/index.md
+index b82e282..71c28d2 100644
+--- a/src/zh/template/index.md
++++ b/src/zh/template/index.md
+@@ -8,7 +8,7 @@ layout: page
+ import TemplateGenerator from '../../../.vitepress/theme/components/TemplateGenerator.vue'
+ </script>
+ 
+-请先选择准确的 Minecraft 目标版本，再选择 Katton。新版 Maven 产物使用 `0.3.1b3+mc26.2` 这样的带 MC 标识版本；`0.3.0` 等旧产物仍保留不带 MC 标识的原坐标。生成器会自动选择正确的依赖版本。
++请先选择准确的 Minecraft 目标版本，再选择 Katton。Katton 0.4.0 的 Maven 产物使用 `0.4.0+mc26.2` 这样的带 MC 标识版本；`0.3.0` 等旧产物仍保留不带 MC 标识的原坐标。生成器会自动选择正确的依赖版本。
+ 
+ 请在依赖区域添加世界脚本使用的每个模组或 Paper 插件。生成器会把与所选平台匹配的条目写入 `world_scripts/manifest.json`，让空的全局包保留 `dependencies: []`，并准备 `lib/*.jar` 的 compile-only 后备配置。清单声明负责校验运行时可用性，不会自动为 IDE 下载依赖 API。
+ 
+-- 
+2.31.1.windows.1
+

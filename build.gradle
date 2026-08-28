@@ -1,10 +1,23 @@
- import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
+import groovy.json.JsonSlurper
+import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
+
+import java.nio.charset.StandardCharsets
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
+import java.security.MessageDigest
+import java.util.jar.JarFile
 
 plugins {
 	id 'maven-publish'
-	id "org.jetbrains.kotlin.jvm" version "2.3.10"
-	id "org.jetbrains.dokka" version "2.1.0"
+		id "org.jetbrains.kotlin.jvm" version "2.3.10"
+		id "org.jetbrains.dokka" version "2.1.0"
     id 'net.fabricmc.fabric-loom' version "${loom_version}"
+    // Declare Paper build plugins once so Stonecutter version projects share a
+    // single plugin classloader. Applying versioned copies in both version
+    // projects can mix incompatible kotlinx.serialization internals.
+    id 'com.gradleup.shadow' version '8.3.10' apply false
+    id 'io.papermc.paperweight.userdev' version '2.0.0-beta.21' apply false
+    id 'xyz.jpenilla.run-paper' version '3.0.2' apply false
     id 'top.katton.api-doc-generator'
 }
 
@@ -110,18 +123,23 @@ subprojects {
         }
 
         afterEvaluate {
-            def publication = publishing.publications.findByName('mavenJava')
-            if (publication == null) {
-                publication = publishing.publications.create('mavenJava', MavenPublication)
-            }
+            // java-gradle-plugin owns the sign plugin's implementation and marker
+            // publications. Creating a second publication from the same Java
+            // component removes artifacts from Gradle's generated plugin metadata.
+            if (!project.plugins.hasPlugin('java-gradle-plugin')) {
+                def publication = publishing.publications.findByName('mavenJava')
+                if (publication == null) {
+                    publication = publishing.publications.create('mavenJava', MavenPublication)
+                }
 
-            def publicationComponent = project.findProperty('useLeanMavenPublication') ? null : components.findByName('java')
-            if (publicationComponent != null && publication.artifacts.empty) {
-                publication.from publicationComponent
-            }
+                def publicationComponent = project.findProperty('useLeanMavenPublication') ? null : components.findByName('java')
+                if (publicationComponent != null && publication.artifacts.empty) {
+                    publication.from publicationComponent
+                }
 
-            def moduleName = stonecutterControllerPaths.contains(project.parent?.path) ? project.parent.name : project.name
-            publication.artifactId = "${rootProject.findProperty('archives_base_name')}-${moduleName}"
+                def moduleName = stonecutterControllerPaths.contains(project.parent?.path) ? project.parent.name : project.name
+                publication.artifactId = "${rootProject.findProperty('archives_base_name')}-${moduleName}"
+            }
         }
     }
 }
@@ -254,6 +272,176 @@ tasks.register('buildKattonJars') {
     dependsOn ":fabric:${activeTarget}:jar", ":neoforge:${activeTarget}:jar", ":paper:${activeTarget}:shadowJar"
 }
 
+def releaseMinecraftVersions = ['26.1.2', '26.2']
+def releasePlatforms = ['fabric', 'neoforge', 'paper']
+def releaseArtifactFile = { String platform, String minecraftVersion ->
+    def artifactVersion = rootProject.ext.minecraftMavenVersion(minecraftVersion)
+    rootProject.layout.buildDirectory.file("${platform}-katton-${artifactVersion}.jar").get().asFile
+}
+def releaseArtifactTasks = releaseMinecraftVersions.collectMany { minecraftVersion ->
+    [
+        ":fabric:${minecraftVersion}:jar",
+        ":neoforge:${minecraftVersion}:jar",
+        ":paper:${minecraftVersion}:shadowJar"
+    ]
+}
+
+tasks.register('buildReleaseArtifacts') {
+    group = 'build'
+    description = 'Build all six Fabric, NeoForge, and Paper deployment jars for supported Minecraft versions.'
+    dependsOn releaseArtifactTasks
+}
+
+tasks.register('verifyReleaseArtifacts') {
+    group = 'verification'
+    description = 'Verify platform descriptors, versions, entrypoints, and agent metadata in all release jars.'
+    dependsOn tasks.named('buildReleaseArtifacts')
+
+    doLast {
+        def requiredAgentAttributes = [
+            'Premain-Class': 'top.katton.engine.KattonAgent',
+            'Agent-Class': 'top.katton.engine.KattonAgent',
+            'Can-Redefine-Classes': 'true',
+            'Can-Retransform-Classes': 'true'
+        ]
+        def descriptorPaths = [
+            fabric: 'fabric.mod.json',
+            neoforge: 'META-INF/neoforge.mods.toml',
+            paper: 'paper-plugin.yml'
+        ]
+
+        releaseMinecraftVersions.each { minecraftVersion ->
+            def expectedArtifactVersion = rootProject.ext.minecraftMavenVersion(minecraftVersion)
+            def neoTargetProject = project(":neoforge:${minecraftVersion}")
+            def expectedNeoVersionRange = "[${neoTargetProject.property('neo_version')},)"
+            def expectedMinecraftVersionRange = neoTargetProject.property('minecraft_version_range').toString()
+
+            releasePlatforms.each { platform ->
+                def artifact = releaseArtifactFile(platform, minecraftVersion)
+                if (!artifact.isFile() || artifact.length() == 0L) {
+                    throw new GradleException("Missing or empty release artifact: ${artifact}")
+                }
+
+                new JarFile(artifact).withCloseable { jar ->
+                    def expectedDescriptor = descriptorPaths[platform]
+                    if (jar.getJarEntry(expectedDescriptor) == null) {
+                        throw new GradleException("${artifact.name} is missing ${expectedDescriptor}")
+                    }
+
+                    descriptorPaths.findAll { otherPlatform, ignored -> otherPlatform != platform }
+                        .each { otherPlatform, descriptorPath ->
+                            if (jar.getJarEntry(descriptorPath) != null) {
+                                throw new GradleException(
+                                    "${artifact.name} unexpectedly contains the ${otherPlatform} descriptor ${descriptorPath}"
+                                )
+                            }
+                        }
+
+                    def descriptorText = jar.getInputStream(jar.getJarEntry(expectedDescriptor)).withCloseable {
+                        new String(it.readAllBytes(), StandardCharsets.UTF_8)
+                    }
+
+                    if (platform == 'fabric') {
+                        def metadata = new JsonSlurper().parseText(descriptorText)
+                        if (metadata.id != 'katton') {
+                            throw new GradleException("${artifact.name} has Fabric mod id '${metadata.id}', expected 'katton'")
+                        }
+                        if (metadata.version != expectedArtifactVersion) {
+                            throw new GradleException(
+                                "${artifact.name} declares Fabric version '${metadata.version}', expected '${expectedArtifactVersion}'"
+                            )
+                        }
+                        if (metadata.entrypoints?.main?.first()?.value != 'top.katton.KattonFabric') {
+                            throw new GradleException("${artifact.name} has an invalid Fabric main entrypoint")
+                        }
+                    } else if (platform == 'neoforge') {
+                        if (!descriptorText.contains('modId="katton"')) {
+                            throw new GradleException("${artifact.name} does not declare the Katton NeoForge mod id")
+                        }
+                        if (!descriptorText.contains("version=\"${expectedArtifactVersion}\"")) {
+                            throw new GradleException(
+                                "${artifact.name} does not declare NeoForge version '${expectedArtifactVersion}'"
+                            )
+                        }
+                        if (!descriptorText.contains('modId="neoforge"') ||
+                            !descriptorText.contains("versionRange=\"${expectedNeoVersionRange}\"")) {
+                            throw new GradleException("${artifact.name} does not declare its required NeoForge version")
+                        }
+                        if (!descriptorText.contains('modId="minecraft"') ||
+                            !descriptorText.contains("versionRange=\"${expectedMinecraftVersionRange}\"")) {
+                            throw new GradleException("${artifact.name} does not declare its supported Minecraft range")
+                        }
+                    } else {
+                        if (!descriptorText.contains('main: top.katton.paper.KattonPaperPlugin')) {
+                            throw new GradleException("${artifact.name} has an invalid Paper main entrypoint")
+                        }
+                        if (!descriptorText.contains("version: '${expectedArtifactVersion}'")) {
+                            throw new GradleException(
+                                "${artifact.name} does not declare Paper version '${expectedArtifactVersion}'"
+                            )
+                        }
+                    }
+
+                    if (platform != 'paper') {
+                        requiredAgentAttributes.each { attributeName, expectedValue ->
+                            def actualValue = jar.manifest?.mainAttributes?.getValue(attributeName)
+                            if (actualValue != expectedValue) {
+                                throw new GradleException(
+                                    "${artifact.name} manifest ${attributeName}='${actualValue}', expected '${expectedValue}'"
+                                )
+                            }
+                        }
+                    }
+                }
+
+                logger.lifecycle("Verified release artifact: ${artifact.name}")
+            }
+        }
+    }
+}
+
+tasks.register('prepareReleaseArtifacts') {
+    group = 'distribution'
+    description = 'Verify and stage the six deployment jars with a SHA-256 checksum file.'
+    dependsOn tasks.named('verifyReleaseArtifacts')
+
+    doLast {
+        def releaseDirectory = rootProject.layout.buildDirectory
+            .dir("release/${rootProject.mod_version}")
+            .get()
+            .asFile
+        Files.createDirectories(releaseDirectory.toPath())
+
+        def checksumLines = []
+        releaseMinecraftVersions.each { minecraftVersion ->
+            releasePlatforms.each { platform ->
+                def artifact = releaseArtifactFile(platform, minecraftVersion)
+                def stagedArtifact = releaseDirectory.toPath().resolve(artifact.name)
+                Files.copy(artifact.toPath(), stagedArtifact, StandardCopyOption.REPLACE_EXISTING)
+
+                def digest = MessageDigest.getInstance('SHA-256')
+                artifact.withInputStream { input ->
+                    byte[] buffer = new byte[8192]
+                    int read
+                    while ((read = input.read(buffer)) != -1) {
+                        digest.update(buffer, 0, read)
+                    }
+                }
+                def checksum = digest.digest().collect { String.format('%02x', it & 0xff) }.join()
+                checksumLines << "${checksum}  ${artifact.name}"
+            }
+        }
+
+        def checksumFile = releaseDirectory.toPath().resolve('SHA256SUMS')
+        Files.writeString(
+            checksumFile,
+            checksumLines.join(System.lineSeparator()) + System.lineSeparator(),
+            StandardCharsets.UTF_8
+        )
+        logger.lifecycle("Prepared release artifacts in ${releaseDirectory}")
+    }
+}
+
 def nexusVersionedModules = ['common', 'fabric', 'neoforge', 'paper']
 def activeNexusPublishTasks = nexusVersionedModules.collect {
     ":${it}:${activeStonecutterVersionProvider.get()}:publishAllPublicationsToPrivateNexusRepository"
@@ -263,6 +451,17 @@ def allNexusPublishTasks = nexusVersionedModules.collectMany { moduleName ->
         "${versionProject.path}:publishAllPublicationsToPrivateNexusRepository"
     }
 }.sort()
+def allMavenLocalPublishTasks = nexusVersionedModules.collectMany { moduleName ->
+    project(":${moduleName}").subprojects.collect { versionProject ->
+        "${versionProject.path}:publishToMavenLocal"
+    }
+}.sort() + [':sign-plugin:publishToMavenLocal']
+
+tasks.register('verifyLocalMavenPublications') {
+    group = 'verification'
+    description = 'Publish every release module and the signing plugin to Maven Local to validate POM and module metadata.'
+    dependsOn allMavenLocalPublishTasks
+}
 
 def validateNexusCredentials = tasks.register('validateNexusCredentials') {
     group = 'publishing'

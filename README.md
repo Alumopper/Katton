@@ -2,7 +2,7 @@
 
 # Katton
 
-Katton is a Kotlin scripting runtime for Minecraft **Fabric**, **NeoForge**, and **Paper** (MC `26.1.2`) with hot reload support.  
+Katton is a Kotlin scripting runtime for Minecraft **Fabric**, **NeoForge**, and **Paper** (MC `26.1.2` and `26.2`) with hot reload support.
 Write script packs in `.kt`, reload with a command, and extend server/game behavior without rebuilding your whole mod/plugin every iteration.
 
 ## Features
@@ -61,16 +61,34 @@ Entrypoints are selected by annotations such as `@ServerScriptEntrypoint` and `@
 ## Quick Start Example
 
 ```kotlin
+import top.katton.api.ServerPhase
 import top.katton.api.ServerScriptEntrypoint
 
-@ServerScriptEntrypoint
+@ServerScriptEntrypoint(ServerPhase.READY)
 fun main() {
     println("Hello from Katton script pack")
 }
 ```
 
-A ready-to-use sample project is available at:  
-**Katton-Example** → https://github.com/Alumopper/Katton-Example
+For a world script pack, add a `manifest.json` next to the source file:
+
+```json
+{
+  "id": "hello_katton",
+  "name": "Hello Katton",
+  "version": "1.0.0",
+  "dependencies": []
+}
+```
+
+`dependencies` is required, even when the pack has no external mod or plugin dependencies.
+
+A minimal 0.4-compatible pack is included in [`examples/hello-pack`](examples/hello-pack/).
+The larger, separately versioned sample project is available at
+**Katton-Example** → https://github.com/Alumopper/Katton-Example.
+
+When upgrading an existing pack from 0.3.x, follow the
+[0.4.0 migration guide](docs/migrating-to-0.4.0.md) before loading it.
 
 ## Hot Reload
 
@@ -95,7 +113,9 @@ Reload performs:
 - `/katton registry`
 - `/katton registry stale`
 - `/katton reload`
+- `/katton capabilities injection`
 - `/katton debug registryLogging [on|off]`
+- `/katton debug injection`
 
 ### Paper
 
@@ -114,6 +134,10 @@ Reload performs:
 
 Then attach from IntelliJ IDEA using **Attach to remote JVM**.
 
+For Fold Craft Launcher (FCL), Android's Java runtime may not include runtime Attach.
+Use the Katton mod jar as a startup agent and follow the desktop reproduction and ADB
+workflow in [docs/fcl-injection-debugging.md](docs/fcl-injection-debugging.md).
+
 ## Unsafe Injection API (Experimental)
 
 `top.katton.api.inject` provides runtime method hook capabilities (before/after + rollback).
@@ -123,8 +147,9 @@ Then attach from IntelliJ IDEA using **Attach to remote JVM**.
 
 Reference implementation and entrypoints:
 
-- `common/src/main/kotlin/top/katton/engine/UnsafeInjectionManager.kt`
-- `common/src/main/kotlin/top/katton/api/inject/UnsafeApi.kt`
+- `common/src/main/kotlin/top/katton/engine/InjectionManager.kt`
+- `common/src/main/kotlin/top/katton/api/inject/InjectApi.kt`
+- `common/src/main/java/top/katton/engine/KattonAgent.java`
 
 ## Project Modules
 

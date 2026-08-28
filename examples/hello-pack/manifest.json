@@ -1,0 +1,10 @@
+{
+  "id": "hello_katton",
+  "name": "Hello Katton",
+  "version": "1.0.0",
+  "description": "Minimal Katton 0.4 world-pack example",
+  "authors": ["Katton contributors"],
+  "enabled": true,
+  "clientSync": false,
+  "dependencies": []
+}

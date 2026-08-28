@@ -1,0 +1,1016 @@
+From c11949c22dab8b8e5d7059e53062c070c52be21d Mon Sep 17 00:00:00 2001
+From: Alumopper <609255325@qq.com>
+Date: Fri, 28 Aug 2026 19:35:02 +0800
+Subject: [PATCH] Migrate examples to Katton 0.4.0
+
+---
+ README.md                                     | 61 +++++++++++--------
+ build.gradle.kts                              | 10 ++-
+ fabric/build.gradle.kts                       | 29 ++++++---
+ fabric/world_scripts/manifest.json            |  2 +-
+ fabric/world_scripts/modify_test/main.kt      |  6 +-
+ .../world_scripts/qwq/client_ui_smoke_test.kt |  4 +-
+ fabric/world_scripts/qwq/command_demo.kt      |  3 +-
+ fabric/world_scripts/qwq/entity_test.kt       |  8 ++-
+ .../qwq/event_block_interact_demo.kt          |  3 +-
+ .../qwq/event_entity_damage_demo.kt           |  3 +-
+ .../qwq/event_player_lifecycle_demo.kt        |  3 +-
+ .../qwq/event_server_lifecycle_demo.kt        |  3 +-
+ fabric/world_scripts/qwq/hello.kt             |  3 +-
+ fabric/world_scripts/qwq/hud_render_test.kt   |  3 +-
+ fabric/world_scripts/qwq/main.kt              |  6 +-
+ fabric/world_scripts/qwq/post_effect.kt       |  3 +-
+ .../world_scripts/qwq/scoreboard_example.kt   |  3 +-
+ .../qwq/target_selector_example.kt            |  3 +-
+ fabric/world_scripts/qwq/test.kt              |  3 +-
+ fabric/world_scripts/qwq/unsafe_demo.kt       |  3 +-
+ neoforge/build.gradle.kts                     | 27 +++++---
+ neoforge/world_scripts/manifest.json          |  2 +-
+ .../world_scripts/qwq/client_ui_smoke_test.kt |  4 +-
+ neoforge/world_scripts/qwq/command_demo.kt    |  3 +-
+ neoforge/world_scripts/qwq/entity_test.kt     |  8 ++-
+ .../qwq/event_block_interact_demo.kt          |  3 +-
+ .../qwq/event_entity_damage_demo.kt           |  3 +-
+ .../qwq/event_player_lifecycle_demo.kt        |  3 +-
+ .../qwq/event_server_lifecycle_demo.kt        |  3 +-
+ neoforge/world_scripts/qwq/hello.kt           |  3 +-
+ neoforge/world_scripts/qwq/hud_render_test.kt |  3 +-
+ neoforge/world_scripts/qwq/main.kt            |  6 +-
+ .../world_scripts/qwq/scoreboard_example.kt   |  3 +-
+ .../qwq/target_selector_example.kt            |  3 +-
+ neoforge/world_scripts/qwq/unsafe_demo.kt     |  3 +-
+ paper/build.gradle.kts                        | 38 +++++++++---
+ paper/world_scripts/foliatest/main.kt         |  2 +-
+ paper/world_scripts/managed_events.kt         |  3 +-
+ paper/world_scripts/manifest.json             |  2 +-
+ paper/world_scripts/paper_native_events.kt    |  3 +-
+ settings.gradle.kts                           |  2 +
+ 41 files changed, 192 insertions(+), 97 deletions(-)
+
+diff --git a/README.md b/README.md
+index 2235e19..e38b04e 100644
+--- a/README.md
++++ b/README.md
+@@ -1,50 +1,55 @@
+ # Katton Example Project
+ 
+-This is an example project for [Katton](https://github.com/Alumopper/Katton), a Minecraft Fabric mod that brings Kotlin scripting support to script packs. It serves as a comprehensive template to help you start creating your own Katton-based script packs, demonstrating the essential file structure and setup.
++This repository contains Minecraft 26.1.2 script-pack examples for
++[Katton](https://github.com/Alumopper/Katton) 0.4.0 on Fabric, NeoForge, and
++Paper. Script sources use `.kt`, and each platform subproject supplies the
++matching Katton Maven artifacts for IDE completion and compile-time checks.
+ 
+-## Example Script
++## Build and use
+ 
+-The project includes a sample script showcasing the base API provided by Katton. In `main.main.kts`, you'll find an implementation of an explosive bow that shoots TNT arrows.
++Build every example with Java 25:
+ 
+-**How to use:**
+-
+-1. Get the custom bow using this command:
+-   `/give @s bow[custom_data={tnt:true}]`
+-2. Try modifying the script: Change the explosion power (the fifth argument of the `explode` method).
+-3. Run the `/reload` command in-game to apply your changes instantly.
+-
+-## Dependencies Setup
++```powershell
++.\gradlew.bat build
++```
+ 
+-While this project uses Gradle for structure, **Kotlin script dependencies are not managed by Gradle**. instead, you need to manually manage them to enable IDE support (code completion and error checking).
++Pass your own run directory as `kattonWorldScriptsDir`, then mirror a pack with
++the relevant `copyWorldScripts` task. Multiple targets use the OS path separator
++(`;` on Windows, `:` on Linux/macOS):
+ 
+-### How to configure dependencies for IDE support:
++```powershell
++.\gradlew.bat :fabric:copyWorldScripts "-PkattonWorldScriptsDir=G:\Minecraft\run\world\kattonpacks\test"
++```
+ 
+-1. Place the required `.jar` files into the `libs` folder.
+-2. Declare them in your script files using the `@file:DependsOn` annotation.
++In game, reload Katton scripts with:
+ 
+-**Base dependencies required:**
++```text
++/katton reload
++```
+ 
+-- **Minecraft jar**: Locate it in your Minecraft installation directory (`versions/<version>/<version>.jar`). Copy it to `libs`.
++Every world entrypoint declares its 0.4 lifecycle phase explicitly:
+ 
+-You can add other mod jars to `libs` and declare them in your script to access their APIs. Just remember to keep these jars updated alongside your game and mods.
++- server listeners, commands, and registry work use `ServerPhase.READY`;
++- client registry and renderer work uses `ClientPhase.REGISTRY_SETUP`;
++- UI actions that require a connected player use `ClientPhase.JOINED`.
+ 
+-> [!TIP]
+-> Some mods (like **fabric-api**) distribute multiple jars nested inside a single file. IDEs cannot read jars within jars. **You must extract these inner jar files** and place them individually into the `libs` folder.
++Every manifest also contains the required `dependencies` list. Add a dependency
++entry there when an example imports another installed mod or plugin API.
+ 
+ ## Signing Client-Synced Packs
+ 
+ Katton supports signing script packs that are downloaded by clients. Signing is optional for local development, but recommended for multiplayer packs with `"clientSync": true`.
+ 
+-Generate a signing key once:
++Generate a signing key and sign a platform pack:
+ 
+ ```powershell
+-.\gradlew.bat :fabric:generateKattonSigningKey "-PkattonPrivateKey=build\katton-signing-key.pem" "-PkattonPublicKey=build\katton-signing-key.pub"
++.\gradlew.bat :fabric:signKattonPack
+ ```
+ 
+-Sign the pack after editing scripts:
++The NeoForge and Paper equivalents are:
+ 
+ ```powershell
+-.\gradlew.bat :fabric:signKattonPack "-PkattonPackDir=world_scripts" "-PkattonPrivateKey=build\katton-signing-key.pem" "-PkattonPublicKey=build\katton-signing-key.pub" "-PkattonScope=world" "-PkattonKeyId=my-server-key"
++.\gradlew.bat :neoforge:signKattonPack :paper:signKattonPack
+ ```
+ 
+ Or sign and distribute in one step:
+@@ -53,6 +58,10 @@ Or sign and distribute in one step:
+ .\gradlew.bat :fabric:signAndCopyWorldScripts
+ ```
+ 
+-`signAndCopyWorldScripts` signs `world_scripts/manifest.json` first, then mirrors the signed pack to the configured target path. Use `signAndCopyGameScripts` when you want to sign world scripts and then run the full world/global copy flow.
++`signAndCopyWorldScripts` signs `world_scripts/manifest.json` first, then mirrors
++the signed pack to the configured target path. Use `signAndCopyGameScripts` when
++you want to sign world scripts and then run the full world/global copy flow.
+ 
+-The task updates `manifest.json` with a `signature` block. Clients verify signed packs before caching or running them. Keep the private key secret and do not commit it.
++The signing task writes payload-v2 Ed25519 metadata. Clients verify signed packs
++before caching or running them. Keep each generated private key secret and do not
++commit it.
+diff --git a/build.gradle.kts b/build.gradle.kts
+index 63308c3..af61533 100644
+--- a/build.gradle.kts
++++ b/build.gradle.kts
+@@ -1 +1,9 @@
+-// Root build for the examples workspace.
++plugins {
++	// Centralize plugin versions so subprojects share one plugin classloader.
++	// Source: https://docs.gradle.org/current/userguide/plugins_intermediate.html#sec:subprojects_plugins_dsl
++	id("org.jetbrains.kotlin.jvm") version "2.3.10" apply false
++	id("net.fabricmc.fabric-loom") version "1.15-SNAPSHOT" apply false
++	id("net.neoforged.moddev") version "2.0.141" apply false
++	id("io.papermc.paperweight.userdev") version "2.0.0-beta.21" apply false
++	id("top.katton.sign") version "1.0.0" apply false
++}
+diff --git a/fabric/build.gradle.kts b/fabric/build.gradle.kts
+index 9ec0418..c9d963f 100644
+--- a/fabric/build.gradle.kts
++++ b/fabric/build.gradle.kts
+@@ -2,17 +2,26 @@ import java.nio.file.Files
+ import java.nio.file.Path
+ 
+ plugins {
+-	id("org.jetbrains.kotlin.jvm") version "2.3.0"
+-	id("top.katton.sign") version "1.0.0"
++	id("org.jetbrains.kotlin.jvm")
++	// Loom supplies the mapped Minecraft compile classpath.
++	// Source: https://docs.fabricmc.net/develop/loom/
++	id("net.fabricmc.fabric-loom")
++	id("top.katton.sign")
+ }
+ 
+-val kattonVersion = "0.3.0"
++val kattonVersion = "0.4.0+mc26.1.2"
++val minecraftVersion = "26.1.2"
++val fabricLoaderVersion = "0.18.4"
+ val fabricApiVersion = "0.144.0+26.1"
+-val worldScriptsTargetDir: List<File> = listOf(
+-	file("G:\\AST\\katton\\fabric\\run\\saves\\新的世界\\kattonpacks\\test"),
+-	file("G:\\AST\\katton\\fabric\\run\\world\\kattonpacks\\test")
+-)
+-val globalScriptsTargetDir: List<File> = listOf()
++fun configuredDirectories(propertyName: String): List<File> =
++	providers.gradleProperty(propertyName).orNull
++		?.split(File.pathSeparatorChar)
++		?.filter(String::isNotBlank)
++		?.map(::file)
++		.orEmpty()
++
++val worldScriptsTargetDir = configuredDirectories("kattonWorldScriptsDir")
++val globalScriptsTargetDir = configuredDirectories("kattonGlobalScriptsDir")
+ 
+ tasks.named<top.katton.sign.GenerateKattonSigningKeyTask>("generateKattonSigningKey") {
+ 	privateKeyFile.convention(layout.buildDirectory.file("katton-signing-key.pem"))
+@@ -37,12 +46,14 @@ repositories {
+ }
+ 
+ dependencies {
++	minecraft("com.mojang:minecraft:$minecraftVersion")
++	implementation("net.fabricmc:fabric-loader:$fabricLoaderVersion")
+ 	implementation("top.katton:katton-common:${kattonVersion}")
+ 	implementation("top.katton:katton-fabric:$kattonVersion")
+ 	compileOnly(fileTree("lib") {
+ 		include("*.jar")
+ 	})
+-	compileOnly("net.fabricmc.fabric-api:fabric-api:$fabricApiVersion")
++	implementation("net.fabricmc.fabric-api:fabric-api:$fabricApiVersion")
+ 	compileOnly("com.mojang:brigadier:1.3.10")
+ 	compileOnly("org.joml:joml:1.10.8")
+ 	compileOnly("com.google.code.gson:gson:2.13.2")
+diff --git a/fabric/world_scripts/manifest.json b/fabric/world_scripts/manifest.json
+index 326caea..e882989 100644
+--- a/fabric/world_scripts/manifest.json
++++ b/fabric/world_scripts/manifest.json
+@@ -1 +1 @@
+-{"id":"test","name":"Test Pack","version":"1.0.0","description":"Comprehensive test for Katton APIs","authors":["Katton Dev"],"enabled":true,"signature":{"algorithm":"Ed25519","keyId":"fabric-example","publicKey":"MCowBQYDK2VwAyEAjHNRgXOEC5eO5fYN4elac4L1xLeN/rSgaehl8e0GHs8=","signature":"rV79J9e8pb7TiBhx011p7GHi8Z2dWtk2H1Z5P2Ne8KqovMtZm9YL6idd+72qQpmKYtwN0bSs0/9gMco8q5IBCw=="}}
+\ No newline at end of file
++{"id":"test","name":"Test Pack","version":"1.0.0","description":"Comprehensive test for Katton APIs","authors":["Katton Dev"],"enabled":true,"dependencies":[],"signature":{"algorithm":"Ed25519","payloadVersion":2,"keyId":"fabric-example","publicKey":"MCowBQYDK2VwAyEANsUWNfyMcydWJhs4pGsK2IOtvZrXLK+0+7gLHpTQLlU=","signature":"Mb820V+rEKuRTreGOPcCjyKveCeP1SqDZdUO2KpVfJOKDinOOcXXcWlvO6Y29V3mgtFc2lp9SZeihzQJ7K5oBA=="}}
+\ No newline at end of file
+diff --git a/fabric/world_scripts/modify_test/main.kt b/fabric/world_scripts/modify_test/main.kt
+index 680831a..a210af4 100644
+--- a/fabric/world_scripts/modify_test/main.kt
++++ b/fabric/world_scripts/modify_test/main.kt
+@@ -6,7 +6,9 @@ import net.minecraft.network.chat.Component
+ import net.minecraft.world.food.FoodProperties
+ import net.minecraft.world.item.Rarity
+ import net.minecraft.world.level.block.SoundType
++import top.katton.api.ClientPhase
+ import top.katton.api.ClientScriptEntrypoint
++import top.katton.api.ServerPhase
+ import top.katton.api.ServerScriptEntrypoint
+ import top.katton.api.mod.*
+ 
+@@ -19,8 +21,8 @@ import top.katton.api.mod.*
+  * Run `/katton reload` after editing to apply changes.
+  */
+ 
+-@ServerScriptEntrypoint
+-@ClientScriptEntrypoint
++@ServerScriptEntrypoint(ServerPhase.READY)
++@ClientScriptEntrypoint(ClientPhase.REGISTRY_SETUP)
+ fun modifyTestMain() {
+     tell("[ModifyTest] Loaded. Run /katton reload to apply modifications.")
+ 
+diff --git a/fabric/world_scripts/qwq/client_ui_smoke_test.kt b/fabric/world_scripts/qwq/client_ui_smoke_test.kt
+index 2893668..cbab4de 100644
+--- a/fabric/world_scripts/qwq/client_ui_smoke_test.kt
++++ b/fabric/world_scripts/qwq/client_ui_smoke_test.kt
+@@ -3,7 +3,7 @@ package qwq
+ import net.minecraft.client.gui.components.toasts.SystemToast
+ import top.katton.api.*
+ 
+-@ClientScriptEntrypoint
++@ClientScriptEntrypoint(ClientPhase.JOINED)
+ fun clientUiSmokeTestMain(){
+     runOnClient {
+         clientTell("[Katton] Client UI smoke test start")
+@@ -23,4 +23,4 @@ fun clientUiSmokeTestMain(){
+         // Clear overlay after a short delay equivalent handled by user re-running script.
+         clearClientOverlay()
+     }
+-}
+\ No newline at end of file
++}
+diff --git a/fabric/world_scripts/qwq/command_demo.kt b/fabric/world_scripts/qwq/command_demo.kt
+index ee4be09..8746481 100644
+--- a/fabric/world_scripts/qwq/command_demo.kt
++++ b/fabric/world_scripts/qwq/command_demo.kt
+@@ -6,10 +6,11 @@ import com.mojang.brigadier.arguments.StringArgumentType.getString
+ import com.mojang.brigadier.arguments.StringArgumentType.word
+ import net.minecraft.commands.SharedSuggestionProvider.suggest
+ import net.minecraft.network.chat.Component
++import top.katton.api.ServerPhase
+ import top.katton.api.ServerScriptEntrypoint
+ import top.katton.registry.registerCommand
+ 
+-@ServerScriptEntrypoint
++@ServerScriptEntrypoint(ServerPhase.READY)
+ fun commandTest() {
+     registerCommand("demo") {
+         literal("ping") {
+diff --git a/fabric/world_scripts/qwq/entity_test.kt b/fabric/world_scripts/qwq/entity_test.kt
+index 68aae27..f3ccfd7 100644
+--- a/fabric/world_scripts/qwq/entity_test.kt
++++ b/fabric/world_scripts/qwq/entity_test.kt
+@@ -10,7 +10,9 @@ import net.minecraft.world.entity.MobCategory
+ import net.minecraft.world.entity.monster.Monster
+ import net.minecraft.world.level.Level
+ import qwq.Zombie1Entity
++import top.katton.api.ClientPhase
+ import top.katton.api.ClientScriptEntrypoint
++import top.katton.api.ServerPhase
+ import top.katton.api.ServerScriptEntrypoint
+ import top.katton.api.registry.registerAnimatedEntityRenderer
+ import top.katton.api.registry.registerNativeEntity
+@@ -46,8 +48,8 @@ class Zombie1Entity(type: EntityType<out Monster>, level: Level) : Monster(type,
+ //  Registration
+ // ═══════════════════════════════════════════════════════════
+ 
+-@ServerScriptEntrypoint
+-@ClientScriptEntrypoint
++@ServerScriptEntrypoint(ServerPhase.READY)
++@ClientScriptEntrypoint(ClientPhase.REGISTRY_SETUP)
+ fun initZombie() {
+     registerNativeEntity("test:zombie1", RegisterMode.RELOADABLE,
+         configure = {
+@@ -60,7 +62,7 @@ fun initZombie() {
+     }
+ }
+ 
+-@ClientScriptEntrypoint
++@ClientScriptEntrypoint(ClientPhase.REGISTRY_SETUP)
+ fun initZombieRenderer() {
+     registerAnimatedEntityRenderer(
+         entityTypeId = "test:zombie1",
+diff --git a/fabric/world_scripts/qwq/event_block_interact_demo.kt b/fabric/world_scripts/qwq/event_block_interact_demo.kt
+index 8e85d35..6e8c98e 100644
+--- a/fabric/world_scripts/qwq/event_block_interact_demo.kt
++++ b/fabric/world_scripts/qwq/event_block_interact_demo.kt
+@@ -3,12 +3,13 @@ package qwq
+ import net.minecraft.server.level.ServerPlayer
+ import net.minecraft.world.InteractionResult
+ import net.minecraft.world.level.block.Blocks
++import top.katton.api.ServerPhase
+ import top.katton.api.ServerScriptEntrypoint
+ import top.katton.api.dpcaller.tell
+ import top.katton.api.event.PlayerEvent
+ import top.katton.api.event.UseItemOnArg
+ 
+-@ServerScriptEntrypoint
++@ServerScriptEntrypoint(ServerPhase.READY)
+ fun eventBlockInteractDemo() {
+     PlayerEvent.onUseItemOn += onUse@ fun(arg: UseItemOnArg): InteractionResult? {
+         if (arg.world.isClientSide) return null
+diff --git a/fabric/world_scripts/qwq/event_entity_damage_demo.kt b/fabric/world_scripts/qwq/event_entity_damage_demo.kt
+index 58500bf..c611b78 100644
+--- a/fabric/world_scripts/qwq/event_entity_damage_demo.kt
++++ b/fabric/world_scripts/qwq/event_entity_damage_demo.kt
+@@ -6,13 +6,14 @@ import net.minecraft.world.item.ItemStack
+ import net.minecraft.world.item.Items
+ import top.katton.api.ClientItemRenderEasing.EASE_IN_OUT_QUINT
+ import top.katton.api.ClientItemRenderEasing.EASE_IN_QUINT
++import top.katton.api.ServerPhase
+ import top.katton.api.ServerScriptEntrypoint
+ import top.katton.api.dpcaller.tell
+ import top.katton.api.event.AllowDamageArg
+ import top.katton.api.event.ServerLivingEntityEvent
+ import top.katton.api.showItemRenderMarker
+ 
+-@ServerScriptEntrypoint
++@ServerScriptEntrypoint(ServerPhase.READY)
+ fun eventEntityDamageDemo() {
+     ServerLivingEntityEvent.onAllowDamage += allow@ fun(arg: AllowDamageArg): Boolean {
+         val level = arg.entity.level()
+diff --git a/fabric/world_scripts/qwq/event_player_lifecycle_demo.kt b/fabric/world_scripts/qwq/event_player_lifecycle_demo.kt
+index 0a1d28e..f8acdb8 100644
+--- a/fabric/world_scripts/qwq/event_player_lifecycle_demo.kt
++++ b/fabric/world_scripts/qwq/event_player_lifecycle_demo.kt
+@@ -1,12 +1,13 @@
+ package qwq
+ 
++import top.katton.api.ServerPhase
+ import top.katton.api.ServerScriptEntrypoint
+ import top.katton.api.dpcaller.tell
+ import top.katton.api.event.PlayerArg
+ import top.katton.api.event.ServerPlayerEvent
+ import top.katton.api.once
+ 
+-@ServerScriptEntrypoint
++@ServerScriptEntrypoint(ServerPhase.READY)
+ fun eventPlayerLifecycleDemo() {
+     ServerPlayerEvent.onPlayerJoin += join@ fun(arg: PlayerArg) {
+         val player = arg.player
+diff --git a/fabric/world_scripts/qwq/event_server_lifecycle_demo.kt b/fabric/world_scripts/qwq/event_server_lifecycle_demo.kt
+index 58ca3a6..359e060 100644
+--- a/fabric/world_scripts/qwq/event_server_lifecycle_demo.kt
++++ b/fabric/world_scripts/qwq/event_server_lifecycle_demo.kt
+@@ -1,12 +1,13 @@
+ package qwq
+ 
++import top.katton.api.ServerPhase
+ import top.katton.api.ServerScriptEntrypoint
+ import top.katton.api.dpcaller.tell
+ import top.katton.api.event.EndDatapackReloadArg
+ import top.katton.api.event.ServerArg
+ import top.katton.api.event.ServerEvent
+ 
+-@ServerScriptEntrypoint
++@ServerScriptEntrypoint(ServerPhase.READY)
+ fun eventServerLifecycleDemo() {
+     ServerEvent.onServerStarted += started@ fun(arg: ServerArg) {
+         tell("[event-demo] 服务器已启动，在线玩家=${arg.server.playerList.players.size}")
+diff --git a/fabric/world_scripts/qwq/hello.kt b/fabric/world_scripts/qwq/hello.kt
+index 367a41f..2cc9ede 100644
+--- a/fabric/world_scripts/qwq/hello.kt
++++ b/fabric/world_scripts/qwq/hello.kt
+@@ -1,11 +1,12 @@
+ package qwq
+ 
+ import net.minecraft.network.chat.Component
++import top.katton.api.ServerPhase
+ import top.katton.api.ServerScriptEntrypoint
+ import top.katton.api.event.PlayerArg
+ import top.katton.api.event.ServerPlayerEvent
+ 
+-@ServerScriptEntrypoint
++@ServerScriptEntrypoint(ServerPhase.READY)
+ fun helloMain(){
+     ServerPlayerEvent.onPlayerJoin += onJoin@
+     fun(arg: PlayerArg){
+diff --git a/fabric/world_scripts/qwq/hud_render_test.kt b/fabric/world_scripts/qwq/hud_render_test.kt
+index 44abf1a..7d50bfc 100644
+--- a/fabric/world_scripts/qwq/hud_render_test.kt
++++ b/fabric/world_scripts/qwq/hud_render_test.kt
+@@ -1,5 +1,6 @@
+ package qwq
+ 
++import top.katton.api.ClientPhase
+ import top.katton.api.ClientScriptEntrypoint
+ import top.katton.api.HudRenderLayer
+ import top.katton.api.clientFps
+@@ -12,7 +13,7 @@ import top.katton.api.fillHudRect
+ import top.katton.api.registerHudRenderer
+ import top.katton.api.unregisterHudRenderer
+ 
+-@ClientScriptEntrypoint
++@ClientScriptEntrypoint(ClientPhase.REGISTRY_SETUP)
+ fun hudRenderTestMain() {
+ 
+     unregisterHudRenderer("katton:test:hud")
+diff --git a/fabric/world_scripts/qwq/main.kt b/fabric/world_scripts/qwq/main.kt
+index c52f294..ab5c667 100644
+--- a/fabric/world_scripts/qwq/main.kt
++++ b/fabric/world_scripts/qwq/main.kt
+@@ -15,7 +15,9 @@ import net.minecraft.world.food.FoodProperties
+ import net.minecraft.world.item.Item
+ import net.minecraft.world.level.Level
+ import net.minecraft.world.level.block.Block
++import top.katton.api.ClientPhase
+ import top.katton.api.ClientScriptEntrypoint
++import top.katton.api.ServerPhase
+ import top.katton.api.ServerScriptEntrypoint
+ import top.katton.api.dpcaller.*
+ import top.katton.api.event.EntityLoadArg
+@@ -27,8 +29,8 @@ import top.katton.api.registry.registerNativeEffect
+ import top.katton.api.registry.registerNativeItem
+ import top.katton.registry.RegisterMode
+ 
+-@ServerScriptEntrypoint
+-@ClientScriptEntrypoint
++@ServerScriptEntrypoint(ServerPhase.READY)
++@ClientScriptEntrypoint(ClientPhase.REGISTRY_SETUP)
+ fun main() {
+     // 示例：动态注册一个可热重载的方块
+     registerNativeBlock(
+diff --git a/fabric/world_scripts/qwq/post_effect.kt b/fabric/world_scripts/qwq/post_effect.kt
+index 5a53d75..4b89292 100644
+--- a/fabric/world_scripts/qwq/post_effect.kt
++++ b/fabric/world_scripts/qwq/post_effect.kt
+@@ -1,5 +1,6 @@
+ package qwq
+ 
++import top.katton.api.ClientPhase
+ import top.katton.api.ClientScriptEntrypoint
+ import top.katton.api.clearClientPostEffect
+ import top.katton.api.clientTell
+@@ -19,7 +20,7 @@ private const val PRESET_STUN = "qwq:post/stun_aberration"
+ private const val PRESET_BLUR = "qwq:post/soft_blur"
+ private const val CUSTOM_SCAN = "qwq:post/custom_scan"
+ 
+-@ClientScriptEntrypoint
++@ClientScriptEntrypoint(ClientPhase.REGISTRY_SETUP)
+ fun postEffectDemoMain() {
+     runOnClient {
+         // Vanilla/resource-pack backed effect. Reads:
+diff --git a/fabric/world_scripts/qwq/scoreboard_example.kt b/fabric/world_scripts/qwq/scoreboard_example.kt
+index b8f31cb..44d94a0 100644
+--- a/fabric/world_scripts/qwq/scoreboard_example.kt
++++ b/fabric/world_scripts/qwq/scoreboard_example.kt
+@@ -1,10 +1,11 @@
+ package qwq
+ 
++import top.katton.api.ServerPhase
+ import top.katton.api.ServerScriptEntrypoint
+ import top.katton.api.dpcaller.getOrCreateObjective
+ import top.katton.api.dpcaller.setScore
+ 
+-@ServerScriptEntrypoint
++@ServerScriptEntrypoint(ServerPhase.READY)
+ fun scoreboardExampleMain(){
+     //get the scoreboard objective
+     val obj = getOrCreateObjective("myscore")
+diff --git a/fabric/world_scripts/qwq/target_selector_example.kt b/fabric/world_scripts/qwq/target_selector_example.kt
+index c89d5e7..ce8c13c 100644
+--- a/fabric/world_scripts/qwq/target_selector_example.kt
++++ b/fabric/world_scripts/qwq/target_selector_example.kt
+@@ -4,12 +4,13 @@ import net.minecraft.world.effect.MobEffects
+ import net.minecraft.world.entity.EntityType
+ import net.minecraft.world.entity.LivingEntity
+ import net.minecraft.world.phys.Vec3
++import top.katton.api.ServerPhase
+ import top.katton.api.ServerScriptEntrypoint
+ import top.katton.api.dpcaller.addEffect
+ import top.katton.api.requireServer
+ import top.katton.util.EntitySelectorBuilder
+ 
+-@ServerScriptEntrypoint
++@ServerScriptEntrypoint(ServerPhase.READY)
+ fun targetSelectorExample(){
+ 
+     // Build a target selector
+diff --git a/fabric/world_scripts/qwq/test.kt b/fabric/world_scripts/qwq/test.kt
+index a538364..2c1ea63 100644
+--- a/fabric/world_scripts/qwq/test.kt
++++ b/fabric/world_scripts/qwq/test.kt
+@@ -1,5 +1,6 @@
+ package qwq
+ 
++import top.katton.api.ServerPhase
+ import top.katton.api.ServerScriptEntrypoint
+ import top.katton.api.datapack.FrameType
+ import top.katton.api.datapack.advancements
+@@ -8,7 +9,7 @@ import top.katton.api.datapack.recipes
+ import top.katton.api.datapack.uniform
+ import top.katton.api.mod.modifyRecipe
+ 
+-@ServerScriptEntrypoint
++@ServerScriptEntrypoint(ServerPhase.READY)
+ fun test(){
+     // Recipes — existing + new types
+     recipes {
+diff --git a/fabric/world_scripts/qwq/unsafe_demo.kt b/fabric/world_scripts/qwq/unsafe_demo.kt
+index cdb36e4..8af23bb 100644
+--- a/fabric/world_scripts/qwq/unsafe_demo.kt
++++ b/fabric/world_scripts/qwq/unsafe_demo.kt
+@@ -1,6 +1,7 @@
+ package qwq
+ 
+ import net.minecraft.network.chat.Component
++import top.katton.api.ServerPhase
+ import top.katton.api.ServerScriptEntrypoint
+ import top.katton.api.dpcaller.tell
+ import top.katton.api.inject.*
+@@ -19,7 +20,7 @@ private class UnsafeDemoTarget {
+     fun multiplyTarget(a: Int, b: Int): Int = a * b
+ }
+ 
+-@ServerScriptEntrypoint
++@ServerScriptEntrypoint(ServerPhase.READY)
+ fun unsafeDemo() {
+     registerCommand("unsafe_demo") {
+         literal("test") {
+diff --git a/neoforge/build.gradle.kts b/neoforge/build.gradle.kts
+index a643b10..fff3bbc 100644
+--- a/neoforge/build.gradle.kts
++++ b/neoforge/build.gradle.kts
+@@ -2,16 +2,27 @@ import java.nio.file.Files
+ import java.nio.file.Path
+ 
+ plugins {
+-	id("org.jetbrains.kotlin.jvm") version "2.3.0"
+-	id("top.katton.sign") version "1.0.0"
++	id("org.jetbrains.kotlin.jvm")
++	// ModDevGradle supplies the NeoForge/Minecraft development artifacts.
++	// Source: https://github.com/neoforged/ModDevGradle#basic-usage-for-neoforge-mods
++	id("net.neoforged.moddev")
++	id("top.katton.sign")
+ }
+ 
+-val kattonVersion = "0.3.0"
+-val worldScriptsTargetDir: List<File> = listOf(
+-	file("G:\\AST\\kts4mc-template-1.21.11\\neoforge\\run\\saves\\New World\\kattonpacks\\test"),
+-	file("G:\\AST\\kts4mc-template-1.21.11\\neoforge\\run\\world\\kattonpacks\\test")
+-)
+-val globalScriptsTargetDir: List<File> = listOf()
++val kattonVersion = "0.4.0+mc26.1.2"
++fun configuredDirectories(propertyName: String): List<File> =
++	providers.gradleProperty(propertyName).orNull
++		?.split(File.pathSeparatorChar)
++		?.filter(String::isNotBlank)
++		?.map(::file)
++		.orEmpty()
++
++val worldScriptsTargetDir = configuredDirectories("kattonWorldScriptsDir")
++val globalScriptsTargetDir = configuredDirectories("kattonGlobalScriptsDir")
++
++neoForge {
++	version = "26.1.2.30-beta"
++}
+ 
+ tasks.named<top.katton.sign.GenerateKattonSigningKeyTask>("generateKattonSigningKey") {
+ 	privateKeyFile.convention(layout.buildDirectory.file("katton-signing-key.pem"))
+diff --git a/neoforge/world_scripts/manifest.json b/neoforge/world_scripts/manifest.json
+index b32d6a4..28a8167 100644
+--- a/neoforge/world_scripts/manifest.json
++++ b/neoforge/world_scripts/manifest.json
+@@ -1 +1 @@
+-{"id":"test","name":"Test Pack","version":"1.0.0","description":"Comprehensive test for Katton APIs","authors":["Katton Dev"],"enabled":true,"signature":{"algorithm":"Ed25519","keyId":"neoforge-example","publicKey":"MCowBQYDK2VwAyEAdbs54rpiGuhmCBC7Wdxj0UJQfVEYGqzvYyF/+BzLqew=","signature":"D12VoFSQU7OOEvF0Xvc+Sw3QqbzUD1ttaFvykY2IK+zFi1eb7Wlk8HXNIqmKND+zqxkgt7RH2R/erQatdG68DQ=="}}
+\ No newline at end of file
++{"id":"test","name":"Test Pack","version":"1.0.0","description":"Comprehensive test for Katton APIs","authors":["Katton Dev"],"enabled":true,"dependencies":[],"signature":{"algorithm":"Ed25519","payloadVersion":2,"keyId":"neoforge-example","publicKey":"MCowBQYDK2VwAyEAtNhpqbXTTXI7HBR3DRJwIzzWnEFDP+QUnLPsVwU17B0=","signature":"xiUkhQU682MCsIUajVYVOfdnTsD4fljX75J7bYNwmjocjXVRnvkHOIvULd0RDrsyKadgeepf6VFMCrvTBBVbBw=="}}
+\ No newline at end of file
+diff --git a/neoforge/world_scripts/qwq/client_ui_smoke_test.kt b/neoforge/world_scripts/qwq/client_ui_smoke_test.kt
+index 2893668..cbab4de 100644
+--- a/neoforge/world_scripts/qwq/client_ui_smoke_test.kt
++++ b/neoforge/world_scripts/qwq/client_ui_smoke_test.kt
+@@ -3,7 +3,7 @@ package qwq
+ import net.minecraft.client.gui.components.toasts.SystemToast
+ import top.katton.api.*
+ 
+-@ClientScriptEntrypoint
++@ClientScriptEntrypoint(ClientPhase.JOINED)
+ fun clientUiSmokeTestMain(){
+     runOnClient {
+         clientTell("[Katton] Client UI smoke test start")
+@@ -23,4 +23,4 @@ fun clientUiSmokeTestMain(){
+         // Clear overlay after a short delay equivalent handled by user re-running script.
+         clearClientOverlay()
+     }
+-}
+\ No newline at end of file
++}
+diff --git a/neoforge/world_scripts/qwq/command_demo.kt b/neoforge/world_scripts/qwq/command_demo.kt
+index ee4be09..8746481 100644
+--- a/neoforge/world_scripts/qwq/command_demo.kt
++++ b/neoforge/world_scripts/qwq/command_demo.kt
+@@ -6,10 +6,11 @@ import com.mojang.brigadier.arguments.StringArgumentType.getString
+ import com.mojang.brigadier.arguments.StringArgumentType.word
+ import net.minecraft.commands.SharedSuggestionProvider.suggest
+ import net.minecraft.network.chat.Component
++import top.katton.api.ServerPhase
+ import top.katton.api.ServerScriptEntrypoint
+ import top.katton.registry.registerCommand
+ 
+-@ServerScriptEntrypoint
++@ServerScriptEntrypoint(ServerPhase.READY)
+ fun commandTest() {
+     registerCommand("demo") {
+         literal("ping") {
+diff --git a/neoforge/world_scripts/qwq/entity_test.kt b/neoforge/world_scripts/qwq/entity_test.kt
+index 68aae27..f3ccfd7 100644
+--- a/neoforge/world_scripts/qwq/entity_test.kt
++++ b/neoforge/world_scripts/qwq/entity_test.kt
+@@ -10,7 +10,9 @@ import net.minecraft.world.entity.MobCategory
+ import net.minecraft.world.entity.monster.Monster
+ import net.minecraft.world.level.Level
+ import qwq.Zombie1Entity
++import top.katton.api.ClientPhase
+ import top.katton.api.ClientScriptEntrypoint
++import top.katton.api.ServerPhase
+ import top.katton.api.ServerScriptEntrypoint
+ import top.katton.api.registry.registerAnimatedEntityRenderer
+ import top.katton.api.registry.registerNativeEntity
+@@ -46,8 +48,8 @@ class Zombie1Entity(type: EntityType<out Monster>, level: Level) : Monster(type,
+ //  Registration
+ // ═══════════════════════════════════════════════════════════
+ 
+-@ServerScriptEntrypoint
+-@ClientScriptEntrypoint
++@ServerScriptEntrypoint(ServerPhase.READY)
++@ClientScriptEntrypoint(ClientPhase.REGISTRY_SETUP)
+ fun initZombie() {
+     registerNativeEntity("test:zombie1", RegisterMode.RELOADABLE,
+         configure = {
+@@ -60,7 +62,7 @@ fun initZombie() {
+     }
+ }
+ 
+-@ClientScriptEntrypoint
++@ClientScriptEntrypoint(ClientPhase.REGISTRY_SETUP)
+ fun initZombieRenderer() {
+     registerAnimatedEntityRenderer(
+         entityTypeId = "test:zombie1",
+diff --git a/neoforge/world_scripts/qwq/event_block_interact_demo.kt b/neoforge/world_scripts/qwq/event_block_interact_demo.kt
+index bc91365..0443b84 100644
+--- a/neoforge/world_scripts/qwq/event_block_interact_demo.kt
++++ b/neoforge/world_scripts/qwq/event_block_interact_demo.kt
+@@ -3,13 +3,14 @@ package qwq
+ import net.minecraft.server.level.ServerPlayer
+ import net.minecraft.world.InteractionResult
+ import net.minecraft.world.level.block.Blocks
++import top.katton.api.ServerPhase
+ import top.katton.api.ServerScriptEntrypoint
+ import top.katton.api.dpcaller.tell
+ import top.katton.api.event.NeoPlayerInteractBlockArg
+ import top.katton.api.event.PlayerEvent
+ import top.katton.api.event.UseItemOnArg
+ 
+-@ServerScriptEntrypoint
++@ServerScriptEntrypoint(ServerPhase.READY)
+ fun eventBlockInteractDemo() {
+     PlayerEvent.onBlockInteract += onBlockInteract@ fun(arg: NeoPlayerInteractBlockArg){
+         if (arg.player.level().isClientSide) return
+diff --git a/neoforge/world_scripts/qwq/event_entity_damage_demo.kt b/neoforge/world_scripts/qwq/event_entity_damage_demo.kt
+index 5ea47fb..5852c73 100644
+--- a/neoforge/world_scripts/qwq/event_entity_damage_demo.kt
++++ b/neoforge/world_scripts/qwq/event_entity_damage_demo.kt
+@@ -1,12 +1,13 @@
+ package qwq
+ 
+ import net.minecraft.server.level.ServerPlayer
++import top.katton.api.ServerPhase
+ import top.katton.api.ServerScriptEntrypoint
+ import top.katton.api.dpcaller.tell
+ import top.katton.api.event.AllowDamageArg
+ import top.katton.api.event.ServerLivingEntityEvent
+ 
+-@ServerScriptEntrypoint
++@ServerScriptEntrypoint(ServerPhase.READY)
+ fun eventEntityDamageDemo() {
+     ServerLivingEntityEvent.onAllowDamage += allow@ fun(arg: AllowDamageArg): Boolean {
+         val level = arg.entity.level()
+diff --git a/neoforge/world_scripts/qwq/event_player_lifecycle_demo.kt b/neoforge/world_scripts/qwq/event_player_lifecycle_demo.kt
+index 0a1d28e..f8acdb8 100644
+--- a/neoforge/world_scripts/qwq/event_player_lifecycle_demo.kt
++++ b/neoforge/world_scripts/qwq/event_player_lifecycle_demo.kt
+@@ -1,12 +1,13 @@
+ package qwq
+ 
++import top.katton.api.ServerPhase
+ import top.katton.api.ServerScriptEntrypoint
+ import top.katton.api.dpcaller.tell
+ import top.katton.api.event.PlayerArg
+ import top.katton.api.event.ServerPlayerEvent
+ import top.katton.api.once
+ 
+-@ServerScriptEntrypoint
++@ServerScriptEntrypoint(ServerPhase.READY)
+ fun eventPlayerLifecycleDemo() {
+     ServerPlayerEvent.onPlayerJoin += join@ fun(arg: PlayerArg) {
+         val player = arg.player
+diff --git a/neoforge/world_scripts/qwq/event_server_lifecycle_demo.kt b/neoforge/world_scripts/qwq/event_server_lifecycle_demo.kt
+index 58ca3a6..359e060 100644
+--- a/neoforge/world_scripts/qwq/event_server_lifecycle_demo.kt
++++ b/neoforge/world_scripts/qwq/event_server_lifecycle_demo.kt
+@@ -1,12 +1,13 @@
+ package qwq
+ 
++import top.katton.api.ServerPhase
+ import top.katton.api.ServerScriptEntrypoint
+ import top.katton.api.dpcaller.tell
+ import top.katton.api.event.EndDatapackReloadArg
+ import top.katton.api.event.ServerArg
+ import top.katton.api.event.ServerEvent
+ 
+-@ServerScriptEntrypoint
++@ServerScriptEntrypoint(ServerPhase.READY)
+ fun eventServerLifecycleDemo() {
+     ServerEvent.onServerStarted += started@ fun(arg: ServerArg) {
+         tell("[event-demo] 服务器已启动，在线玩家=${arg.server.playerList.players.size}")
+diff --git a/neoforge/world_scripts/qwq/hello.kt b/neoforge/world_scripts/qwq/hello.kt
+index 367a41f..2cc9ede 100644
+--- a/neoforge/world_scripts/qwq/hello.kt
++++ b/neoforge/world_scripts/qwq/hello.kt
+@@ -1,11 +1,12 @@
+ package qwq
+ 
+ import net.minecraft.network.chat.Component
++import top.katton.api.ServerPhase
+ import top.katton.api.ServerScriptEntrypoint
+ import top.katton.api.event.PlayerArg
+ import top.katton.api.event.ServerPlayerEvent
+ 
+-@ServerScriptEntrypoint
++@ServerScriptEntrypoint(ServerPhase.READY)
+ fun helloMain(){
+     ServerPlayerEvent.onPlayerJoin += onJoin@
+     fun(arg: PlayerArg){
+diff --git a/neoforge/world_scripts/qwq/hud_render_test.kt b/neoforge/world_scripts/qwq/hud_render_test.kt
+index 44abf1a..7d50bfc 100644
+--- a/neoforge/world_scripts/qwq/hud_render_test.kt
++++ b/neoforge/world_scripts/qwq/hud_render_test.kt
+@@ -1,5 +1,6 @@
+ package qwq
+ 
++import top.katton.api.ClientPhase
+ import top.katton.api.ClientScriptEntrypoint
+ import top.katton.api.HudRenderLayer
+ import top.katton.api.clientFps
+@@ -12,7 +13,7 @@ import top.katton.api.fillHudRect
+ import top.katton.api.registerHudRenderer
+ import top.katton.api.unregisterHudRenderer
+ 
+-@ClientScriptEntrypoint
++@ClientScriptEntrypoint(ClientPhase.REGISTRY_SETUP)
+ fun hudRenderTestMain() {
+ 
+     unregisterHudRenderer("katton:test:hud")
+diff --git a/neoforge/world_scripts/qwq/main.kt b/neoforge/world_scripts/qwq/main.kt
+index bc54629..4cacebd 100644
+--- a/neoforge/world_scripts/qwq/main.kt
++++ b/neoforge/world_scripts/qwq/main.kt
+@@ -14,7 +14,9 @@ import net.minecraft.world.food.FoodProperties
+ import net.minecraft.world.item.Item
+ import net.minecraft.world.level.Level
+ import net.minecraft.world.level.block.Block
++import top.katton.api.ClientPhase
+ import top.katton.api.ClientScriptEntrypoint
++import top.katton.api.ServerPhase
+ import top.katton.api.ServerScriptEntrypoint
+ import top.katton.api.datapack.blockTags
+ import top.katton.api.datapack.itemTags
+@@ -33,8 +35,8 @@ import top.katton.api.registry.registerNativeItem
+ import top.katton.registry.RegisterMode
+ import top.katton.registry.id
+ 
+-@ServerScriptEntrypoint
+-@ClientScriptEntrypoint
++@ServerScriptEntrypoint(ServerPhase.READY)
++@ClientScriptEntrypoint(ClientPhase.REGISTRY_SETUP)
+ fun main() {
+     // 示例：动态注册一个可热重载的方块
+     registerNativeBlock(
+diff --git a/neoforge/world_scripts/qwq/scoreboard_example.kt b/neoforge/world_scripts/qwq/scoreboard_example.kt
+index b8f31cb..44d94a0 100644
+--- a/neoforge/world_scripts/qwq/scoreboard_example.kt
++++ b/neoforge/world_scripts/qwq/scoreboard_example.kt
+@@ -1,10 +1,11 @@
+ package qwq
+ 
++import top.katton.api.ServerPhase
+ import top.katton.api.ServerScriptEntrypoint
+ import top.katton.api.dpcaller.getOrCreateObjective
+ import top.katton.api.dpcaller.setScore
+ 
+-@ServerScriptEntrypoint
++@ServerScriptEntrypoint(ServerPhase.READY)
+ fun scoreboardExampleMain(){
+     //get the scoreboard objective
+     val obj = getOrCreateObjective("myscore")
+diff --git a/neoforge/world_scripts/qwq/target_selector_example.kt b/neoforge/world_scripts/qwq/target_selector_example.kt
+index c89d5e7..ce8c13c 100644
+--- a/neoforge/world_scripts/qwq/target_selector_example.kt
++++ b/neoforge/world_scripts/qwq/target_selector_example.kt
+@@ -4,12 +4,13 @@ import net.minecraft.world.effect.MobEffects
+ import net.minecraft.world.entity.EntityType
+ import net.minecraft.world.entity.LivingEntity
+ import net.minecraft.world.phys.Vec3
++import top.katton.api.ServerPhase
+ import top.katton.api.ServerScriptEntrypoint
+ import top.katton.api.dpcaller.addEffect
+ import top.katton.api.requireServer
+ import top.katton.util.EntitySelectorBuilder
+ 
+-@ServerScriptEntrypoint
++@ServerScriptEntrypoint(ServerPhase.READY)
+ fun targetSelectorExample(){
+ 
+     // Build a target selector
+diff --git a/neoforge/world_scripts/qwq/unsafe_demo.kt b/neoforge/world_scripts/qwq/unsafe_demo.kt
+index cdb36e4..8af23bb 100644
+--- a/neoforge/world_scripts/qwq/unsafe_demo.kt
++++ b/neoforge/world_scripts/qwq/unsafe_demo.kt
+@@ -1,6 +1,7 @@
+ package qwq
+ 
+ import net.minecraft.network.chat.Component
++import top.katton.api.ServerPhase
+ import top.katton.api.ServerScriptEntrypoint
+ import top.katton.api.dpcaller.tell
+ import top.katton.api.inject.*
+@@ -19,7 +20,7 @@ private class UnsafeDemoTarget {
+     fun multiplyTarget(a: Int, b: Int): Int = a * b
+ }
+ 
+-@ServerScriptEntrypoint
++@ServerScriptEntrypoint(ServerPhase.READY)
+ fun unsafeDemo() {
+     registerCommand("unsafe_demo") {
+         literal("test") {
+diff --git a/paper/build.gradle.kts b/paper/build.gradle.kts
+index ccae77e..6bfd557 100644
+--- a/paper/build.gradle.kts
++++ b/paper/build.gradle.kts
+@@ -2,15 +2,35 @@ import java.nio.file.Files
+ import java.nio.file.Path
+ 
+ plugins {
+-	id("org.jetbrains.kotlin.jvm") version "2.3.0"
+-	id("io.papermc.paperweight.userdev") version "2.0.0-beta.21"
++	id("org.jetbrains.kotlin.jvm")
++	id("io.papermc.paperweight.userdev")
++	id("top.katton.sign")
+ }
+ 
+-val kattonVersion = "0.3.0"
+-val worldScriptsTargetDir: List<File> = listOf(
+-	file("G:\\AST\\kts4mc-template-1.21.11\\paper\\run\\world\\kattonpacks\\test")
+-)
+-val globalScriptsTargetDir: List<File> = listOf()
++val kattonVersion = "0.4.0+mc26.1.2"
++fun configuredDirectories(propertyName: String): List<File> =
++	providers.gradleProperty(propertyName).orNull
++		?.split(File.pathSeparatorChar)
++		?.filter(String::isNotBlank)
++		?.map(::file)
++		.orEmpty()
++
++val worldScriptsTargetDir = configuredDirectories("kattonWorldScriptsDir")
++val globalScriptsTargetDir = configuredDirectories("kattonGlobalScriptsDir")
++
++tasks.named<top.katton.sign.GenerateKattonSigningKeyTask>("generateKattonSigningKey") {
++	privateKeyFile.convention(layout.buildDirectory.file("katton-signing-key.pem"))
++	publicKeyFile.convention(layout.buildDirectory.file("katton-signing-key.pub"))
++}
++
++tasks.named<top.katton.sign.KattonSignPackTask>("signKattonPack") {
++	dependsOn("generateKattonSigningKey")
++	packDir.convention(layout.projectDirectory.dir("world_scripts"))
++	privateKeyFile.convention(layout.buildDirectory.file("katton-signing-key.pem"))
++	publicKeyFile.convention(layout.buildDirectory.file("katton-signing-key.pub"))
++	scope.convention("world")
++	keyId.convention("paper-example")
++}
+ 
+ repositories {
+ 	mavenLocal()
+@@ -21,7 +41,7 @@ repositories {
+ 
+ dependencies {
+ 	implementation("top.katton:katton-paper:$kattonVersion")
+-	paperweight.paperDevBundle("26.1.2.build.69-stable")
++	paperweight.paperDevBundle("26.1.2.build.71-stable")
+ }
+ 
+ 
+@@ -117,4 +137,4 @@ tasks.register("copyGameScripts") {
+ 	group = "distribution"
+ 	description = "Mirrors world_scripts and global_scripts contents to their configured target paths."
+ 	dependsOn("copyWorldScripts", "copyGlobalScripts")
+-}
+\ No newline at end of file
++}
+diff --git a/paper/world_scripts/foliatest/main.kt b/paper/world_scripts/foliatest/main.kt
+index 67f8d6e..9d881fe 100644
+--- a/paper/world_scripts/foliatest/main.kt
++++ b/paper/world_scripts/foliatest/main.kt
+@@ -24,7 +24,7 @@ import top.katton.paper.*
+ private var testPlayer: ServerPlayer? = null
+ private var running = false
+ 
+-@ServerScriptEntrypoint
++@ServerScriptEntrypoint(ServerPhase.READY)
+ fun main() {
+     val interval = config.getNumber("test_interval", 100).toLong()
+     val targetName = config.getString("test_player", "")
+diff --git a/paper/world_scripts/managed_events.kt b/paper/world_scripts/managed_events.kt
+index 1c23761..8dfc3b2 100644
+--- a/paper/world_scripts/managed_events.kt
++++ b/paper/world_scripts/managed_events.kt
+@@ -1,5 +1,6 @@
+ @file:Suppress("unused")
+ 
++import top.katton.api.ServerPhase
+ import top.katton.api.ServerScriptEntrypoint
+ import top.katton.api.event.*
+ import top.katton.api.event.managed.*
+@@ -15,7 +16,7 @@ import kotlin.compareTo
+ //  Katton Managed Event Listener Test
+ //  ═══════════════════════════════════════════════════════════════
+ 
+-@ServerScriptEntrypoint
++@ServerScriptEntrypoint(ServerPhase.READY)
+ fun main() {
+     // ─── 1. Katton 包装事件 ───
+     ServerEvent.onServerStarted += { arg ->
+diff --git a/paper/world_scripts/manifest.json b/paper/world_scripts/manifest.json
+index 63172c1..6177962 100644
+--- a/paper/world_scripts/manifest.json
++++ b/paper/world_scripts/manifest.json
+@@ -1 +1 @@
+-{"id":"test","name":"Test Pack","version":"1.0.0","description":"Comprehensive test for Katton APIs","authors":["Katton Dev"],"enabled":true,"signature":{"algorithm":"Ed25519","keyId":"paper-example","publicKey":"MCowBQYDK2VwAyEAwp0KtcCfIkQ595xg6DgCKeXwf9fpXk/I79vlaugifNw=","signature":"x98IFzq8mj3vdHJ1xVpWa8rP8mGrNpyzPbw2xUzLQZrZRSQO2+v9+KIMPsAdLvJEdhxYZLDWx/c4aLWSADn8CA=="}}
+\ No newline at end of file
++{"id":"test","name":"Test Pack","version":"1.0.0","description":"Comprehensive test for Katton APIs","authors":["Katton Dev"],"enabled":true,"dependencies":[],"signature":{"algorithm":"Ed25519","payloadVersion":2,"keyId":"paper-example","publicKey":"MCowBQYDK2VwAyEABnQNiAmwdxU9G+3lSIU1gmYqDILUP8MmSpJByXMSnOo=","signature":"PwpijUqsEgPsxR+Q4w4A/UMMYVVYCt7vrym/TdY5H47poCFJJYpfk6czCL1fSJhxQDg76MFn8A/jGKfQZcGGBw=="}}
+\ No newline at end of file
+diff --git a/paper/world_scripts/paper_native_events.kt b/paper/world_scripts/paper_native_events.kt
+index ecd7bb1..6be300a 100644
+--- a/paper/world_scripts/paper_native_events.kt
++++ b/paper/world_scripts/paper_native_events.kt
+@@ -1,5 +1,6 @@
+ @file:Suppress("unused")
+ 
++import top.katton.api.ServerPhase
+ import top.katton.api.ServerScriptEntrypoint
+ import top.katton.api.event.managed.*
+ import org.bukkit.event.block.*
+@@ -8,7 +9,7 @@ import org.bukkit.event.block.*
+ //  Paper Native Events Test
+ // ═══════════════════════════════════════════════════════════════
+ 
+-@ServerScriptEntrypoint
++@ServerScriptEntrypoint(ServerPhase.READY)
+ fun main() {
+ 
+     // ─── Managed Event: 爆炸监听 ───
+diff --git a/settings.gradle.kts b/settings.gradle.kts
+index e59867c..0f1248a 100644
+--- a/settings.gradle.kts
++++ b/settings.gradle.kts
+@@ -3,6 +3,8 @@ pluginManagement {
+ 		mavenLocal()
+ 		gradlePluginPortal()
+ 		mavenCentral()
++		maven("https://maven.fabricmc.net/")
++		maven("https://maven.neoforged.net/releases")
+ 		maven("https://nexus.mcfpp.top/repository/maven-public/")
+ 	}
+ }
+-- 
+2.31.1.windows.1
+
