@@ -27,12 +27,10 @@ artifact is loadable.
   server/client phase.
 - [x] Add `dependencies` to every Katton-Example manifest.
 - [x] Re-sign every signed Katton-Example pack with signature payload v2.
-- [x] Prepare and verify the Katton-Example 0.4.0 migration locally as commit
-  `c11949c` on branch `release/0.4.0-migration` (all three subprojects build;
-  all three manifests are re-signed with payload v2). The clone is under
-  `build/release-work/Katton-Example`, with a durable export at
-  `docs/0001-Migrate-examples-to-Katton-0.4.0.patch`; pushing it remains an
-  external release action.
+- [x] Prepare, verify, and push the Katton-Example 0.4.0 migration as commit
+  `c11949c` to `master` (all three subprojects build; all three manifests are
+  re-signed with payload v2). A durable export remains at
+  `docs/0001-Migrate-examples-to-Katton-0.4.0.patch`.
 - [x] Document the 0.3.x to 0.4.0 migration: mandatory `dependencies`, explicit
   world entrypoint phases, payload-v2 signatures, and Minecraft-qualified Maven
   versions.
@@ -100,8 +98,9 @@ artifact is loadable.
 - [x] Review the 0.3.0 to 0.4.0 diff and write user-facing release notes.
 - [x] Set `mod_version=0.4.0` and verify Maven coordinates use
   `0.4.0+mc26.1.2` and `0.4.0+mc26.2`.
-- [ ] Publish common, Fabric, NeoForge, and Paper Maven artifacts for both MC
-  targets.
+- [x] Publish common, Fabric, NeoForge, and Paper Maven artifacts for both MC
+  targets. All eight POMs resolve with HTTP 200 from the public aggregate
+  repository (2026-08-29).
 - [x] Verify local Maven publication for the 26.1.2 common, Fabric, NeoForge,
   Paper, and signing-plugin artifacts. This caught and fixed a duplicate
   `sign-plugin` publication that previously broke Gradle module metadata.
@@ -110,8 +109,8 @@ artifact is loadable.
   combinations pass `pnpm verify:template`, the full VitePress site passes
   `pnpm docs:build`, and the durable export is
   `docs/0001-Update-template-generator-for-Katton-0.4.0.patch`.
-- [ ] Apply/push the katton-api template update after the 0.4.0 Maven artifacts
-  are published, so the public generator never points at unavailable coordinates.
+- [x] Apply/push the stable katton-api template update through commit `01b3887`
+  to `main` after the 0.4.0 Maven artifacts became publicly resolvable.
 - [x] Produce SHA-256 checksums for the six deployment jars.
 - [ ] Create the stable GitHub `v0.4.0` Release (not a pre-release) with all six
   jars, checksums, migration notes, supported-version matrix, and known
