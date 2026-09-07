@@ -91,7 +91,7 @@ For a world script pack, add a `manifest.json` next to the source file:
 
 `dependencies` is required, even when the pack has no external mod or plugin dependencies.
 
-A minimal 0.4-compatible pack is included in [`examples/hello-pack`](examples/hello-pack/).
+A minimal compatible pack is included in [`examples/hello-pack`](examples/hello-pack/).
 The larger, separately versioned sample project is available at
 **Katton-Example** → https://github.com/Alumopper/Katton-Example.
 
