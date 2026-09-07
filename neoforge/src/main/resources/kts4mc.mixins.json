@@ -27,6 +27,13 @@
     "ServerPlayerMixin"
   ],
   "client": [
+    "SceneCameraMixin",
+    "SceneHandMixin",
+    "SceneInputMixin",
+    "SceneInteractionMixin",
+    "SceneKeyboardMixin",
+    "SceneMouseMixin",
+    "SceneLevelRendererMixin",
     "ClientConfigurationPacketListenerImplMixin",
     "ConnectScreenMixin",
     "EntityRenderDispatcherMixin",

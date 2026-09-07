@@ -277,6 +277,7 @@ object ScriptPackResourceManager {
             /*mc.levelRenderer.allChanged()*/
             /*?}*/
             ClientPostEffectManager.invalidatePostChainCache()
+            top.katton.client.scene.ClientSceneManager.resourceReload()
         }
         if (mc.isSameThread) {
             task.run()

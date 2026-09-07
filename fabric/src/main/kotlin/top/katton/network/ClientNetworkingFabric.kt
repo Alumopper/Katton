@@ -16,6 +16,9 @@ object ClientNetworkingFabric {
      * Registers packet handlers. Payload type is registered in common code.
      */
     fun initialize() {
+        ClientPlayNetworking.registerGlobalReceiver(ClientScenePacket.TYPE) { packet, context ->
+            context.client().execute { top.katton.client.scene.ClientSceneManager.handlePacket(packet) }
+        }
         ClientConfigurationNetworking.registerGlobalReceiver(ScriptPackHashListPacket.TYPE) { packet, context ->
             if (context.client().isLocalServer) return@registerGlobalReceiver
             val sync = ServerPackCacheManager.beginMainThreadSync()

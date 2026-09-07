@@ -64,6 +64,7 @@ public class KattonClientFabric implements ClientModInitializer {
 			Katton.clearWorldAndServerEvents();
 			ScriptPackResourceManager.INSTANCE.clearAll();
 			ClientItemRenderMarkerManager.clear();
+			top.katton.client.scene.ClientSceneManager.disconnect();
 			ClientPostEffectManager.INSTANCE.clearAll();
 			ServerPackCacheManager.INSTANCE.reset();
 		});
@@ -71,6 +72,7 @@ public class KattonClientFabric implements ClientModInitializer {
 		ClientTickEvents.END_CLIENT_TICK.register(_ -> {
 			ScriptReloadManager.tickClientLifecycle();
 			ClientItemRenderMarkerManager.tick();
+			top.katton.client.scene.ClientSceneManager.tick();
 			while (OPEN_PACK_SCREEN.consumeClick()) {
 				ScriptPackUi.openInWorldScreen();
 			}

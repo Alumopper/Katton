@@ -1,0 +1,10 @@
+{
+  "id": "katton_scene_examples",
+  "name": "Katton Camera and World Effects",
+  "version": "1.0.0",
+  "description": "Camera, particles, trails, beams, magic circles and basic geometry",
+  "authors": ["Katton contributors"],
+  "enabled": true,
+  "clientSync": true,
+  "dependencies": []
+}

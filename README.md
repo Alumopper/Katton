@@ -13,6 +13,7 @@ Write script packs in `.kt`, reload with a command, and extend server/game behav
 - Registry APIs for mod platforms (Fabric/NeoForge)
 - Experimental unsafe runtime injection API (ByteBuddy)
 - Paper-specific managed Bukkit event bridge
+- Client camera paths, shake/FOV, particle and geometry effects, and Kotlin scene timelines with server triggers ([guide and examples](docs/client-scenes.md))
 
 ## Platform Support
 

@@ -125,6 +125,15 @@ object ServerNetworkingNeoForge {
                 handleClientPostEffectPacket(packet)
             }
         }
+        registrar.playToClient(ClientScenePacket.TYPE, ClientScenePacket.STREAM_CODEC) { packet, context ->
+            context.enqueueWork {
+                // Keep the common registration path free of physical-client class references.
+                runCatching {
+                    Class.forName("top.katton.client.scene.ClientSceneManager")
+                        .getMethod("handlePacket", ClientScenePacket::class.java).invoke(null, packet)
+                }.onFailure { LOGGER.warn("Failed to handle client scene packet", it) }
+            }
+        }
     }
 
     private fun handleClientItemRenderMarkerPacket(packet: ClientItemRenderMarkerPacket) {

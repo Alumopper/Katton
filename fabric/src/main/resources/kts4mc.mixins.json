@@ -13,6 +13,13 @@
     "ServerLevelMixin"
   ],
   "client": [
+    "SceneCameraMixin",
+    "SceneHandMixin",
+    "SceneInputMixin",
+    "SceneInteractionMixin",
+    "SceneKeyboardMixin",
+    "SceneMouseMixin",
+    "SceneLevelRendererMixin",
     "ClientRegistrySyncHandlerMixin",
     "ConnectScreenMixin",
     "EntityRenderDispatcherMixin",

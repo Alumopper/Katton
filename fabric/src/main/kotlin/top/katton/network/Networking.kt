@@ -57,6 +57,9 @@ object Networking {
             SERVERBOUND_PLAY.register(ScriptPackSyncAckPacket.TYPE, ScriptPackSyncAckPacket.STREAM_CODEC)
         }
 
+        if(CLIENTBOUND_PLAY.get(ClientScenePacket.TYPE.id) == null){
+            CLIENTBOUND_PLAY.register(ClientScenePacket.TYPE, ClientScenePacket.STREAM_CODEC)
+        }
         if(CLIENTBOUND_PLAY.get(ClientPostEffectPacket.TYPE.id) == null){
             CLIENTBOUND_PLAY.register(ClientPostEffectPacket.TYPE, ClientPostEffectPacket.STREAM_CODEC)
         }

@@ -73,6 +73,7 @@ public class KattonClientNeoForge {
     private static void onClientTick(ClientTickEvent.Post event) {
         ScriptReloadManager.tickClientLifecycle();
         ClientItemRenderMarkerManager.tick();
+        top.katton.client.scene.ClientSceneManager.tick();
         while (OPEN_PACK_SCREEN.consumeClick()) {
             ScriptPackUi.openInWorldScreen();
         }
@@ -90,6 +91,7 @@ public class KattonClientNeoForge {
         Katton.clearWorldAndServerEvents();
         ScriptPackResourceManager.INSTANCE.clearAll();
         ClientItemRenderMarkerManager.clear();
+        top.katton.client.scene.ClientSceneManager.disconnect();
         ClientPostEffectManager.INSTANCE.clearAll();
         ServerPackCacheManager.INSTANCE.reset();
     }

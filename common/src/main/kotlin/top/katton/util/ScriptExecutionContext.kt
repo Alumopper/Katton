@@ -15,6 +15,14 @@ import top.katton.pack.ScriptPackScope
  * different lifecycle phases can be replaced independently.
  */
 object ScriptExecutionContext {
+    private val ownerRevisions = java.util.concurrent.ConcurrentHashMap<String, String>()
+
+    /** Code revision follows owner propagation into event callbacks. */
+    fun currentScriptRevision(): String? = currentScriptOwner()?.let(ownerRevisions::get)
+
+    fun recordCurrentRevision(revision: String) {
+        currentScriptOwner()?.let { ownerRevisions[it] = revision }
+    }
     private val currentScriptOwner = ThreadLocal<String?>()
     private val currentScriptScope = ThreadLocal<ScriptPackScope?>()
     private val currentScriptEnvironment = ThreadLocal<ScriptEnvironment?>()

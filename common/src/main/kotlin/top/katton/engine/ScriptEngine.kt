@@ -966,6 +966,7 @@ object ScriptEngine {
                     ScriptExecutionContext.withEnvironment(environment) {
                         ScriptExecutionContext.withScope(entryScope) {
                             ScriptExecutionContext.withOwner("${entryScope.serializedName}:${invocation.phaseName}:$fqcn") {
+                                ScriptExecutionContext.recordCurrentRevision(pack.codeHash)
                                 invokeEntrypoint(clazz, entrypoint, methodType, environment, context)
                             }
                         }

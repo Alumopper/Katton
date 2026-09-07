@@ -61,6 +61,35 @@ tasks.withType(Test).configureEach {
     useJUnitPlatform()
 }
 
+// Compile the shipped script against each version's real Minecraft and Katton API.
+tasks.register('verifySceneExamples', JavaExec) {
+    group = 'verification'
+    description = 'Compiles the client-scene example pack without executing its entrypoints.'
+    dependsOn tasks.named('classes')
+    classpath = files(configurations.compileClasspath, sourceSets.main.output)
+    mainClass = 'org.jetbrains.kotlin.cli.jvm.K2JVMCompiler'
+    def exampleSource = rootProject.file('examples/client-scenes/Scenes.kt')
+    def probeSource = project.parent.file('src/test/resources/scene-probe/Probe.kt')
+    def serverProbeSource = project.parent.file('src/test/resources/scene-probe/ServerProbe.kt')
+    def integrationProbeSource = project.parent.file('src/test/resources/scene-probe/IntegrationProbe.kt')
+    def reloadProbeSource = project.parent.file('src/test/resources/scene-probe/reload-pack/ReloadScene.kt')
+    def exampleOutput = layout.buildDirectory.dir('scene-example-classes')
+    inputs.file(exampleSource)
+    inputs.file(probeSource)
+    inputs.file(serverProbeSource)
+    inputs.file(integrationProbeSource)
+    inputs.file(reloadProbeSource)
+    inputs.files(classpath)
+    outputs.dir(exampleOutput)
+    doFirst {
+        args = ['-no-stdlib', '-no-reflect', '-jvm-target', '25',
+                '-classpath', classpath.asPath, '-d', exampleOutput.get().asFile.absolutePath,
+                exampleSource.absolutePath, probeSource.absolutePath, serverProbeSource.absolutePath,
+                integrationProbeSource.absolutePath, reloadProbeSource.absolutePath]
+    }
+}
+tasks.named('check') { dependsOn tasks.named('verifySceneExamples') }
+
 def kattonAgentManifest = [
     'Premain-Class': 'top.katton.engine.KattonAgent',
     'Agent-Class': 'top.katton.engine.KattonAgent',

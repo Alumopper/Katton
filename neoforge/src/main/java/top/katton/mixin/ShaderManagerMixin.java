@@ -62,10 +62,12 @@ public abstract class ShaderManagerMixin {
     )
     private void katton$invalidateRuntimePostChains(ShaderManager.Configs configs, ResourceManager manager, ProfilerFiller profiler, CallbackInfo ci) {
         ClientPostEffectManager.invalidatePostChainCache();
+        top.katton.client.scene.ClientSceneManager.resourceReload();
     }
 
     @Inject(method = "close", at = @At("HEAD"))
     private void katton$closeRuntimePostChains(CallbackInfo ci) {
         ClientPostEffectManager.invalidatePostChainCache();
+        top.katton.client.scene.ClientSceneManager.resourceReload();
     }
 }

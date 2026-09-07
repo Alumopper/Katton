@@ -105,6 +105,14 @@ object ScriptReloadManager {
         if (!Katton.hasClient) {
             return true
         }
+        return try {
+            reloadClientScriptsPrepared(reason, cause)
+        } finally {
+            runOnClientThreadAndWait { top.katton.client.scene.ClientSceneManager.finishReload() }
+        }
+    }
+
+    private fun reloadClientScriptsPrepared(reason: InvocationReason, cause: ReloadCause): Boolean {
         //simple progress bar
         //seems straightforward and brutal, but it works well enough for now.
         //it's making the code a bit messy, but... just consider it as an alternative comment (?
@@ -145,6 +153,9 @@ object ScriptReloadManager {
             return false
         }
         val effectivePacks = prepared.packs
+        val preservedSceneRevisions = effectivePacks
+            .filter { it.syncId in prepared.rejectedCandidateSyncIds }
+            .mapTo(hashSetOf()) { it.codeHash }
 
         val minecraft = Minecraft.getInstance()
         var firstReset = true
@@ -153,7 +164,7 @@ object ScriptReloadManager {
             previousPacks = previousPacks,
             invocation = registryInvocation,
             resetRuntime = {
-                resetClientRuntime(if (firstReset) tracker else null)
+                resetClientRuntime(if (firstReset) tracker else null, preservedSceneRevisions)
                 check(restoreItemComponents(previousItemComponents)) {
                     "Failed to restore item components before client script activation"
                 }
@@ -174,7 +185,7 @@ object ScriptReloadManager {
             groupOk
         }
         if (activatedPacks == null) {
-            restoreClientRuntime(previousPacks, previousItemComponents, reason, cause)
+            restoreClientRuntime(previousPacks, previousItemComponents, reason, cause, preservedSceneRevisions)
             tracker.finish("katton.reload.client.failed")
             return false
         }
@@ -183,7 +194,7 @@ object ScriptReloadManager {
             addAll(activatedPacks)
         }
         if (!ScriptPackResourceManager.activateAndReload(activatedResourcePacks)) {
-            restoreClientRuntime(previousPacks, previousItemComponents, reason, cause)
+            restoreClientRuntime(previousPacks, previousItemComponents, reason, cause, preservedSceneRevisions)
             tracker.finish("katton.reload.client.failed")
             return false
         }
@@ -200,7 +211,10 @@ object ScriptReloadManager {
         return true
     }
 
-    private fun resetClientRuntime(tracker: ReloadProgressTracker? = null) {
+    private fun resetClientRuntime(
+        tracker: ReloadProgressTracker? = null,
+        preservedSceneRevisions: Set<String> = emptySet()
+    ) {
         // Client and integrated-server registrations share one JVM, so only clear client-owned entries.
         runOnClientThreadAndWait {
             for (scope in CLIENT_RELOAD_SCOPES) {
@@ -211,6 +225,7 @@ object ScriptReloadManager {
             tracker?.step("katton.reload.client.clear_world_handlers")
             tracker?.step("katton.reload.common.reset_injections")
             clearClientRenderers()
+            top.katton.client.scene.ClientSceneManager.clearForReload(preservedSceneRevisions)
             tracker?.step("katton.reload.client.clear_renderers")
             clearClientPostEffects()
             tracker?.step("katton.reload.client.clear_post_effects")
@@ -225,10 +240,11 @@ object ScriptReloadManager {
         previousPacks: List<ScriptPack>,
         previousItemComponents: Map<net.minecraft.world.item.Item, net.minecraft.core.component.DataComponentMap>,
         reason: InvocationReason,
-        cause: ReloadCause
+        cause: ReloadCause,
+        preservedSceneRevisions: Set<String>
     ) {
         logger.warn("Restoring the previous client script snapshot after a rejected reload")
-        resetClientRuntime()
+        resetClientRuntime(preservedSceneRevisions = preservedSceneRevisions)
         var restored = restoreItemComponents(previousItemComponents)
         val registryInvocation = ScriptInvocation.client(ClientPhase.REGISTRY_SETUP, reason, cause)
         val minecraft = Minecraft.getInstance()
