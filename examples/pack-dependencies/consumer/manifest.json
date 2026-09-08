@@ -1,0 +1,1 @@
+{"id":"dependency-consumer","version":"1.0","dependencies":[],"packDependencies":[{"id":"shared-behavior","version":">=1.0","required":true,"export":false}]}
