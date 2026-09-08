@@ -135,6 +135,11 @@ class SceneRuntime(
             return play
         }
         plays[id] = play
+        top.katton.engine.ManagedResources.record(
+            attach = { play.resume(); plays[id] = play },
+            detach = { play.pause(); plays.remove(id) },
+            dispose = { end(play, EffectEndReason.WORLD_CHANGED) }
+        )
         startTracks(play)
         return play
     }

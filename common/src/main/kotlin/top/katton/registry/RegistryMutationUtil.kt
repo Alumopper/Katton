@@ -138,3 +138,35 @@ private fun recalculateLifecycle(registrationInfos: Collection<Any?>): Lifecycle
     }
     return lifecycle
 }
+/** Captures one entry's actual holder and slot; rollback must not manufacture a replacement holder. */
+@Suppress("UNCHECKED_CAST")
+internal fun <T : Any> captureRegistryEntry(
+    registry: MappedRegistry<T>,
+    key: ResourceKey<T>
+): () -> Unit {
+    val holder = registry.get(key).orElseThrow()
+    val value = holder.value()
+    val byKey = checkNotNull(ReflectUtil.get(registry, "byKey").getOrNull() as? MutableMap<ResourceKey<T>, Holder.Reference<T>>)
+    val byLocation = checkNotNull(ReflectUtil.get(registry, "byLocation").getOrNull() as? MutableMap<Any?, Holder.Reference<T>>)
+    val byValue = checkNotNull(ReflectUtil.get(registry, "byValue").getOrNull() as? MutableMap<T, Holder.Reference<T>>)
+    val byId = checkNotNull(ReflectUtil.get(registry, "byId").getOrNull() as? MutableList<Holder.Reference<T>>)
+    val toId = checkNotNull(ReflectUtil.get(registry, "toId").getOrNull() as? Reference2IntMap<T>)
+    val infos = checkNotNull(ReflectUtil.get(registry, "registrationInfos").getOrNull() as? MutableMap<ResourceKey<T>, Any?>)
+    val info = infos[key]
+    val index = toId.getInt(value)
+    val tags = ReflectUtil.get(holder, "tags").getOrNull()
+    return {
+        withUnfrozenRegistry(registry) {
+            check(key !in byKey) { "Cannot restore occupied registry entry $key" }
+            byKey[key] = holder
+            byLocation[key.identifier()] = holder
+            byValue[value] = holder
+            infos[key] = info
+            byId.add(index.coerceIn(0, byId.size), holder)
+            toId.clear()
+            byId.forEachIndexed { slot, entry -> toId.put(entry.value(), slot) }
+            ReflectUtil.set(registry, "registryLifecycle", recalculateLifecycle(infos.values))
+            ReflectUtil.set(holder, "tags", tags)
+        }
+    }
+}

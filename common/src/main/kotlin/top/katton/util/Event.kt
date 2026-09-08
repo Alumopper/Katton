@@ -269,13 +269,18 @@ class DelegateEvent<Arg, R>(val invoker: EventInvoker<Arg, R>): Event<Arg, R> {
         val old = entries
         val n = old.size
         val arr = java.util.Arrays.copyOf(old, n + 1)
-        arr[n] = EventHandler(
+        val entry = EventHandler(
             handler = h,
             scope = ScriptExecutionContext.currentScriptScope(),
             owner = ScriptExecutionContext.currentScriptOwner(),
             environment = ScriptExecutionContext.currentScriptEnvironment()
         )
+        arr[n] = entry
         entries = arr
+        top.katton.engine.ManagedResources.record(
+            attach = { synchronized(this) { if (entries.none { it === entry }) entries = entries + entry } },
+            detach = { synchronized(this) { entries = entries.filterNot { it === entry }.toTypedArray() } }
+        )
     }
 
     override operator fun invoke(arg: Arg): Result<R> {
@@ -337,13 +342,18 @@ class CancellableDelegateEvent<Arg: CancellableEventArg, R>(val invoker: EventIn
         val old = entries
         val n = old.size
         val arr = java.util.Arrays.copyOf(old, n + 1)
-        arr[n] = EventHandler(
+        val entry = EventHandler(
             handler = h,
             scope = ScriptExecutionContext.currentScriptScope(),
             owner = ScriptExecutionContext.currentScriptOwner(),
             environment = ScriptExecutionContext.currentScriptEnvironment()
         )
+        arr[n] = entry
         entries = arr
+        top.katton.engine.ManagedResources.record(
+            attach = { synchronized(this) { if (entries.none { it === entry }) entries = entries + entry } },
+            detach = { synchronized(this) { entries = entries.filterNot { it === entry }.toTypedArray() } }
+        )
     }
 
     override operator fun invoke(arg: Arg): Result<R> {

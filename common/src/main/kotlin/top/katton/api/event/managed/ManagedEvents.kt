@@ -71,14 +71,14 @@ inline fun <reified T : Any> registerEvent(
     val owner = ScriptExecutionContext.currentScriptOwner() ?: "unknown"
     val scope = ScriptExecutionContext.currentScriptScope()
     @Suppress("UNCHECKED_CAST")
-    return p.register(T::class.java, owner, scope, priority, ignoreCancelled, handler as (Any) -> Unit)
+    return registerManagedResource(p, T::class.java, owner, scope, priority, ignoreCancelled, handler as (Any) -> Unit)
 }
 
 /**
  * Unregister a listener previously created by [registerEvent].
  */
 fun unregisterEvent(handle: ManagedEventHandle) {
-    provider?.unregister(handle)
+    managedCancellations.remove(handle.id)?.invoke() ?: provider?.unregister(handle)
 }
 
 // ---------------------------------------------------------------------------
@@ -108,3 +108,23 @@ fun clearManagedByOwnerPrefix(ownerPrefix: String) {
 fun clearAllManaged() {
     provider?.clearAll()
 }
+
+@PublishedApi
+internal fun registerManagedResource(p: ManagedListenerProvider, eventClass: Class<*>, owner: String,
+    scope: ScriptPackScope?, priority: Int, ignoreCancelled: Boolean, handler: (Any) -> Unit): ManagedEventHandle {
+    val environment = ScriptExecutionContext.currentScriptEnvironment()
+    var current = p.register(eventClass, owner, scope, priority, ignoreCancelled, handler)
+    val logical = current
+    var cancelled = false
+    managedCancellations[logical.id] = { cancelled = true; p.unregister(current) }
+    top.katton.engine.ManagedResources.record(
+        attach = { ScriptExecutionContext.withEnvironment(environment) {
+            if (!cancelled) current = p.register(eventClass, owner, scope, priority, ignoreCancelled, handler)
+        } },
+        detach = { p.unregister(current) },
+        dispose = { managedCancellations.remove(logical.id) }
+    )
+    return logical
+}
+
+private val managedCancellations = java.util.concurrent.ConcurrentHashMap<Long, () -> Unit>()

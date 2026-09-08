@@ -72,7 +72,7 @@ abstract class KattonRegistries<T : Identifiable>(
     private val entries = mutableMapOf<Identifier, T>()
 
     internal fun register(entry: T): T {
-        entries[entry.id] = entry
+        top.katton.engine.ManagedResources.put(entries, entry.id, entry)
         return entry
     }
 
@@ -151,7 +151,10 @@ object KattonRegistry {
 
         private fun bindHolderComponents(item: Item, properties: KattonItemProperties?) {
             val holder = item.builtInRegistryHolder
-            holder.components = properties?.buildComponent() ?: DataComponentMap.EMPTY
+            val components = properties?.buildComponent() ?: DataComponentMap.EMPTY
+            if (top.katton.util.ScriptExecutionContext.currentScriptOwner() != null) {
+                top.katton.engine.ManagedResources.contribute(holder, holder.components, components) { values -> holder.components = values.last() }
+            } else holder.components = components
             holder.tags = emptySet()
         }
 

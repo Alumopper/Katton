@@ -110,10 +110,10 @@ class ScriptPackManifestTest {
     }
 
     @Test
-    fun `signature payload version parses current v2`() {
+    fun `signature payload version parses current v3`() {
         val manifest = ScriptPackManifest.parse(
             path,
-            """{"dependencies":[],"signature":{"algorithm":"Ed25519","payloadVersion":2,"keyId":"publisher","signature":"AA=="}}"""
+            """{"dependencies":[],"signature":{"algorithm":"Ed25519","payloadVersion":3,"keyId":"publisher","signature":"AA=="}}"""
         )
 
         assertEquals(SCRIPT_PACK_SIGNATURE_PAYLOAD_VERSION, manifest.signature?.payloadVersion)

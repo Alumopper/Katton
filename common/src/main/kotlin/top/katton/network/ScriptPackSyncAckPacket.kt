@@ -12,6 +12,7 @@ data class ScriptPackSyncAckPacket(
     val message: String = ""
 ) : CustomPacketPayload {
     private fun write(buf: FriendlyByteBuf) {
+        buf.writeInt(0x4b500003)
         buf.writeVarLong(revision)
         buf.writeBoolean(success)
         buf.writeUtf(message, 1024)
@@ -25,6 +26,7 @@ data class ScriptPackSyncAckPacket(
         @JvmField
         val STREAM_CODEC: StreamCodec<FriendlyByteBuf, ScriptPackSyncAckPacket> =
             StreamCodec.of({ buf, packet -> packet.write(buf) }, { buf ->
+                require(buf.readInt() == 0x4b500003) { "Incompatible Katton pack protocol; update client/server" }
                 ScriptPackSyncAckPacket(buf.readVarLong(), buf.readBoolean(), buf.readUtf(1024))
             })
     }

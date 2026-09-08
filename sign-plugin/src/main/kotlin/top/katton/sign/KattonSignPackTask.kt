@@ -29,7 +29,7 @@ import java.util.Base64
 
 abstract class KattonSignPackTask : DefaultTask() {
     private companion object {
-        const val PAYLOAD_VERSION = 2
+        const val PAYLOAD_VERSION = 3
         const val MAX_FILES = 4_096
         const val MAX_DIRECTORY_ENTRIES = 16_384
         const val MAX_RELATIVE_PATH_CHARS = 1_024
@@ -38,7 +38,7 @@ abstract class KattonSignPackTask : DefaultTask() {
         const val MAX_PACK_BYTES = 64 * 1024 * 1024
         const val MAX_KEY_FILE_BYTES = 64 * 1024
         const val MAX_KEY_ID_CHARS = 256
-        val PAYLOAD_DOMAIN = "katton-script-pack-signature-v2".toByteArray(StandardCharsets.UTF_8)
+        val PAYLOAD_DOMAIN = "katton-script-pack-signature-v3".toByteArray(StandardCharsets.UTF_8)
         val WINDOWS_RESERVED_NAMES = buildSet {
             addAll(listOf("con", "prn", "aux", "nul"))
             (1..9).forEach { number ->
@@ -165,7 +165,8 @@ abstract class KattonSignPackTask : DefaultTask() {
                 val inContentRoot = relative.startsWith("assets/") || relative.startsWith("data/")
                 val isSource = relative.endsWith(".kt", ignoreCase = true) ||
                     relative.endsWith(".java", ignoreCase = true)
-                if (!inContentRoot && !isSource) return@forEach
+                val isLibrary = relative.startsWith("libs/") && relative.count { it == '/' } == 1 && relative.endsWith(".jar", ignoreCase = true)
+                if (!inContentRoot && !(isSource && !relative.startsWith("libs/")) && !isLibrary) return@forEach
                 require(isPortableRelativePath(relative)) {
                     "Pack file path is not portable across clients: $relative"
                 }

@@ -54,8 +54,11 @@ object ClientPostEffectManager {
         }
         val config = parsePostEffectConfig(id, postEffectJson) ?: return false
         warnMissingReferencedResources(id, config, fragmentShaders, vertexShaders)
-        definitions[id] = Definition(owner, config, fragmentShaders, vertexShaders)
-        invalidatePostChainCache(id)
+        top.katton.engine.ManagedResources.contribute("post-effect:$id", definitions[id], Definition(owner, config, fragmentShaders, vertexShaders), exclusive = true) { values ->
+            val current = values.lastOrNull()
+            if (current == null) definitions.remove(id) else definitions[id] = current
+            invalidatePostChainCache(id)
+        }
         return true
     }
 

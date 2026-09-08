@@ -292,6 +292,8 @@ object ServerNetworking {
      */
     private fun collectSyncSnapshot(): List<ScriptPack> {
         val packs = ScriptPackManager.collectServerSyncPacks().toList()
+        val graph = top.katton.pack.ScriptPackDependencyGraph.resolve(packs)
+        require(graph.invalidPacks.isEmpty()) { "Synchronized pack dependencies must be contained in the sync set: ${graph.errors.joinToString()}" }
         require(packs.size <= ScriptPackPacketLimits.MAX_PACKS) {
             "Too many client-synchronized script packs (${packs.size}, maximum ${ScriptPackPacketLimits.MAX_PACKS})"
         }

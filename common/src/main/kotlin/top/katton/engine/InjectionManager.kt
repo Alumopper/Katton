@@ -651,6 +651,7 @@ internal object InjectionManager {
         beforeHandlers.computeIfAbsent(key) { CopyOnWriteArrayList() }
             .add(BeforeEntry(id, owner, handler))
         handles[id] = createHandleMeta(id, owner, key, Phase.BEFORE)
+        recordInjection(id, key, beforeHandlers)
 
         return InjectionHandle(id, owner, method.declaringClass.name, method.name, Phase.BEFORE)
     }
@@ -689,6 +690,7 @@ internal object InjectionManager {
         afterHandlers.computeIfAbsent(key) { CopyOnWriteArrayList() }
             .add(AfterEntry(id, owner, handler))
         handles[id] = createHandleMeta(id, owner, key, Phase.AFTER)
+        recordInjection(id, key, afterHandlers)
 
         return InjectionHandle(id, owner, method.declaringClass.name, method.name, Phase.AFTER)
     }
@@ -721,6 +723,7 @@ internal object InjectionManager {
         replaceHandlers.computeIfAbsent(key) { CopyOnWriteArrayList() }
             .add(ReplaceEntry(id, owner, handler))
         handles[id] = createHandleMeta(id, owner, key, Phase.REPLACE)
+        recordInjection(id, key, replaceHandlers)
 
         return InjectionHandle(id, owner, method.declaringClass.name, method.name, Phase.REPLACE)
     }
@@ -760,6 +763,7 @@ internal object InjectionManager {
         redirectHandlers.computeIfAbsent(key) { CopyOnWriteArrayList() }
             .add(RedirectEntry(id, owner, targetMethod.also { it.isAccessible = true }))
         handles[id] = createHandleMeta(id, owner, key, Phase.REDIRECT)
+        recordInjection(id, key, redirectHandlers)
 
         return InjectionHandle(id, owner, sourceMethod.declaringClass.name, sourceMethod.name, Phase.REDIRECT)
     }
@@ -791,6 +795,7 @@ internal object InjectionManager {
         constructorBeforeHandlers.computeIfAbsent(key) { CopyOnWriteArrayList() }
             .add(ConstructorBeforeEntry(id, owner, handler))
         handles[id] = createHandleMeta(id, owner, key, Phase.CONSTRUCTOR_BEFORE)
+        recordInjection(id, key, constructorBeforeHandlers)
 
         return InjectionHandle(id, owner, constructor.declaringClass.name, "<init>", Phase.CONSTRUCTOR_BEFORE)
     }
@@ -822,6 +827,7 @@ internal object InjectionManager {
         constructorAfterHandlers.computeIfAbsent(key) { CopyOnWriteArrayList() }
             .add(ConstructorAfterEntry(id, owner, handler))
         handles[id] = createHandleMeta(id, owner, key, Phase.CONSTRUCTOR_AFTER)
+        recordInjection(id, key, constructorAfterHandlers)
 
         return InjectionHandle(id, owner, constructor.declaringClass.name, "<init>", Phase.CONSTRUCTOR_AFTER)
     }
@@ -830,6 +836,17 @@ internal object InjectionManager {
     /**
      * Roll back a single injection by handle id.
      */
+    private fun <T> recordInjection(id: String, key: String, table: ConcurrentHashMap<String, CopyOnWriteArrayList<T>>) {
+        val meta = handles.getValue(id)
+        val list = table.getValue(key)
+        val entry = list.last()
+        val position = list.lastIndex
+        ManagedResources.record(
+            attach = { list.add(minOf(position, list.size), entry); handles[id] = meta },
+            detach = { list.remove(entry); handles.remove(id) }
+        )
+    }
+
     fun rollback(handleId: String): Boolean {
         val meta = handles.remove(handleId) ?: return false
         when (meta.phase) {

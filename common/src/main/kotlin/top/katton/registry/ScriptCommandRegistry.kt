@@ -22,6 +22,7 @@ import top.katton.util.ReflectUtil
 object ScriptCommandRegistry {
 
     private val managedRoots = linkedSetOf<String>()
+    private val owners = mutableMapOf<String, String?>()
 
     /**
      * Begins a reload cycle by removing all managed commands.
@@ -37,6 +38,7 @@ object ScriptCommandRegistry {
         val dispatcherRoot = server.commands.dispatcher.root
         managedRoots.forEach { removeRootCommand(dispatcherRoot, it) }
         managedRoots.clear()
+        owners.clear()
     }
 
     /**
@@ -59,6 +61,8 @@ object ScriptCommandRegistry {
 
         val dispatcherRoot = server.commands.dispatcher.root
 
+        val owner = top.katton.util.ScriptExecutionContext.currentScriptOwner()
+        require(rootName !in owners || owners[rootName] == owner) { "Command $rootName belongs to another script instance" }
         val existingNode = dispatcherRoot.getChild(rootName)
         if (existingNode != null && rootName !in managedRoots) {
             throw IllegalArgumentException("Command root '$rootName' already exists and is not managed by scripts")
@@ -70,6 +74,20 @@ object ScriptCommandRegistry {
 
         server.commands.dispatcher.register(rootBuilder)
         managedRoots.add(rootName)
+        owners[rootName] = owner
+        val registered = dispatcherRoot.getChild(rootName)
+        val context = top.katton.scene.SceneOwner.capture()
+        fun wrap(node: com.mojang.brigadier.tree.CommandNode<CommandSourceStack>) {
+            node.command?.let { command ->
+                check(ReflectUtil.set(node, "command", com.mojang.brigadier.Command<CommandSourceStack> { args -> context.invoke { command.run(args) } }).isSuccess)
+            }
+            node.children.forEach(::wrap)
+        }
+        wrap(registered)
+        top.katton.engine.ManagedResources.record(
+            attach = { removeRootCommand(dispatcherRoot, rootName); dispatcherRoot.addChild(registered); managedRoots.add(rootName); owners[rootName] = owner },
+            detach = { removeRootCommand(dispatcherRoot, rootName); managedRoots.remove(rootName); owners.remove(rootName) }
+        )
     }
 
     /**

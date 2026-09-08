@@ -129,7 +129,7 @@ object ScriptPackDataManager {
         val dataHash = packDataHash(pack, jarLocation) ?: return null
         val effectiveLocation = when (pack.kind) {
             ScriptPackKind.JAR -> jarLocation ?: return null
-            ScriptPackKind.DIRECTORY ->
+            ScriptPackKind.DIRECTORY, ScriptPackKind.ZIP ->
                 ScriptPackDirectorySnapshots.materialize(pack, "data", dataHash)
                     ?: error("Cannot materialize data snapshot for ${pack.syncId}")
         }
@@ -164,7 +164,7 @@ object ScriptPackDataManager {
             Optional.empty()
         )
         val supplier = when (entry.kind) {
-            ScriptPackKind.DIRECTORY -> PathPackResources.PathResourcesSupplier(entry.location)
+            ScriptPackKind.DIRECTORY, ScriptPackKind.ZIP -> PathPackResources.PathResourcesSupplier(entry.location)
             ScriptPackKind.JAR -> FilePackResources.FileResourcesSupplier(entry.location)
         }
         return Pack(

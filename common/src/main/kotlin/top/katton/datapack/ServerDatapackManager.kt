@@ -50,40 +50,51 @@ object ServerDatapackManager {
     }
 
     fun registerRecipe(id: Identifier, recipe: JsonObject) {
-        recipes[id] = recipe
-        removedRecipes.remove(id)
+        contributeData("recipes:$id", recipes, removedRecipes, id, recipe.deepCopy())
     }
 
     fun removeRecipe(id: Identifier) {
-        recipes.remove(id)
-        removedRecipes.add(id)
+        contributeData("recipes:$id", recipes, removedRecipes, id, null)
     }
 
     fun registerAdvancement(id: Identifier, advancement: JsonObject) {
-        advancements[id] = advancement
-        removedAdvancements.remove(id)
+        contributeData("advancements:$id", advancements, removedAdvancements, id, advancement.deepCopy())
     }
 
     fun removeAdvancement(id: Identifier) {
-        advancements.remove(id)
-        removedAdvancements.add(id)
+        contributeData("advancements:$id", advancements, removedAdvancements, id, null)
     }
 
     fun registerLootTable(id: Identifier, lootTable: JsonObject) {
-        lootTables[id] = lootTable
-        removedLootTables.remove(id)
+        contributeData("lootTables:$id", lootTables, removedLootTables, id, lootTable.deepCopy())
     }
 
     fun removeLootTable(id: Identifier) {
-        lootTables.remove(id)
-        removedLootTables.add(id)
+        contributeData("lootTables:$id", lootTables, removedLootTables, id, null)
+    }
+
+    private fun contributeData(key: String, values: MutableMap<Identifier, JsonObject>, removed: MutableSet<Identifier>, id: Identifier, value: JsonObject?) {
+        val base = values[id]
+        val wasRemoved = id in removed
+        top.katton.engine.ManagedResources.contribute(key, base, value) { contributions ->
+            val latest = contributions.lastOrNull()
+            if (latest == null) values.remove(id) else values[id] = latest
+            if ((contributions.size > 1 && latest == null) || (contributions.size == 1 && wasRemoved)) removed.add(id) else removed.remove(id)
+        }
     }
 
     fun mutateTag(registryKey: ResourceKey<out Registry<*>>, tagId: Identifier, block: TagMutation.() -> Unit) {
-        val mutation = tagMutations
-            .computeIfAbsent(registryKey) { linkedMapOf() }
-            .computeIfAbsent(tagId) { TagMutation() }
-        mutation.block()
+        val mutation = TagMutation().apply(block)
+        val mutations = tagMutations.computeIfAbsent(registryKey) { linkedMapOf() }
+        top.katton.engine.ManagedResources.contribute("tag:$registryKey:$tagId", mutations[tagId], mutation) { values ->
+            val combined = TagMutation()
+            values.filterNotNull().forEach { contribution ->
+                if (contribution.replaceContents) combined.clear()
+                combined.addedEntries += contribution.addedEntries
+                combined.removedEntries += contribution.removedEntries
+            }
+            if (values.all { it == null }) mutations.remove(tagId) else mutations[tagId] = combined
+        }
     }
 
     fun apply(server: MinecraftServer): Boolean {

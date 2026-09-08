@@ -22,7 +22,7 @@ internal object ScriptPackDirectorySnapshots {
     private val initializedRoots = HashSet<Path>()
 
     fun materialize(pack: ScriptPack, contentRoot: String, contentHash: String): Path? {
-        require(pack.kind == ScriptPackKind.DIRECTORY) { "Only directory packs use directory snapshots" }
+        require(pack.kind != ScriptPackKind.JAR) { "Only directory packs use directory snapshots" }
         require(contentRoot == "assets" || contentRoot == "data") { "Unsupported content root '$contentRoot'" }
         require(CONTENT_HASH_PATTERN.matches(contentHash)) { "Invalid content snapshot hash" }
         val files = pack.contentFiles.filter { it.relativePath.startsWith("$contentRoot/") }

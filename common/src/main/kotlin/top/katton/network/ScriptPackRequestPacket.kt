@@ -17,6 +17,7 @@ data class ScriptPackRequestPacket(
         requestedSyncIds.forEach { id ->
             ScriptPackPacketLimits.requireUniqueForEncoding(id, uniqueIds, "requested script pack id")
         }
+        buf.writeInt(0x4b500003)
         buf.writeVarLong(revision)
         buf.writeVarInt(requestedSyncIds.size)
         requestedSyncIds.forEach { buf.writeUtf(it, ScriptPackPacketLimits.MAX_SYNC_ID_CHARS) }
@@ -32,6 +33,7 @@ data class ScriptPackRequestPacket(
             StreamCodec.of({ buf, packet -> packet.write(buf) }, { buf -> read(buf) })
 
         fun read(buf: FriendlyByteBuf): ScriptPackRequestPacket {
+            require(buf.readInt() == 0x4b500003) { "Incompatible Katton pack protocol; update client/server and rebuild the v3 cache" }
             val revision = buf.readVarLong()
             val count = ScriptPackPacketLimits.readCount(buf, ScriptPackPacketLimits.MAX_PACKS, "requested script packs")
             val ids = ArrayList<String>(count)

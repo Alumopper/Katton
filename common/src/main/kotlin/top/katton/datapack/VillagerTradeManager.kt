@@ -106,7 +106,10 @@ internal object VillagerTradeManager {
     }
 
     fun stageAddTrade(trade: PendingTrade) {
-        pendingTrades += trade
+        top.katton.engine.ManagedResources.contribute("villager-trades", pendingTrades.toList(), listOf(trade)) { values ->
+            pendingTrades.clear()
+            pendingTrades += values.flatten()
+        }
     }
 
     /**

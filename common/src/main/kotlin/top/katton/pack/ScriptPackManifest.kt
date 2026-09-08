@@ -22,7 +22,7 @@ private const val MAX_PUBLIC_KEY_TEXT_LENGTH = 1_024
 private const val MAX_SIGNATURE_TEXT_LENGTH = 512
 
 /** Current unambiguous, length-framed remote pack signature format. */
-internal const val SCRIPT_PACK_SIGNATURE_PAYLOAD_VERSION = 2
+internal const val SCRIPT_PACK_SIGNATURE_PAYLOAD_VERSION = 3
 private val POSITIVE_INTEGER_PATTERN = Regex("[1-9][0-9]*")
 
 data class ScriptPackManifest(
@@ -59,7 +59,7 @@ data class ScriptPackManifest(
 
             val fileName = packPath.fileName.toString()
             val fallbackId = fallbackIdOverride
-                ?: if (fileName.endsWith(".jar")) fileName.removeSuffix(".jar") else fileName
+                ?: if (fileName.endsWith(".zip", true)) fileName.dropLast(4) else fileName
             val id = root.stringOrNull("id")?.takeIf { it.isNotBlank() } ?: fallbackId
             val name = root.stringOrNull("name")?.takeIf { it.isNotBlank() } ?: id
             val version = root.stringOrNull("version") ?: "unknown"
@@ -125,7 +125,7 @@ private fun JsonObject.packDependenciesOrThrow(packPath: Path): List<ScriptPackD
         require(seen.add(id.lowercase(Locale.ROOT))) { "Duplicate pack dependency '$id' at $packPath" }
         val version = dependency.stringOrNull("version")?.trim()?.takeIf(String::isNotEmpty) ?: "*"
         require(version.length <= MAX_DEPENDENCY_VERSION_LENGTH) { "Pack dependency '$id' version is too long" }
-        ScriptPackDependency(id, version, dependency.booleanOrNull("required") ?: true)
+        ScriptPackDependency(id, version, dependency.booleanOrNull("required") ?: true, dependency.booleanOrNull("export") ?: false)
     }
 }
 

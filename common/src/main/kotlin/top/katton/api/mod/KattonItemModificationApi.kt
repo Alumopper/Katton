@@ -157,9 +157,14 @@ fun modifyItem(itemId: Identifier, configure: ItemModificationConfig.() -> Unit)
     val item = BuiltInRegistries.ITEM.getOptional(itemId)
         .orElseThrow { IllegalArgumentException("Item not found: $itemId") }
     val config = ItemModificationConfig(itemId).apply(configure)
-    ACTIVE_ITEM_MODIFICATIONS[itemId] = config
-
-    applyItemModifications(item, config)
+    val baseline = ReflectUtil.getT<DataComponentMap>(item, "components").getOrNull()
+    top.katton.engine.ManagedResources.contribute("item-mod:$itemId", null as ItemModificationConfig?, config) { values ->
+        baseline?.let { check(restoreItemComponents(mapOf(item to it))) }
+        val contributions = values.filterNotNull()
+        contributions.forEach { applyItemModifications(item, it) }
+        if (contributions.isEmpty()) ACTIVE_ITEM_MODIFICATIONS.remove(itemId)
+        else ACTIVE_ITEM_MODIFICATIONS[itemId] = contributions.last()
+    }
     return item
 }
 

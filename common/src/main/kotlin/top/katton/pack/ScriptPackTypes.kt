@@ -4,6 +4,7 @@ import java.nio.file.Path
 
 enum class ScriptPackKind {
     DIRECTORY,
+    ZIP,
     JAR
 }
 

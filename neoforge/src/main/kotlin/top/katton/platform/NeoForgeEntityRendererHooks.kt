@@ -36,12 +36,13 @@ object NeoForgeEntityRendererHooks : EntityRendererHooks {
                 ?: throw IllegalStateException("Context not yet captured.")
             @Suppress("UNCHECKED_CAST")
             val renderer = factory.create(context) as EntityRenderer<*, *>
-            kattonRenderers[entityType] = renderer
+            top.katton.engine.ManagedResources.put(kattonRenderers, entityType, renderer, exclusive = true)
             @Suppress("UNCHECKED_CAST")
             val state = (renderer as EntityRenderer<Entity, EntityRenderState>).createRenderState()
-            rendererByStateClass[state.javaClass] = renderer
+            top.katton.engine.ManagedResources.put(rendererByStateClass, state.javaClass, renderer, exclusive = true)
         } catch (e: Exception) {
             LOGGER.error("Failed to register entity renderer for {}", entityType, e)
+            throw e
         }
     }
 
@@ -52,8 +53,8 @@ object NeoForgeEntityRendererHooks : EntityRendererHooks {
     }
 
     override fun registerModelLayer(layer: ModelLayerLocation, definition: () -> LayerDefinition) {
-        try { bakedModelParts[layer] = definition().bakeRoot() }
-        catch (e: Exception) { LOGGER.error("Failed to register model layer {}", layer, e) }
+        try { top.katton.engine.ManagedResources.put(bakedModelParts, layer, definition().bakeRoot(), exclusive = true) }
+        catch (e: Exception) { LOGGER.error("Failed to register model layer {}", layer, e); throw e }
     }
 
     override fun unregisterModelLayer(layer: ModelLayerLocation): Boolean {

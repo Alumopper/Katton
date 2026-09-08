@@ -91,6 +91,7 @@ public class Katton {
      * Global-scoped handlers persist.
      */
     public static void clearWorldAndServerEvents() {
+        top.katton.engine.ScriptEngine.clearWorldInstances();
         Event.clearHandlersByScope(ScriptPackScope.WORLD);
         Event.clearHandlersByScope(ScriptPackScope.SERVER_CACHE);
         ManagedEventsKt.clearManagedByScope(ScriptPackScope.WORLD);

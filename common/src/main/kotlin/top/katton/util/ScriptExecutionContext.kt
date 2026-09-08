@@ -14,7 +14,26 @@ import top.katton.pack.ScriptPackScope
  * Entrypoint owners use `"<scope>:<phase>:<fqcn>"` so registrations from
  * different lifecycle phases can be replaced independently.
  */
+data class ScriptResourceOwner(
+    val environment: ScriptEnvironment,
+    val lifecycle: ScriptPackScope,
+    val syncId: String,
+    val generation: Long,
+    val phase: String,
+    val entrypoint: String
+) {
+    val key: String get() = "${lifecycle.serializedName}:${environment.name}:$syncId:$generation:$phase:$entrypoint"
+}
+
 object ScriptExecutionContext {
+    private val identities = java.util.concurrent.ConcurrentHashMap<String, ScriptResourceOwner>()
+    fun identityOf(owner: String?): ScriptResourceOwner? = owner?.let(identities::get)
+    fun currentIdentity(): ScriptResourceOwner? = currentScriptOwner()?.let(identities::get)
+    fun <T> withIdentity(identity: ScriptResourceOwner, action: () -> T): T {
+        identities[identity.key] = identity
+        return withOwner(identity.key, action)
+    }
+    fun forgetOwner(owner: String) { identities.remove(owner); ownerRevisions.remove(owner) }
     private val ownerRevisions = java.util.concurrent.ConcurrentHashMap<String, String>()
 
     /** Code revision follows owner propagation into event callbacks. */
@@ -37,11 +56,13 @@ object ScriptExecutionContext {
      */
     fun <R> withOwner(owner: String?, action: () -> R): R {
         if (owner == null) return action()
+        if (!top.katton.engine.ManagedResources.enter(owner)) throw ManagedCallbackPausedException()
         val previous = currentScriptOwner.get()
         currentScriptOwner.set(owner)
         return try {
             action()
         } finally {
+            top.katton.engine.ManagedResources.leave(owner)
             if (previous == null) {
                 currentScriptOwner.remove()
             } else {
@@ -84,3 +105,5 @@ object ScriptExecutionContext {
         }
     }
 }
+
+internal class ManagedCallbackPausedException : RuntimeException("Script generation is paused", null, false, false)

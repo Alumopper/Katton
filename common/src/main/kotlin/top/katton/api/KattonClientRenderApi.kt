@@ -192,7 +192,7 @@ fun registerHudRenderer(
     priority: Int = 0,
     render: (HudRenderContext) -> Unit
 ) {
-    hudRenderers[id] = HudRendererEntry(ScriptExecutionContext.currentScriptOwner(), layer, priority, render)
+    top.katton.engine.ManagedResources.put(hudRenderers, id, HudRendererEntry(ScriptExecutionContext.currentScriptOwner(), layer, priority, render), exclusive = true)
 }
 
 /**
@@ -264,7 +264,7 @@ fun registerWorldRenderer(
     priority: Int = 0,
     render: (WorldRenderContext) -> Unit
 ) {
-    worldRenderers[id] = WorldRendererEntry(ScriptExecutionContext.currentScriptOwner(), layer, priority, render)
+    top.katton.engine.ManagedResources.put(worldRenderers, id, WorldRendererEntry(ScriptExecutionContext.currentScriptOwner(), layer, priority, render), exclusive = true)
 }
 
 /**

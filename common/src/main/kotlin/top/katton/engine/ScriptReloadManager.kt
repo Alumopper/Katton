@@ -8,12 +8,6 @@ import top.katton.api.ClientPhase
 import top.katton.api.InvocationReason
 import top.katton.api.ReloadCause
 import top.katton.api.ServerPhase
-import top.katton.api.clearClientPostEffects
-import top.katton.api.clearClientRenderers
-import top.katton.api.mod.clearItemModifications
-import top.katton.api.mod.restoreItemComponents
-import top.katton.api.mod.snapshotItemComponents
-import top.katton.api.event.managed.clearManagedByScopeAndEnvironment
 import top.katton.api.event.managed.clearManagedByOwnerPrefix
 import top.katton.client.ReloadProgressState
 import top.katton.client.ReloadProgressTracker
@@ -22,14 +16,11 @@ import top.katton.config.KattonConfigManager
 import top.katton.datapack.ServerDatapackManager
 import top.katton.datapack.ScriptPackDataManager
 import top.katton.pack.ScriptPack
-import top.katton.pack.ScriptPackDependencyGraph
 import top.katton.pack.ScriptPackManager
 import top.katton.pack.ScriptPackScope
 import top.katton.pack.ServerPackCacheManager
 import top.katton.network.ServerNetworking
 import top.katton.platform.ServerTaskScheduler
-import top.katton.registry.KattonRegistry
-import top.katton.registry.ScriptCommandRegistry
 import top.katton.util.Event
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
@@ -62,6 +53,38 @@ object ScriptReloadManager {
         val future: CompletableFuture<Void> = CompletableFuture()
     )
 
+    private data class PreparedServerReload(
+        val previousWorld: List<ScriptPack>, val candidateWorld: List<ScriptPack>,
+        val effectiveWorld: List<ScriptPack>, val previousGlobals: List<ScriptPack>,
+        val globalCandidate: List<ScriptPack>?, val plans: List<PackPreparation>,
+        val previousPlans: List<PackPreparation>
+    ) {
+        fun select(packs: List<ScriptPack>): List<PackPreparation> {
+            val next = plans.associateBy { it.pack.syncId }
+            val old = previousPlans.associateBy { it.pack.syncId }
+            val chosen = next.toMutableMap()
+            packs.forEach { pack ->
+                chosen[pack.syncId] = next[pack.syncId]?.takeIf { it.pack.hash == pack.hash }
+                    ?: old[pack.syncId]?.takeIf { it.pack.hash == pack.hash }
+                    ?: error("No immutable preparation for ${pack.syncId}")
+            }
+            val result = mutableListOf<PackPreparation>()
+            val seen = hashSetOf<String>()
+            fun visit(id: String) {
+                if (!seen.add(id)) return
+                val plan = chosen[id] ?: old[id] ?: error("Missing prepared dependency: $id")
+                plan.visible.forEach(::visit)
+                result += plan
+            }
+            packs.forEach { visit(it.syncId) }
+            return result
+        }
+    }
+
+    private val serverPreparationExecutor = Executors.newSingleThreadExecutor { runnable ->
+        Thread(runnable, "Katton-ServerPreparation").also { it.isDaemon = true }
+    }
+
     private val clientReloadExecutor: ExecutorService = Executors.newSingleThreadExecutor { r ->
         Thread(r, "Katton-ClientReload").also { it.isDaemon = true }
     }
@@ -91,6 +114,11 @@ object ScriptReloadManager {
     @Volatile
     private var activeClientPacks: List<ScriptPack> = emptyList()
 
+    internal fun clearClientRuntimeSnapshot() {
+        activeClientPacks = emptyList()
+        clientJoinedDispatchPending = false
+    }
+
     /**
      * Reloads all client-side world scripts.
      * No-op on server-only platforms (Paper) where hasClient=false.
@@ -105,9 +133,11 @@ object ScriptReloadManager {
         if (!Katton.hasClient) {
             return true
         }
+        var success = false
         return try {
-            reloadClientScriptsPrepared(reason, cause)
+            reloadClientScriptsPrepared(reason, cause).also { success = it }
         } finally {
+            ScriptPackManager.finishGlobalResourceRefresh(success)
             runOnClientThreadAndWait { top.katton.client.scene.ClientSceneManager.finishReload() }
         }
     }
@@ -121,7 +151,6 @@ object ScriptReloadManager {
 
         // Keep the last-known-good snapshot live until the candidate compiles.
         val previousPacks = activeClientPacks.toList()
-        val previousItemComponents = snapshotItemComponents()
 
         //set world and game directories for script packs
         ScriptPackManager.setGameDirectory(Katton.gameDirectory)
@@ -135,6 +164,8 @@ object ScriptReloadManager {
         tracker.step("katton.reload.common.set_world_directory")
 
         //scan and collect world script packs and resources
+        val previousGlobals = ScriptPackManager.collectExecutableGlobalPacks()
+        ScriptPackManager.refreshGlobalResources()
         val candidateWorldPacks = ScriptPackManager.scanWorldPacksCandidate()
         val worldOnlyPacks = candidateWorldPacks.filter { it.enabled }
         tracker.step("katton.reload.common.scan_world_packs")
@@ -153,51 +184,33 @@ object ScriptReloadManager {
             return false
         }
         val effectivePacks = prepared.packs
-        val preservedSceneRevisions = effectivePacks
-            .filter { it.syncId in prepared.rejectedCandidateSyncIds }
-            .mapTo(hashSetOf()) { it.codeHash }
-
         val minecraft = Minecraft.getInstance()
-        var firstReset = true
-        val activatedPacks = executePreparedGroupsWithFallback(
-            initialPacks = effectivePacks,
-            previousPacks = previousPacks,
-            invocation = registryInvocation,
-            resetRuntime = {
-                resetClientRuntime(if (firstReset) tracker else null, preservedSceneRevisions)
-                check(restoreItemComponents(previousItemComponents)) {
-                    "Failed to restore item components before client script activation"
+        var globals = ScriptPackManager.collectExecutableGlobalPacks()
+        if (globals != previousGlobals) {
+            val accepted = ScriptPackResourceManager.activateAndReload(globals + previousPacks)
+            ScriptPackManager.finishGlobalResourceRefresh(accepted)
+            if (!accepted) globals = previousGlobals
+        }
+        val activatedPacks = PackReloadBatch.run(previousPacks, effectivePacks,
+            activate = { proposed ->
+                var ok = ScriptEngine.compileAndExecuteAll(proposed, registryInvocation, tracker::update)
+                if (ok && minecraft.player != null && minecraft.level != null) {
+                    ok = ScriptEngine.compileAndExecuteAll(proposed,
+                        ScriptInvocation.client(ClientPhase.JOINED, reason, cause, minecraft), tracker::update)
+                    if (ok) clientJoinedDispatchPending = false
+                } else if (ok) clientJoinedDispatchPending = true
+                if (!ok) null else {
+                    val active = PackRuntime.effectivePacks(ScriptEnvironment.CLIENT,
+                        setOf(ScriptPackScope.WORLD, ScriptPackScope.SERVER_CACHE))
+                    if (ScriptPackResourceManager.activateAndReload(globals + active)) active else null
                 }
-                firstReset = false
+            },
+            restoreResources = { old ->
+                check(ScriptPackResourceManager.activateAndReload(globals + old)) { "Could not restore client asset view" }
+                KattonConfigManager.retainPacks(setOf(ScriptPackScope.WORLD, ScriptPackScope.SERVER_CACHE),
+                    old.mapTo(hashSetOf(), KattonConfigManager::configId))
             }
-        ) { group ->
-            var groupOk = ScriptEngine.compileAndExecuteAll(group, registryInvocation, tracker::update)
-            if (groupOk && minecraft.player != null && minecraft.level != null) {
-                groupOk = ScriptEngine.compileAndExecuteAll(
-                    group,
-                    ScriptInvocation.client(ClientPhase.JOINED, reason, cause, minecraft),
-                    tracker::update
-                )
-                if (groupOk) clientJoinedDispatchPending = false
-            } else if (groupOk) {
-                clientJoinedDispatchPending = true
-            }
-            groupOk
-        }
-        if (activatedPacks == null) {
-            restoreClientRuntime(previousPacks, previousItemComponents, reason, cause, preservedSceneRevisions)
-            tracker.finish("katton.reload.client.failed")
-            return false
-        }
-        val activatedResourcePacks = mutableListOf<ScriptPack>().apply {
-            addAll(ScriptPackManager.collectExecutableGlobalPacks())
-            addAll(activatedPacks)
-        }
-        if (!ScriptPackResourceManager.activateAndReload(activatedResourcePacks)) {
-            restoreClientRuntime(previousPacks, previousItemComponents, reason, cause, preservedSceneRevisions)
-            tracker.finish("katton.reload.client.failed")
-            return false
-        }
+        ) ?: run { tracker.finish("katton.reload.client.failed"); return false }
         ScriptPackManager.publishWorldPacks(
             candidateWorldPacks,
             activatedPacks.filter { it.scope == ScriptPackScope.WORLD }
@@ -209,61 +222,6 @@ object ScriptReloadManager {
         activeClientPacks = activatedPacks.toList()
         tracker.finish("katton.reload.client.finished")
         return true
-    }
-
-    private fun resetClientRuntime(
-        tracker: ReloadProgressTracker? = null,
-        preservedSceneRevisions: Set<String> = emptySet()
-    ) {
-        // Client and integrated-server registrations share one JVM, so only clear client-owned entries.
-        runOnClientThreadAndWait {
-            for (scope in CLIENT_RELOAD_SCOPES) {
-                Event.clearHandlersByScopeAndEnvironment(scope, ScriptEnvironment.CLIENT)
-                clearManagedByScopeAndEnvironment(scope, ScriptEnvironment.CLIENT)
-                InjectionManager.beginReload(scope, ScriptEnvironment.CLIENT)
-            }
-            tracker?.step("katton.reload.client.clear_world_handlers")
-            tracker?.step("katton.reload.common.reset_injections")
-            clearClientRenderers()
-            top.katton.client.scene.ClientSceneManager.clearForReload(preservedSceneRevisions)
-            tracker?.step("katton.reload.client.clear_renderers")
-            clearClientPostEffects()
-            tracker?.step("katton.reload.client.clear_post_effects")
-            clearItemModifications()
-            tracker?.step("katton.reload.common.clear_item_modifications")
-            KattonRegistry.ENTITY_RENDERERS.beginReload()
-            tracker?.step("katton.reload.common.reset_entity_renderers")
-        }
-    }
-
-    private fun restoreClientRuntime(
-        previousPacks: List<ScriptPack>,
-        previousItemComponents: Map<net.minecraft.world.item.Item, net.minecraft.core.component.DataComponentMap>,
-        reason: InvocationReason,
-        cause: ReloadCause,
-        preservedSceneRevisions: Set<String>
-    ) {
-        logger.warn("Restoring the previous client script snapshot after a rejected reload")
-        resetClientRuntime(preservedSceneRevisions = preservedSceneRevisions)
-        var restored = restoreItemComponents(previousItemComponents)
-        val registryInvocation = ScriptInvocation.client(ClientPhase.REGISTRY_SETUP, reason, cause)
-        val minecraft = Minecraft.getInstance()
-        ScriptPackDependencyGraph.compilationGroups(previousPacks).forEach { group ->
-            var groupRestored = ScriptEngine.compileAndExecuteAll(group, registryInvocation)
-            if (groupRestored && minecraft.player != null && minecraft.level != null) {
-                groupRestored = ScriptEngine.compileAndExecuteAll(
-                    group,
-                    ScriptInvocation.client(ClientPhase.JOINED, reason, cause, minecraft)
-                )
-            }
-            restored = groupRestored && restored
-        }
-        clientJoinedDispatchPending = restored && (minecraft.player == null || minecraft.level == null)
-        if (!restored) logger.error("Failed to restore the previous client script snapshot")
-        KattonConfigManager.retainPacks(
-            setOf(ScriptPackScope.WORLD, ScriptPackScope.SERVER_CACHE),
-            previousPacks.mapTo(hashSetOf(), KattonConfigManager::configId)
-        )
     }
 
     /** Preflights a candidate server-cache snapshot while the current one remains active. */
@@ -529,9 +487,7 @@ object ScriptReloadManager {
                     ReloadCause.CLIENT_JOIN,
                     minecraft
                 )
-            ScriptPackDependencyGraph.compilationGroups(packs).forEach { group ->
-                ok = ScriptEngine.compileAndExecuteAll(group, invocation) && ok
-            }
+            ok = ScriptEngine.compileAndExecuteAll(packs, invocation)
             if (!ok) logger.error("Failed to execute client JOINED entrypoints")
         }
     }
@@ -604,6 +560,7 @@ object ScriptReloadManager {
     @JvmStatic
     fun resetServerLifecycle(server: MinecraftServer?) {
         if (server == null || globalReadyServer === server) {
+            PackRuntime.resetGlobalPhase(ScriptEnvironment.SERVER, ServerPhase.READY.name)
             val ownerPrefix = "${ScriptPackScope.GLOBAL.serializedName}:${ServerPhase.READY.name}:"
             Event.clearHandlersByOwnerPrefix(ownerPrefix)
             clearManagedByOwnerPrefix(ownerPrefix)
@@ -627,79 +584,69 @@ object ScriptReloadManager {
         reason: InvocationReason,
         cause: ReloadCause
     ): Boolean {
-        if (server == null) {
-            return false
-        }
+        var success = false
+        return try {
+            reloadServerScriptsPrepared(server, reason, cause).also { success = it }
+        } finally { ScriptPackManager.finishGlobalResourceRefresh(success) }
+    }
 
+    /** Reads and compiles immutable snapshots without invoking script code or mutating native resources. */
+    private fun prepareServerReload(server: MinecraftServer, reason: InvocationReason, cause: ReloadCause): PreparedServerReload {
+        ScriptPackManager.setGameDirectory(Katton.gameDirectory)
+        ScriptPackManager.setWorldDirectory(server.getWorldPath(LevelResource.ROOT))
+        ensureDirectory(ScriptPackManager.getWorldScriptDirectory())
+        val previousWorld = ScriptPackManager.collectExecutableWorldPacks()
+        val previousGlobals = ScriptPackManager.collectExecutableGlobalPacks()
+        val previousPlans = PackRuntime.preparations(ScriptEnvironment.SERVER)
+        ScriptPackManager.refreshGlobalResources()
+        try {
+            val candidates = ScriptPackManager.scanWorldPacksCandidate()
+            val invocation = ScriptInvocation.server(ServerPhase.READY, reason, cause, server)
+            val effective = ScriptEngine.prepareWithFallback(candidates.filter { it.enabled }, previousWorld, invocation)
+                ?: error("Server script preparation failed")
+            val globals = ScriptPackManager.collectExecutableGlobalPacks()
+            val plans = ScriptEngine.preparePacks(globals + effective.packs, invocation)
+            return PreparedServerReload(previousWorld, candidates, effective.packs, previousGlobals,
+                ScriptPackManager.captureGlobalResourceCandidate(), plans, previousPlans)
+        } finally { ScriptPackManager.finishGlobalResourceRefresh(false) }
+    }
+
+    private fun reloadServerScriptsPrepared(server: MinecraftServer?, reason: InvocationReason, cause: ReloadCause,
+                                            snapshot: PreparedServerReload? = null): Boolean {
+        if (server == null) return false
+        val prepared = snapshot ?: prepareServerReload(server, reason, cause)
         val tracker = ReloadProgressTracker(24)
         tracker.begin("katton.reload.server.begin")
-
-        val previousWorldPacks = ScriptPackManager.collectExecutableWorldPacks()
-        val previousItemComponents = snapshotItemComponents()
-
-        ScriptPackManager.setGameDirectory(Katton.gameDirectory)
-        tracker.step("katton.reload.common.set_game_directory")
-        ScriptPackManager.setWorldDirectory(server.getWorldPath(LevelResource.ROOT))
-        tracker.step("katton.reload.common.set_world_directory")
-        ensureDirectory(ScriptPackManager.getWorldScriptDirectory())
-        val candidateWorldPacks = ScriptPackManager.scanWorldPacksCandidate()
-        val worldOnlyPacks = candidateWorldPacks.filter { it.enabled }
-        tracker.step("katton.reload.common.scan_world_packs")
-
-        tracker.step("katton.reload.common.collect_world_packs")
-        val previousDataPacks = mutableListOf<ScriptPack>().apply {
-            addAll(ScriptPackManager.collectExecutableGlobalPacks())
-            addAll(previousWorldPacks)
-        }
-        tracker.step("katton.reload.server.collect_data_packs")
+        val previousWorldPacks = prepared.previousWorld
+        val candidateWorldPacks = prepared.candidateWorld
+        val effectiveWorldPacks = prepared.effectiveWorld
+        val previousGlobals = prepared.previousGlobals
+        ScriptPackManager.stageGlobalResourceCandidate(prepared.globalCandidate)
         val invocation = ScriptInvocation.server(ServerPhase.READY, reason, cause, server)
-        val prepared = ScriptEngine.prepareWithFallback(worldOnlyPacks, previousWorldPacks, invocation)
-        if (prepared == null) {
-            tracker.finish("katton.reload.server.failed")
-            return false
-        }
-        val effectiveWorldPacks = prepared.packs
 
         tracker.step("katton.reload.common.compile_execute_scripts")
-        var firstReset = true
-        val activatedWorldPacks = executePreparedGroupsWithFallback(
-            initialPacks = effectiveWorldPacks,
-            previousPacks = previousWorldPacks,
-            invocation = invocation,
-            resetRuntime = {
-                resetServerRuntime(server, if (firstReset) tracker else null)
-                check(restoreItemComponents(previousItemComponents)) {
-                    "Failed to restore item components before server script activation"
+        var globals = ScriptPackManager.collectExecutableGlobalPacks()
+        if (globals != previousGlobals) {
+            val accepted = ScriptPackDataManager.activateAndReload(server, globals + previousWorldPacks)
+            ScriptPackManager.finishGlobalResourceRefresh(accepted)
+            if (!accepted) globals = previousGlobals
+        }
+        val activatedWorldPacks = PackReloadBatch.run(previousWorldPacks, effectiveWorldPacks,
+            activate = { proposed ->
+                if (!ScriptEngine.executePreparedPacks(proposed, prepared.select(proposed), invocation)) null else {
+                    val active = PackRuntime.effectivePacks(ScriptEnvironment.SERVER, setOf(ScriptPackScope.WORLD))
+                    if (!ScriptPackDataManager.activateAndReload(server, globals + active)) null
+                    else if (runCatching { ServerDatapackManager.apply(server) }
+                            .onFailure { logger.error("Failed to apply scripted datapack resources", it) }.isSuccess) active
+                    else null
                 }
-                firstReset = false
+            },
+            restoreResources = { old ->
+                check(ScriptPackDataManager.activateAndReload(server, globals + old)) { "Could not restore server datapack view" }
+                ServerDatapackManager.apply(server)
+                KattonConfigManager.retainPacks(setOf(ScriptPackScope.WORLD), old.mapTo(hashSetOf(), KattonConfigManager::configId))
             }
-        ) { group ->
-            ScriptEngine.compileAndExecuteAll(group, invocation, tracker::update)
-        }
-        if (activatedWorldPacks == null) {
-            restoreServerRuntime(server, previousWorldPacks, previousDataPacks, previousItemComponents, reason, cause)
-            tracker.finish("katton.reload.server.failed")
-            return false
-        }
-        val activatedServerDataPacks = mutableListOf<ScriptPack>().apply {
-            addAll(ScriptPackManager.collectExecutableGlobalPacks())
-            addAll(activatedWorldPacks)
-        }
-        if (!ScriptPackDataManager.activateAndReload(server, activatedServerDataPacks)) {
-            restoreServerRuntime(server, previousWorldPacks, previousDataPacks, previousItemComponents, reason, cause)
-            tracker.finish("katton.reload.server.failed")
-            return false
-        }
-        tracker.step("katton.reload.server.mount_script_data")
-        tracker.step("katton.reload.server.reload_script_data")
-        val dataApplied = runCatching { ServerDatapackManager.apply(server) }
-            .onFailure { logger.error("Failed to apply scripted data-pack mutations", it) }
-            .isSuccess
-        if (!dataApplied) {
-            restoreServerRuntime(server, previousWorldPacks, previousDataPacks, previousItemComponents, reason, cause)
-            tracker.finish("katton.reload.server.failed")
-            return false
-        }
+        ) ?: run { tracker.finish("katton.reload.server.failed"); return false }
         ScriptPackManager.publishWorldPacks(candidateWorldPacks, activatedWorldPacks)
         KattonConfigManager.retainPacks(
             setOf(ScriptPackScope.WORLD),
@@ -708,120 +655,6 @@ object ScriptReloadManager {
         tracker.step("katton.reload.server.apply_datapacks")
         tracker.finish("katton.reload.server.finished")
         return true
-    }
-
-    private fun resetServerRuntime(server: MinecraftServer, tracker: ReloadProgressTracker? = null) {
-        ScriptCommandRegistry.beginReload(server)
-        tracker?.step("katton.reload.server.reset_command_registry")
-        if (Katton.registrationEnabled) {
-            KattonRegistry.ITEMS.beginReload()
-            tracker?.step("katton.reload.server.reset_item_registry")
-            KattonRegistry.EFFECTS.beginReload()
-            KattonRegistry.BLOCKS.beginReload()
-            tracker?.step("katton.reload.server.reset_effect_block_registries")
-            KattonRegistry.ENTITY_TYPES.beginReload()
-            tracker?.step("katton.reload.server.reset_entity_type_registry")
-            KattonRegistry.SOUND_EVENTS.beginReload()
-            KattonRegistry.PARTICLE_TYPES.beginReload()
-            tracker?.step("katton.reload.server.reset_sound_particle_registries")
-            KattonRegistry.BLOCK_ENTITY_TYPES.beginReload()
-            tracker?.step("katton.reload.server.reset_block_entity_type_registry")
-            KattonRegistry.CREATIVE_TABS.beginReload()
-            KattonRegistry.DATA_COMPONENT_TYPES.beginReload()
-            tracker?.step("katton.reload.server.reset_creative_tabs_components")
-        }
-        if (Katton.hasClient) {
-            KattonRegistry.ENTITY_RENDERERS.beginReload()
-            tracker?.step("katton.reload.common.reset_entity_renderers")
-        }
-        ServerDatapackManager.beginReload()
-        tracker?.step("katton.reload.server.reset_datapack_manager")
-        clearItemModifications()
-        tracker?.step("katton.reload.common.clear_item_modifications")
-        Event.clearHandlersByScopeAndEnvironment(ScriptPackScope.WORLD, ScriptEnvironment.SERVER)
-        tracker?.step("katton.reload.server.clear_event_handlers")
-        clearManagedByScopeAndEnvironment(ScriptPackScope.WORLD, ScriptEnvironment.SERVER)
-        tracker?.step("katton.reload.server.clear_managed_event_listeners")
-        InjectionManager.beginReload(ScriptPackScope.WORLD, ScriptEnvironment.SERVER)
-        tracker?.step("katton.reload.common.reset_injections")
-    }
-
-    private fun restoreServerRuntime(
-        server: MinecraftServer,
-        previousWorldPacks: List<ScriptPack>,
-        previousDataPacks: List<ScriptPack>,
-        previousItemComponents: Map<net.minecraft.world.item.Item, net.minecraft.core.component.DataComponentMap>,
-        reason: InvocationReason,
-        cause: ReloadCause
-    ) {
-        logger.warn("Restoring the previous server script snapshot after a rejected reload")
-        resetServerRuntime(server)
-        val restoredComponents = restoreItemComponents(previousItemComponents)
-        val restoreInvocation = ScriptInvocation.server(ServerPhase.READY, reason, cause, server)
-        var restoredScripts = true
-        ScriptPackDependencyGraph.compilationGroups(previousWorldPacks).forEach { group ->
-            restoredScripts = ScriptEngine.compileAndExecuteAll(group, restoreInvocation) && restoredScripts
-        }
-        val restoredResources = ScriptPackDataManager.activateAndReload(server, previousDataPacks)
-        val restoredData = runCatching { ServerDatapackManager.apply(server) }
-            .onFailure { logger.error("Failed to reapply the previous scripted data-pack mutations", it) }
-            .isSuccess
-        if (!restoredComponents || !restoredScripts || !restoredResources || !restoredData) {
-            logger.error("Failed to fully restore the previous server script snapshot")
-        }
-        KattonConfigManager.retainPacks(
-            setOf(ScriptPackScope.WORLD),
-            previousWorldPacks.mapTo(hashSetOf(), KattonConfigManager::configId)
-        )
-    }
-
-    /**
-     * Executes weakly connected dependency components independently. A local
-     * component that fails at runtime is replaced with its previous immutable
-     * snapshot (or omitted when it has no last-known-good version), then the
-     * runtime is rebuilt so partial registrations from the failed attempt cannot
-     * leak into the activated state.
-     */
-    private fun executePreparedGroupsWithFallback(
-        initialPacks: List<ScriptPack>,
-        previousPacks: List<ScriptPack>,
-        invocation: ScriptInvocation,
-        resetRuntime: () -> Unit,
-        executeGroup: (List<ScriptPack>) -> Boolean
-    ): List<ScriptPack>? {
-        var selected = initialPacks
-        val maximumAttempts = (initialPacks.size + previousPacks.size + 1).coerceAtLeast(1)
-        repeat(maximumAttempts) {
-            if (runCatching(resetRuntime).onFailure {
-                    logger.error("Failed to reset script runtime before activating a candidate", it)
-                }.isFailure) return null
-            val failedGroup = ScriptPackDependencyGraph.compilationGroups(selected)
-                .firstOrNull { group -> !executeGroup(group) }
-                ?: return selected
-            if (failedGroup.any { it.scope == ScriptPackScope.SERVER_CACHE }) return null
-
-            val failedIds = failedGroup.mapTo(hashSetOf()) { it.syncId }
-            failedIds.forEach(KattonConfigManager::clearPack)
-            val failedVersions = failedGroup.associate { it.syncId to it.codeHash }
-            val fallback = previousPacks.filter { previous ->
-                previous.enabled && previous.syncId in failedIds &&
-                    failedVersions[previous.syncId] != previous.codeHash
-            }
-            ScriptIssueReporter.report(
-                "Katton retained last-known-good script packs",
-                if (fallback.isEmpty()) {
-                    "Rejected runtime component: ${failedIds.sorted().joinToString()}; no previous snapshot is available"
-                } else {
-                    "Rejected runtime component: ${failedIds.sorted().joinToString()}; restored: " +
-                        fallback.map { it.syncId }.sorted().joinToString()
-                }
-            )
-            val nextCandidates = selected.filterNot { it.syncId in failedIds } + fallback
-            val prepared = ScriptEngine.prepareWithFallback(nextCandidates, emptyList(), invocation) ?: return null
-            selected = prepared.packs
-        }
-        logger.error("Script pack fallback did not converge after {} attempts", maximumAttempts)
-        return null
     }
 
     /**
@@ -879,18 +712,31 @@ object ScriptReloadManager {
     }
 
     private fun scheduleServerReload(request: ServerReloadRequest) {
+        serverPreparationExecutor.execute {
+            val preparation = runCatching { prepareServerReload(request.server, request.reason, request.cause) }
+            activateServerReload(request, preparation)
+        }
+    }
+
+    private fun activateServerReload(request: ServerReloadRequest, preparation: Result<PreparedServerReload>) {
         // Registry, event, command, and datapack mutations must stay on the
         // platform's server-wide mutation thread (the global region on Folia).
         try {
             ServerTaskScheduler.execute(request.server, Runnable {
                 var completedSuccessfully = false
                 try {
-                    // Calling this on every pass is cheap once initialized and
-                    // also repairs an initial-load failure before a queued reload.
-                    if (!initializeGlobalReadyPacks(request.server)) {
-                        throw IllegalStateException("Global server READY entrypoints failed")
+                    check(Katton.server === request.server) { "Server lifecycle ended during script preparation" }
+                    val snapshot = preparation.getOrThrow()
+                    ScriptPackManager.stageGlobalResourceCandidate(snapshot.globalCandidate)
+                    if (globalReadyServer !== request.server) {
+                        val globals = snapshot.plans.map { it.pack }.filter { it.scope == ScriptPackScope.GLOBAL }
+                        check(ScriptEngine.executePreparedPacks(globals, snapshot.select(globals),
+                            ScriptInvocation.server(ServerPhase.READY, InvocationReason.INITIAL_LOAD, ReloadCause.SERVER_START, request.server))) {
+                            "Global server READY entrypoints failed"
+                        }
+                        globalReadyServer = request.server
                     }
-                    val ok = reloadScripts(request.server, request.reason, request.cause)
+                    val ok = reloadServerScriptsPrepared(request.server, request.reason, request.cause, snapshot)
                     if (ok) {
                         if (Katton.hasClient) {
                             ServerNetworking.publishPackRevision(request.server)
@@ -912,6 +758,7 @@ object ScriptReloadManager {
                     ReloadProgressState.finish("katton.reload.server.failed")
                     request.future.completeExceptionally(t)
                 } finally {
+                    ScriptPackManager.finishGlobalResourceRefresh(completedSuccessfully)
                     request.callbacks.forEach { callback ->
                         runCatching { callback(completedSuccessfully) }
                             .onFailure { logger.error("Server script reload completion callback failed", it) }

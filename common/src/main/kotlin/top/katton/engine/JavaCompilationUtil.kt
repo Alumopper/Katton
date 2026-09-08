@@ -25,9 +25,7 @@ import kotlin.io.path.createTempDirectory
 /**
  * Compiles `.java` source files into a `.jar` with caching based on content hash.
  *
- * **Classpath**: obtained from [ManagementFactory.getRuntimeMXBean().getClassPath()],
- * which includes ALL game jars, mod jars, and libraries — same as what Kotlin's
- * `dependenciesFromCurrentContext(wholeClasspath = true)` sees.
+ * **Classpath**: callers supply the host API and declared dependency paths explicitly.
  *
  * **Caching**: the compiled jar is stored at `<cacheDir>/java-<sha256-hex>.jar`.
  * If the file exists, javac is skipped entirely.
@@ -106,13 +104,12 @@ object JavaCompilationUtil {
                 Files.createDirectories(classOutput)
 
                 val effectiveClasspath = buildList {
-                    add(runtimeClasspath)
                     addAll(additionalClasspath.map(Path::toString))
                 }.filter(String::isNotBlank).joinToString(java.io.File.pathSeparator)
                 val options = listOf(
                     "-classpath", effectiveClasspath,
                     "-d", classOutput.toString(),
-                    "-source", System.getProperty("java.specification.version", "25")
+                    "--release", "25", "-proc:none"
                 )
 
                 val task = compiler.getTask(null, fileManager, diagnostics, options, null, units)
@@ -175,7 +172,7 @@ object JavaCompilationUtil {
         dependencyFingerprints: List<String>
     ): String {
         val digest = MessageDigest.getInstance("SHA-256")
-        digest.updateFramed("katton-java-cache-v2".toByteArray(StandardCharsets.UTF_8))
+        digest.updateFramed("katton-java-cache-v3".toByteArray(StandardCharsets.UTF_8))
         digest.updateInt(javaFiles.size)
         javaFiles.sortedBy { it.relativePath }.forEach { f ->
             digest.updateFramed(f.relativePath.toByteArray(StandardCharsets.UTF_8))

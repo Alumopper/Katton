@@ -25,6 +25,16 @@ internal class ReloadableBuiltInRegistry<T : Any>(
     private val logger = LoggerFactory.getLogger("KattonRegistry")
     private val tracker = OwnershipTracker()
     private val staleManagedIds = linkedSetOf<Identifier>()
+    private val owners = mutableMapOf<Identifier, String?>()
+    private val persistentIds = mutableSetOf<Identifier>()
+    private val persistentRecords = mutableMapOf<Identifier, top.katton.engine.ManagedResources.Record>()
+    private fun canOwn(id: Identifier, owner: String?): Boolean {
+        if (id !in owners || owners[id] == owner) return true
+        if (id !in persistentIds) return false
+        val previous = top.katton.util.ScriptExecutionContext.identityOf(owners[id]) ?: return false
+        val next = top.katton.util.ScriptExecutionContext.identityOf(owner) ?: return false
+        return previous.environment == next.environment && previous.lifecycle == next.lifecycle && previous.syncId == next.syncId
+    }
 
     @Synchronized
     fun beginReload(): List<Identifier> {
@@ -49,7 +59,11 @@ internal class ReloadableBuiltInRegistry<T : Any>(
         return tracker.beginWorldCleanup(
             registry = builtInRegistry as MappedRegistry<T>,
             resourceKey = { id -> ResourceKey.create(registryKey, id) }
-        )
+        ).also { removed -> removed.forEach { id ->
+            owners.remove(id)
+            persistentIds.remove(id)
+            persistentRecords.remove(id)?.let(top.katton.engine.ManagedResources::release)
+        } }
     }
 
     fun registerGlobal(id: Identifier, value: T): T {
@@ -71,6 +85,8 @@ internal class ReloadableBuiltInRegistry<T : Any>(
         builder: () -> T,
         onExisting: ((T) -> Unit)? = null
     ): T {
+        val owner = top.katton.util.ScriptExecutionContext.currentScriptOwner()
+        require(canOwn(id, owner)) { "Registry entry $id is owned by another script instance" }
         val existing = builtInRegistry.getOptional(id)
         if (existing.isPresent) {
             onExisting?.invoke(existing.get())
@@ -131,6 +147,31 @@ internal class ReloadableBuiltInRegistry<T : Any>(
     }
 
     fun markManaged(id: Identifier, mode: RegisterMode) {
+        val owner = top.katton.util.ScriptExecutionContext.currentScriptOwner()
+        require(canOwn(id, owner)) { "Registry entry $id is owned by another script instance" }
+        // Reusing a persistent value must retain the generation that actually defined its type.
+        if (id in persistentIds) {
+            tracker.markManaged(id, mode)
+            return
+        }
+        owners[id] = owner
+        if (mode != RegisterMode.RELOADABLE) persistentIds += id
+        run {
+            var restore: (() -> Unit)? = null
+            val persistent = mode != RegisterMode.RELOADABLE
+            val record = top.katton.engine.ManagedResources.record(
+                attach = { checkNotNull(restore).invoke(); owners[id] = owner; if (persistent) persistentIds += id },
+                detach = {
+                    restore = captureRegistryEntry(builtInRegistry as MappedRegistry<T>, ResourceKey.create(registryKey, id))
+                    unregisterAll(builtInRegistry as MappedRegistry<T>, listOf(id)) { ResourceKey.create(registryKey, it) }
+                    owners.remove(id)
+                    persistentIds.remove(id)
+                },
+                dispose = { if (persistent) persistentRecords.remove(id) },
+                persistent = persistent
+            )
+            if (persistent && record != null) persistentRecords[id] = record
+        }
         val tracked = tracker.markManaged(id, mode)
         if (tracked) {
             synchronized(staleManagedIds) { staleManagedIds.remove(id) }

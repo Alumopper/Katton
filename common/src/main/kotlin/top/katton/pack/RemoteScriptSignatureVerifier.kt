@@ -16,7 +16,7 @@ object RemoteScriptSignatureVerifier {
     private const val ED25519_SIGNATURE_BYTES = 64
     private const val MAX_PUBLIC_KEY_BYTES = 512
     private val PAYLOAD_DOMAIN =
-        "katton-script-pack-signature-v2".toByteArray(StandardCharsets.UTF_8)
+        "katton-script-pack-signature-v3".toByteArray(StandardCharsets.UTF_8)
 
     data class VerificationResult(
         val valid: Boolean,
@@ -123,7 +123,7 @@ object RemoteScriptSignatureVerifier {
     )
 
     /**
-     * Version 2 length-prefixes every variable field and includes the file
+     * Version 3 covers private JARs and length-prefixes every field, including the file
      * count. Unlike the old NUL-delimited stream, arbitrary binary asset bytes
      * can no longer be reinterpreted as additional paths or files.
      */

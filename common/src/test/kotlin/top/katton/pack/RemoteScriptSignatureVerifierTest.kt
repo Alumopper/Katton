@@ -14,11 +14,12 @@ import kotlin.test.assertTrue
 
 class RemoteScriptSignatureVerifierTest {
     @Test
-    fun `v2 signature covers source asset and data bytes`() {
+    fun `v3 signature covers source asset data and private library bytes`() {
         val unsigned = packData(
             manifestJson = BASE_MANIFEST,
             files = listOf(
                 file("main.kt", "fun load() = Unit"),
+                file("libs/private.jar", "library-bytes"),
                 file("assets/example/lang/en_us.json", "{\"hello\":\"world\"}"),
                 file("data/example/tags/item/example.json", "{\"values\":[]}")
             )
@@ -31,6 +32,9 @@ class RemoteScriptSignatureVerifierTest {
             if (entry.relativePath.startsWith("assets/")) entry.copy(content = "tampered".toByteArray()) else entry
         }
         assertFalse(RemoteScriptSignatureVerifier.verify(signed.copy(files = tamperedFiles)).valid)
+        assertFalse(RemoteScriptSignatureVerifier.verify(signed.copy(files = signed.files.map {
+            if (it.relativePath.startsWith("libs/")) it.copy(content = byteArrayOf(1)) else it
+        })).valid)
     }
 
     @Test

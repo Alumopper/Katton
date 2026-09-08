@@ -149,29 +149,10 @@ class ScriptPackManagerTest {
     }
 
     @Test
-    fun `cached compiled jar is restored as a jar pack`() {
+    fun `top level executable jar requires source migration`() {
         val jar = temporaryDirectory.resolve("compiled.jar")
-        val manifest = """{"id":"compiled","dependencies":[]}"""
-        ZipOutputStream(Files.newOutputStream(jar)).use { output ->
-            output.putNextEntry(ZipEntry("manifest.json"))
-            output.write(manifest.toByteArray())
-            output.closeEntry()
-            output.putNextEntry(ZipEntry("example/Compiled.class"))
-            output.write(byteArrayOf(1, 2, 3))
-            output.closeEntry()
-        }
-        val original = assertNotNull(ScriptPackManager.scanPackJar(jar, ScriptPackScope.GLOBAL))
-        val container = Files.createDirectory(temporaryDirectory.resolve("cached-jar"))
-        Files.writeString(container.resolve("manifest.json"), original.manifestJson)
-        Files.copy(jar, container.resolve(jar.fileName))
-
-        val cached = assertNotNull(
-            ScriptPackManager.scanCachedPackContainer(container, original.syncId, original.hash)
-        )
-        assertEquals(ScriptPackKind.JAR, cached.kind)
-        assertEquals(original.hash, cached.hash)
-        assertEquals("compiled", cached.manifest.id)
-        assertEquals(container.resolve("compiled.jar"), cached.compiledJar)
+        writeJar(jar, "Entry.class", byteArrayOf(1, 2, 3))
+        assertNull(ScriptPackManager.scanPackJar(jar, ScriptPackScope.GLOBAL))
     }
 
     @Test
@@ -195,23 +176,18 @@ class ScriptPackManagerTest {
     }
 
     @Test
-    fun `jar consumers receive the scanned byte snapshot after the original changes`() {
-        val jar = temporaryDirectory.resolve("mutable.jar")
-        writeJar(jar, "original/Entry.class", byteArrayOf(1, 2, 3))
-        val scanned = assertNotNull(ScriptPackManager.scanPackJar(jar, ScriptPackScope.GLOBAL))
-
-        // Simulate an editor replacing the pack between scanning and execution.
-        writeJar(jar, "replacement/Entry.class", byteArrayOf(9, 8, 7))
-        val snapshot = assertNotNull(
-            ScriptPackJarSnapshots.materializeInto(scanned, temporaryDirectory.resolve("snapshots"))
-        )
-
-        JarFile(snapshot.toFile()).use { materialized ->
-            assertNotNull(materialized.getJarEntry("original/Entry.class"))
-            assertNull(materialized.getJarEntry("replacement/Entry.class"))
-        }
-        JarFile(jar.toFile()).use { replaced ->
-            assertTrue(replaced.getJarEntry("replacement/Entry.class") != null)
+    fun `private jar snapshot does not reopen the original library`() {
+        val dir = Files.createDirectory(temporaryDirectory.resolve("private"))
+        write(dir.resolve("manifest.json"), """{"id":"private","dependencies":[]}""")
+        Files.createDirectory(dir.resolve("libs"))
+        val jar = dir.resolve("libs/helper.jar")
+        writeJar(jar, "original.txt", byteArrayOf(1,2,3))
+        val scanned = assertNotNull(ScriptPackManager.scanPackDirectory(dir, ScriptPackScope.WORLD))
+        writeJar(jar, "replacement.txt", byteArrayOf(9))
+        val library = top.katton.engine.PrivateLibraries.prepare(scanned, temporaryDirectory.resolve("libraries"))
+        JarFile(library.paths.single().toFile()).use { snapshot ->
+            assertNotNull(snapshot.getJarEntry("original.txt"))
+            assertNull(snapshot.getJarEntry("replacement.txt"))
         }
     }
 

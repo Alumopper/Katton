@@ -92,8 +92,7 @@ object ClientSceneManager {
         require(Identifier.tryParse(id) != null && id.length <= 256 && revision.length in 1..128)
         val previous = definitions[id]
         if (previous != null && previous.owner.revision in retainedRevisions) return
-        unregister(id)
-        definitions[id] = Definition(revision, scene, SceneOwner.capture())
+        top.katton.engine.ManagedResources.put(definitions, id, Definition(revision, scene, SceneOwner.capture()), exclusive = true)
     }
 
     fun unregister(id: String): Boolean {

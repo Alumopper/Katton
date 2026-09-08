@@ -3,132 +3,107 @@ package top.katton.pack
 import top.katton.engine.VersionConstraint
 import java.util.Locale
 
-data class ScriptPackDependency(
-    val id: String,
-    val version: String = "*",
-    val required: Boolean = true
-)
-
+data class ScriptPackDependency(val id: String, val version: String = "*", val required: Boolean = true, val export: Boolean = false)
+data class ResolvedPackEdge(val target: ScriptPack, val declaration: ScriptPackDependency)
 data class ScriptPackDependencySelection(
-    val orderedPacks: List<ScriptPack>,
-    val invalidPacks: Set<ScriptPack>,
-    val errors: List<String>
-)
+    val orderedPacks: List<ScriptPack>, val invalidPacks: Set<ScriptPack>, val errors: List<String>,
+    val edges: Map<ScriptPack, List<ResolvedPackEdge>> = emptyMap()
+) {
+    /** Direct artifacts and only explicitly exported transitive artifacts. Never includes private libraries. */
+    fun visiblePacks(pack: ScriptPack): List<ScriptPack> {
+        val visible = linkedSetOf<ScriptPack>()
+        fun exported(target: ScriptPack) {
+            if (!visible.add(target)) return
+            edges[target].orEmpty().filter { it.declaration.export }.forEach { exported(it.target) }
+        }
+        edges[pack].orEmpty().forEach { exported(it.target) }
+        return orderedPacks.filter { it in visible }
+    }
+}
 
-/** Validates pack-to-pack dependencies and returns a deterministic topological order. */
 object ScriptPackDependencyGraph {
     fun resolve(packs: Collection<ScriptPack>): ScriptPackDependencySelection {
-        val candidates = packs.distinctBy { it.syncId }
-        val bySyncId = candidates.associateBy { it.syncId.lowercase(Locale.ROOT) }
-        val byManifestId = candidates.groupBy { it.manifest.id.lowercase(Locale.ROOT) }
-        val requiredDependencies = linkedMapOf<ScriptPack, MutableSet<ScriptPack>>()
+        val candidates = packs.toList()
+        val bySync = candidates.groupBy { it.syncId.lowercase(Locale.ROOT) }
+        val byId = candidates.groupBy { it.manifest.id.lowercase(Locale.ROOT) }
         val invalid = linkedSetOf<ScriptPack>()
         val errors = mutableListOf<String>()
-
+        val edges = linkedMapOf<ScriptPack, List<ResolvedPackEdge>>()
+        bySync.filterValues { it.size > 1 }.forEach { (id, duplicates) ->
+            invalid += duplicates
+            errors += "Duplicate script pack identity: $id"
+        }
         candidates.forEach { pack ->
-            val requiredResolved = linkedSetOf<ScriptPack>()
-            pack.manifest.packDependencies.forEach { dependency ->
-                val normalizedId = dependency.id.lowercase(Locale.ROOT)
-                val exact = bySyncId[normalizedId]
-                val manifestMatches = byManifestId[normalizedId].orEmpty()
-                val target = exact ?: manifestMatches.singleOrNull()
+            edges[pack] = pack.manifest.packDependencies.mapNotNull { dependency ->
+                val id = dependency.id.lowercase(Locale.ROOT)
+                val matches = bySync[id] ?: byId[id].orEmpty()
+                val target = matches.singleOrNull()
                 val failure = when {
-                    exact == null && manifestMatches.size > 1 ->
-                        "is ambiguous (${manifestMatches.joinToString { it.syncId }})"
+                    matches.size > 1 -> "is ambiguous (${matches.joinToString { it.syncId }})"
                     target == null -> "is not enabled"
-                    target === pack -> "refers to the pack itself"
-                    !VersionConstraint.matches(target.manifest.version, dependency.version) ->
-                        "has version ${target.manifest.version}, which does not satisfy ${dependency.version}"
+                    !VersionConstraint.matches(target.manifest.version, dependency.version) -> "has incompatible version ${target.manifest.version}"
+                    pack.scope == ScriptPackScope.GLOBAL && target.scope != ScriptPackScope.GLOBAL -> "has a shorter lifecycle than a global pack"
+                    pack.scope == ScriptPackScope.SERVER_CACHE && target.scope != ScriptPackScope.SERVER_CACHE -> "is outside the remote synchronization set"
                     else -> null
                 }
                 if (failure != null) {
                     if (dependency.required) {
                         invalid += pack
-                        errors += "Pack '${pack.syncId}' requires script pack '${dependency.id}' ${dependency.version}, but it $failure"
+                        errors += "Pack '${pack.syncId}' requires '${dependency.id}' ${dependency.version}, but it $failure"
                     }
-                } else if (target != null) {
-                    if (dependency.required) requiredResolved += target
-                }
-            }
-            requiredDependencies[pack] = requiredResolved
-        }
-
-        // A pack cannot remain valid when any required dependency was rejected.
-        var changed: Boolean
-        do {
-            changed = false
-            requiredDependencies.forEach { (pack, required) ->
-                if (pack !in invalid && required.any { it in invalid }) {
-                    invalid += pack
-                    errors += "Pack '${pack.syncId}' depends on a rejected script pack"
-                    changed = true
-                }
-            }
-        } while (changed)
-
-        val valid = candidates.filterNot(invalid::contains)
-        val indegree = valid.associateWith { pack -> requiredDependencies.getValue(pack).count { it in valid } }.toMutableMap()
-        val dependents = valid.associateWith { linkedSetOf<ScriptPack>() }
-        valid.forEach { pack ->
-            requiredDependencies.getValue(pack).filter { it in valid }.forEach { dependency ->
-                dependents.getValue(dependency) += pack
+                    null
+                } else ResolvedPackEdge(target!!, dependency)
             }
         }
-        val ready = java.util.PriorityQueue(compareBy<ScriptPack> { it.syncId.lowercase(Locale.ROOT) })
-        indegree.filterValues { it == 0 }.keys.forEach(ready::add)
+        val visited = hashSetOf<ScriptPack>()
+        val stack = mutableListOf<ScriptPack>()
         val ordered = mutableListOf<ScriptPack>()
-        while (ready.isNotEmpty()) {
-            val pack = ready.remove()
-            ordered += pack
-            dependents.getValue(pack).forEach { dependent ->
-                val remaining = indegree.getValue(dependent) - 1
-                indegree[dependent] = remaining
-                if (remaining == 0) ready += dependent
+        fun visit(pack: ScriptPack) {
+            val cycleStart = stack.indexOf(pack)
+            if (cycleStart >= 0) {
+                val cycle = stack.subList(cycleStart, stack.size).toList() + pack
+                invalid += cycle
+                errors += "Script pack dependency cycle: ${cycle.joinToString(" -> ") { it.syncId }}"
+                return
             }
+            if (!visited.add(pack)) return
+            stack += pack
+            edges[pack].orEmpty().forEach { visit(it.target) }
+            stack.removeAt(stack.lastIndex)
+            ordered += pack
         }
-
-        val cyclic = valid.filterNot(ordered::contains)
-        if (cyclic.isNotEmpty()) {
-            invalid += cyclic
-            errors += "Script pack dependency cycle: ${cyclic.map { it.syncId }.sorted().joinToString(" -> ")}"
-        }
-        return ScriptPackDependencySelection(ordered.filterNot(invalid::contains), invalid, errors.distinct())
+        candidates.sortedBy { it.syncId }.forEach(::visit)
+        do {
+            val rejected = candidates.filter { it !in invalid && edges[it].orEmpty().any { edge -> edge.declaration.required && edge.target in invalid } }
+            invalid += rejected
+            rejected.forEach { errors += "Pack '${it.syncId}' depends on a rejected script pack" }
+        } while (rejected.isNotEmpty())
+        val valid = ordered.filterNot { it in invalid }
+        return ScriptPackDependencySelection(valid, invalid, errors.distinct(),
+            edges.filterKeys { it !in invalid }.mapValues { (_, value) -> value.filter { it.target !in invalid } })
     }
 
-    /** Weakly connected dependency components used as independent compilation units. */
-    fun compilationGroups(packs: Collection<ScriptPack>): List<List<ScriptPack>> {
-        val selection = resolve(packs)
-        val ordered = selection.orderedPacks
-        if (ordered.isEmpty()) return emptyList()
-        val bySyncId = ordered.associateBy { it.syncId.lowercase(Locale.ROOT) }
-        val byManifestId = ordered.groupBy { it.manifest.id.lowercase(Locale.ROOT) }
-        val adjacent = ordered.associateWith { linkedSetOf<ScriptPack>() }
-        ordered.forEach { pack ->
-            pack.manifest.packDependencies.forEach dependencyLoop@{ dependency ->
-                val key = dependency.id.lowercase(Locale.ROOT)
-                val target = bySyncId[key] ?: byManifestId[key].orEmpty().singleOrNull() ?: return@dependencyLoop
-                if (!VersionConstraint.matches(target.manifest.version, dependency.version)) return@dependencyLoop
-                adjacent.getValue(pack) += target
-                adjacent.getValue(target) += pack
-            }
-        }
+    /** Reverse closure over both graphs handles removed edges, deletions and optional dependencies appearing. */
+    fun affected(previous: Collection<ScriptPack>, next: Collection<ScriptPack>, changed: Set<String>): Set<String> {
+        val consumers = mutableMapOf<String, MutableSet<String>>()
+        listOf(resolve(previous), resolve(next)).forEach { graph -> graph.edges.forEach { (pack, edges) ->
+            edges.forEach { consumers.getOrPut(it.target.syncId) { linkedSetOf() } += pack.syncId }
+        } }
+        val result = changed.toMutableSet()
+        val queue = ArrayDeque(changed)
+        while (queue.isNotEmpty()) consumers[queue.removeFirst()].orEmpty().forEach { if (result.add(it)) queue += it }
+        return result
+    }
 
-        val visited = hashSetOf<ScriptPack>()
-        return buildList {
-            ordered.forEach { root ->
-                if (!visited.add(root)) return@forEach
-                val component = linkedSetOf<ScriptPack>()
-                val queue = ArrayDeque<ScriptPack>()
-                queue += root
-                while (queue.isNotEmpty()) {
-                    val current = queue.removeFirst()
-                    component += current
-                    adjacent.getValue(current).forEach { next ->
-                        if (visited.add(next)) queue += next
-                    }
-                }
-                add(ordered.filter(component::contains))
-            }
+    fun transactions(previous: Collection<ScriptPack>, next: Collection<ScriptPack>, changed: Set<String>): List<Set<String>> {
+        val groups = mutableListOf<MutableSet<String>>()
+        changed.sorted().forEach { id ->
+            val impact = affected(previous, next, setOf(id)).toMutableSet()
+            val overlaps = groups.filter { it.any(impact::contains) }
+            overlaps.forEach { impact += it }
+            groups.removeAll(overlaps.toSet())
+            groups += impact
         }
+        return groups
     }
 }

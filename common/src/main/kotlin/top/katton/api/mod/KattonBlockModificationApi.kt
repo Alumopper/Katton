@@ -173,7 +173,17 @@ fun modifyBlock(blockId: Identifier, configure: BlockModificationConfig.() -> Un
         .orElseThrow { IllegalArgumentException("Block not found: $blockId") }
     val config = BlockModificationConfig(blockId).apply(configure)
     
-    applyBlockModifications(block, config)
+    val targets = listOf(block to listOf("explosionResistance", "friction", "speedFactor", "jumpFactor", "hasCollision", "soundType"),
+        block.properties() to listOf("destroyTime", "explosionResistance", "requiresCorrectToolForDrops", "friction", "speedFactor", "jumpFactor", "lightEmission", "mapColor", "canOcclude", "isAir", "hasCollision", "isSuffocating", "isViewBlocking", "soundType")) +
+        block.stateDefinition.possibleStates.map { it to listOf("destroySpeed", "requiresCorrectToolForDrops", "lightEmission", "mapColor", "canOcclude", "isAir", "isSuffocating", "isViewBlocking") }
+    val baseline = targets.flatMap { (target, names) -> names.mapNotNull { name ->
+        ReflectUtil.get(target, name).getOrNull()?.let { Triple(target, name, it) }
+    } }
+    top.katton.engine.ManagedResources.contribute("block-mod:$blockId", null as BlockModificationConfig?, config) { values ->
+        baseline.forEach { (target, name, value) -> check(ReflectUtil.setFinal(target, name, value).isSuccess) }
+        values.filterNotNull().forEach { applyBlockModifications(block, it) }
+        block.stateDefinition.possibleStates.forEach { it.initCache() }
+    }
     return block
 }
 

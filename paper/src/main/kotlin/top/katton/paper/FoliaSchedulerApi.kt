@@ -38,7 +38,7 @@ private fun ServerLevel.toBukkitWorld(): org.bukkit.World? {
 fun <T: Entity> T.schedule(action: T.() -> Unit) {
     val p = plugin ?: run { action(); return }
     val bukkit = toBukkit() ?: run { action(); return }
-    bukkit.scheduler.run(p, { _ -> action() }, null)
+    managedSchedule(false, { action() }) { callback -> bukkit.scheduler.run(p, callback, null) }
 }
 
 /**
@@ -47,7 +47,7 @@ fun <T: Entity> T.schedule(action: T.() -> Unit) {
 fun <T: Entity> T.schedule(delayTicks: Long, action: T.() -> Unit) {
     val p = plugin ?: run { action(); return }
     val bukkit = toBukkit() ?: run { action(); return }
-    bukkit.scheduler.runDelayed(p, { _ -> action() }, null, delayTicks)
+    managedSchedule(false, { action() }) { callback -> bukkit.scheduler.runDelayed(p, callback, null, delayTicks.coerceAtLeast(1)) }
 }
 
 /**
@@ -57,7 +57,7 @@ fun <T: Entity> T.schedule(delayTicks: Long, action: T.() -> Unit) {
 fun <T: Entity> T.scheduleRepeating(delayTicks: Long, periodTicks: Long, action: T.() -> Unit): Any? {
     val p = plugin ?: return null
     val bukkit = toBukkit() ?: return null
-    return bukkit.scheduler.runAtFixedRate(p, { _ -> action() }, null, delayTicks, periodTicks)
+    return managedSchedule(true, { action() }) { callback -> bukkit.scheduler.runAtFixedRate(p, callback, null, delayTicks.coerceAtLeast(1), periodTicks) }
 }
 
 // ── Position-based region scheduling ──────────────────────────────
@@ -69,7 +69,7 @@ fun scheduleAt(world: ServerLevel, pos: BlockPos, action: () -> Unit) {
     val p = plugin ?: run { action(); return }
     val bukkitWorld = world.toBukkitWorld() ?: run { action(); return }
     val location = Location(bukkitWorld, pos.x.toDouble(), pos.y.toDouble(), pos.z.toDouble())
-    Bukkit.getRegionScheduler().run(p, location, { _ -> action() })
+    managedSchedule(false, action) { callback -> Bukkit.getRegionScheduler().run(p, location, callback) }
 }
 
 /**
@@ -79,7 +79,7 @@ fun scheduleAt(world: ServerLevel, pos: BlockPos, delayTicks: Long, action: () -
     val p = plugin ?: run { action(); return }
     val bukkitWorld = world.toBukkitWorld() ?: run { action(); return }
     val location = Location(bukkitWorld, pos.x.toDouble(), pos.y.toDouble(), pos.z.toDouble())
-    Bukkit.getRegionScheduler().runDelayed(p, location, { _ -> action() }, delayTicks)
+    managedSchedule(false, action) { callback -> Bukkit.getRegionScheduler().runDelayed(p, location, callback, delayTicks.coerceAtLeast(1)) }
 }
 
 // ── Global region scheduling ──────────────────────────────────────
@@ -89,7 +89,7 @@ fun scheduleAt(world: ServerLevel, pos: BlockPos, delayTicks: Long, action: () -
  */
 fun scheduleGlobal(action: () -> Unit) {
     val p = plugin ?: run { action(); return }
-    Bukkit.getGlobalRegionScheduler().run(p, { _ -> action() })
+    managedSchedule(false, action) { callback -> Bukkit.getGlobalRegionScheduler().run(p, callback) }
 }
 
 /**
@@ -97,7 +97,7 @@ fun scheduleGlobal(action: () -> Unit) {
  */
 fun scheduleGlobal(delayTicks: Long, action: () -> Unit) {
     val p = plugin ?: run { action(); return }
-    Bukkit.getGlobalRegionScheduler().runDelayed(p, { _ -> action() }, delayTicks)
+    managedSchedule(false, action) { callback -> Bukkit.getGlobalRegionScheduler().runDelayed(p, callback, delayTicks.coerceAtLeast(1)) }
 }
 
 /**
@@ -105,7 +105,7 @@ fun scheduleGlobal(delayTicks: Long, action: () -> Unit) {
  */
 fun scheduleGlobalRepeating(delayTicks: Long, periodTicks: Long, action: () -> Unit): Any? {
     val p = plugin ?: return null
-    return Bukkit.getGlobalRegionScheduler().runAtFixedRate(p, { _ -> action() }, delayTicks, periodTicks)
+    return managedSchedule(true, action) { callback -> Bukkit.getGlobalRegionScheduler().runAtFixedRate(p, callback, delayTicks.coerceAtLeast(1), periodTicks) }
 }
 
 // ── Utility ───────────────────────────────────────────────────────
@@ -114,7 +114,47 @@ fun scheduleGlobalRepeating(delayTicks: Long, periodTicks: Long, action: () -> U
  * Cancel a scheduled task returned by the repeating variants.
  */
 fun cancelScheduledTask(task: Any?) {
+    if (task is ManagedScheduledTask) task.cancel()
     if (task is ScheduledTask) {
         task.cancel()
     }
 }
+
+/** Retains the platform task during a tentative detach so rollback does not duplicate repeating tasks. */
+private class ManagedScheduledTask(
+    private val repeating: Boolean,
+    private val action: () -> Unit,
+    private val schedule: (java.util.function.Consumer<ScheduledTask>) -> ScheduledTask?
+) {
+    private val context = top.katton.scene.SceneOwner.capture()
+    @Volatile private var active = true
+    @Volatile private var cancelled = false
+    @Volatile private var missed = false
+    private var task: ScheduledTask? = null
+    private val callback = java.util.function.Consumer<ScheduledTask> {
+        synchronized(this) {
+            if (!cancelled) {
+                if (!active || top.katton.engine.ManagedResources.isPaused(context.owner)) {
+                    missed = !repeating
+                } else if (!top.katton.engine.ManagedResources.runCallback { context.invoke(action) }) {
+                    missed = !repeating
+                }
+            }
+        }
+    }
+    fun start(): ManagedScheduledTask {
+        task = schedule(callback)
+        top.katton.engine.ManagedResources.record(
+            attach = { active = true },
+            detach = { active = false },
+            dispose = { cancel() },
+            resumed = { synchronized(this) { if (missed && !cancelled) { missed = false; task = schedule(callback) } } }
+        )
+        return this
+    }
+    @Synchronized fun cancel() { cancelled = true; task?.cancel(); task = null }
+}
+
+private fun managedSchedule(repeating: Boolean, action: () -> Unit,
+    schedule: (java.util.function.Consumer<ScheduledTask>) -> ScheduledTask?): Any =
+    ManagedScheduledTask(repeating, action, schedule).start()

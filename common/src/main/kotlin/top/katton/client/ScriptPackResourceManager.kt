@@ -133,7 +133,7 @@ object ScriptPackResourceManager {
     private fun createEntry(index: Int, pack: ScriptPack): ResourceEntry? {
         val assetFiles = pack.contentFiles.filter { it.relativePath.startsWith("assets/") }
         val (effectiveLocation, assetHash) = when (pack.kind) {
-            ScriptPackKind.DIRECTORY -> {
+            ScriptPackKind.DIRECTORY, ScriptPackKind.ZIP -> {
                 if (assetFiles.isEmpty()) return null
                 val hash = hashAssetFiles(assetFiles)
                 val snapshot = ScriptPackDirectorySnapshots.materialize(pack, "assets", hash)
@@ -179,7 +179,7 @@ object ScriptPackResourceManager {
             Optional.empty()
         )
         val supplier = when (entry.kind) {
-            ScriptPackKind.DIRECTORY -> PathPackResources.PathResourcesSupplier(entry.location)
+            ScriptPackKind.DIRECTORY, ScriptPackKind.ZIP -> PathPackResources.PathResourcesSupplier(entry.location)
             ScriptPackKind.JAR -> FilePackResources.FileResourcesSupplier(entry.location)
         }
         return Pack(

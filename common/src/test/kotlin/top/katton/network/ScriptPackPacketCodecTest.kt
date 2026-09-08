@@ -13,14 +13,17 @@ class ScriptPackPacketCodecTest {
     @Test
     fun `collection counts are rejected before allocating`() {
         val bundle = buffer {
+            writeInt(0x4b500003)
             writeVarLong(0L)
             writeVarInt(Int.MAX_VALUE)
         }
         val hashes = buffer {
+            writeInt(0x4b500003)
             writeVarLong(0L)
             writeVarInt(Int.MAX_VALUE)
         }
         val request = buffer {
+            writeInt(0x4b500003)
             writeVarLong(0L)
             writeVarInt(Int.MAX_VALUE)
         }
@@ -33,6 +36,7 @@ class ScriptPackPacketCodecTest {
     @Test
     fun `manifest byte arrays are bounded before copying`() {
         val bundle = buffer {
+            writeInt(0x4b500003)
             writeVarLong(0L)
             writeVarInt(1)
             writeUtf("world:example")
@@ -56,6 +60,7 @@ class ScriptPackPacketCodecTest {
     @Test
     fun `bundle rejects traversal paths before reading file content`() {
         val bundle = buffer {
+            writeInt(0x4b500003)
             writeVarLong(0L)
             writeVarInt(1)
             writeUtf("world:example")
@@ -91,6 +96,7 @@ class ScriptPackPacketCodecTest {
     @Test
     fun `bundle rejects a sync id whose prefix disagrees with scope`() {
         val bundle = buffer {
+            writeInt(0x4b500003)
             writeVarLong(0L)
             writeVarInt(1)
             writeUtf("global:example")
@@ -106,6 +112,7 @@ class ScriptPackPacketCodecTest {
     @Test
     fun `pack packets reject non sha256 hashes at the codec boundary`() {
         val bundle = buffer {
+            writeInt(0x4b500003)
             writeVarLong(0L)
             writeVarInt(1)
             writeUtf("world:example")
