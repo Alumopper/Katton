@@ -119,6 +119,9 @@ subprojects {
                         username = nexusUsernameProvider.orNull
                         password = nexusPasswordProvider.orNull
                     }
+                    authentication {
+                        basic(BasicAuthentication)
+                    }
                 }
             }
         }

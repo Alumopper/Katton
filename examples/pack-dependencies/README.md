@@ -12,10 +12,21 @@ continuing. This probe does not undo arbitrary script side effects such as print
 To exercise ZIP transport, ZIP each directory's contents (manifest at ZIP root),
 remove the copied directories, and restart. Do not leave duplicate manifest IDs.
 
-For an automated Paper 26.1.2 smoke, first build `:paper:26.1.2:build` and prepare
-the existing `paper/run/` server installation (including its accepted `eula.txt`).
-With `JAVA_HOME` pointing to Java 25, run `python3 examples/pack-dependencies/paper-smoke.py`.
+For an automated Paper or Folia 26.1.2 smoke, first build `:paper:26.1.2:shadowJar`.
+With `JAVA_HOME` pointing to Java 25 and Python 3 installed, run:
+
+```sh
+python3 examples/pack-dependencies/paper-smoke.py --server-jar /path/to/paper-or-folia.jar --eula-file /path/to/accepted/eula.txt
+```
+
+The EULA file must already contain `eula=true`. Optional `--plugin-jar` selects a
+different plugin artifact; `--output` selects an empty directory for retained
+logs and world files. `--vanilla-jar` supplies a predownloaded Mojang 26.1.2 JAR.
+Add `--zip` to repeat all scenarios with ZIP packs, including hot reload of ZIPs.
+The same command works on Windows with `python` and Windows paths.
 It starts the built plugin in a temporary world bound to localhost on an ephemeral
-port, checks dependency state and managed Bukkit listener rollback, then stops the
+port, checks dependency state, managed Bukkit listener rollback and delayed global
+callbacks, then stops the
 server. The temporary directory and log path are printed for inspection. It does
-not modify the existing Paper world or its plugins.
+not modify an existing server world or its plugins. Global callback checks on
+Folia do not establish entity-region or multi-region concurrency safety.
