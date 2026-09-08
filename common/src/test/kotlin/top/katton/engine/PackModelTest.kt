@@ -247,7 +247,11 @@ class PackModelTest {
                 val host = PackHostClassLoader(parent, emptyList(), listOf(ResolvedScriptDependency("declared", "1", listOf(declaredJar), declared)))
                 assertSame(declared.loadClass("hosted.HostValue"), host.loadClass("hosted.HostValue"))
                 assertNotSame(parent.loadClass("hosted.HostValue"), host.loadClass("hosted.HostValue"))
-                assertEquals(listOf("declared"), host.getResources("META-INF/services/hosted.Service").toList().map { it.openStream().use { stream -> stream.readBytes().toString(Charsets.UTF_8) } })
+                assertEquals(listOf("declared"), host.getResources("META-INF/services/hosted.Service").toList().map { url ->
+                    url.openConnection().apply { useCaches = false }.getInputStream().use { stream ->
+                        stream.readBytes().toString(Charsets.UTF_8)
+                    }
+                })
             }
         }
     }
