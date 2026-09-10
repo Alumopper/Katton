@@ -1,0 +1,14 @@
+{
+  "id": "katton_audio_examples",
+  "name": "Katton Audio Examples",
+  "version": "1.0.0",
+  "enabled": true,
+  "clientSync": true,
+  "dependencies": [
+    {"id":"fabric-data-attachment-api-v1","version":"*","platforms":["fabric"],"environment":"both"},
+    {"id":"fabric-resource-loader-v1","version":"*","platforms":["fabric"],"environment":"both"},
+    {"id":"fabric-networking-api-v1","version":"*","platforms":["fabric"],"environment":"both"},
+    {"id":"fabric-permission-api-v1","version":"*","platforms":["fabric"],"environment":"both"},
+    {"id":"fabric-lifecycle-events-v1","version":"*","platforms":["fabric"],"environment":"both"}
+  ]
+}

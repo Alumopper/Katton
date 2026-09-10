@@ -5,6 +5,8 @@
 Katton is a Kotlin scripting runtime for Minecraft **Fabric**, **NeoForge**, and **Paper** (MC `26.1.2` and `26.2`) with hot reload support.
 Write script packs in `.kt`, reload with a command, and extend server/game behavior without rebuilding your whole mod/plugin every iteration.
 
+The script pack signing Gradle plugin is maintained separately in [Katton-Sign](https://github.com/Alumopper/Katton-Sign). See the [migration guide](docs/sign-plugin-migration.md) for build and publishing commands.
+
 ## Features
 
 - Kotlin-based script packs (`.kt`) with entrypoint annotations
@@ -14,6 +16,8 @@ Write script packs in `.kt`, reload with a command, and extend server/game behav
 - Experimental unsafe runtime injection API (ByteBuddy)
 - Paper-specific managed Bukkit event bridge
 - Client camera paths, shake/FOV, particle and geometry effects, and Kotlin scene timelines with server triggers ([guide and examples](docs/client-scenes.md))
+- Audio playback: client audio from pack files, resources, or sound events (WAV/MP3/Ogg Vorbis/FLAC) with pause, seek, rate, fade, loop, and spatial placement; remote control of another player's client; and a vanilla-safe basic sound API on all three platforms ([guide](docs/audio-control.md))
+- Optional loopback IDE bridge for local script deployment and in-game diagnostics ([guide](docs/idea-development.md))
 
 ## Platform Support
 
@@ -128,16 +132,22 @@ in Alpha 0.4.0 as noted above.
 - `/katton capabilities injection`
 - `/katton debug registryLogging [on|off]`
 - `/katton debug injection`
+- `/katton dev enable|disable`
 
 ### Paper
 
 - `/katton help`
 - `/katton status`
 - `/katton reload`
+- `/katton dev enable|disable`
 
 ## IDE & Debugging
 
 - Use `.kt` for better Kotlin IDE support.
+- The optional IDE bridge (`/katton dev enable`, or the **IDE** button in the script pack
+  screen) lets the Katton IDEA plugin deploy world script packs and stream diagnostics.
+  It listens on loopback only and is off by default. See
+  [docs/idea-development.md](docs/idea-development.md).
 - For remote debugging, run JVM with JDWP agent, e.g.:
 
 ```text

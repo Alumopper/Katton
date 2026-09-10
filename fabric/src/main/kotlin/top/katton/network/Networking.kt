@@ -18,6 +18,19 @@ object Networking {
     @Suppress("UnstableApiUsage")
     @JvmStatic
     fun initialize() {
+        if (CLIENTBOUND_PLAY.get(AudioPacket.TYPE.id) == null) {
+            CLIENTBOUND_PLAY.register(AudioPacket.TYPE, AudioPacket.STREAM_CODEC)
+            SERVERBOUND_PLAY.register(AudioPacket.TYPE, AudioPacket.STREAM_CODEC)
+            net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking.registerGlobalReceiver(AudioPacket.TYPE) { packet, context ->
+                context.server().execute { top.katton.api.audio.AudioServerTransport.receive(context.player(), packet) }
+            }
+        }
+        top.katton.api.audio.AudioServerTransport.send = { player, packet ->
+            if (net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking.canSend(player, AudioPacket.TYPE)) {
+                net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking.send(player, packet)
+                true
+            } else false
+        }
         // Register payload type for server->client communication
         // This must be done on both sides before registering handlers
 

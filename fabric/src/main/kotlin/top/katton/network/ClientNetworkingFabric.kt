@@ -16,6 +16,11 @@ object ClientNetworkingFabric {
      * Registers packet handlers. Payload type is registered in common code.
      */
     fun initialize() {
+        ClientPlayNetworking.registerGlobalReceiver(AudioPacket.TYPE) { packet, context ->
+            context.client().execute {
+                top.katton.client.audio.ClientAudioNetwork.receive(packet) { response -> ClientPlayNetworking.send(response) }
+            }
+        }
         ClientPlayNetworking.registerGlobalReceiver(ClientScenePacket.TYPE) { packet, context ->
             context.client().execute { top.katton.client.scene.ClientSceneManager.handlePacket(packet) }
         }

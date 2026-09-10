@@ -5,6 +5,10 @@ Minecraft Fabric, NeoForge mod & Paper plugin for Kotlin scripting with hot relo
 ## Build & Run
 
 - **Java 25** required (enforced by `project.options.release = 25` and `JVM target = 25`).
+- On Linux/WSL, export `JAVA_HOME` to a JDK 25 installation and set `GRADLE_USER_HOME` to the
+  Gradle home that holds the dependency cache; `F:\.gradle` is the Windows-side home this
+  project builds with, and Gradle cannot write its daemon registry to the 9p (`/mnt/*`) mount,
+  so a native (ext4) Gradle home is required when building from WSL.
 - **Gradle 9.3.0** (wrapper checked in at `gradle/wrapper/gradle-wrapper.properties`).
 - Run via Gradle:
   - `./gradlew :fabric:runClient` — Fabric client

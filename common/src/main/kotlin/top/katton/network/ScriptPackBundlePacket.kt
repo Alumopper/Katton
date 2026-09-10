@@ -128,7 +128,7 @@ data class ScriptPackBundlePacket(
             ScriptPackPacketLimits.MAX_BUNDLE_CONTENT_BYTES,
             "script-pack bundle content"
         )
-        buf.writeInt(0x4b500003)
+        buf.writeInt(0x4b500004)
         buf.writeVarLong(revision)
         buf.writeVarInt(packs.size)
         packs.forEach { it.write(buf) }
@@ -144,7 +144,7 @@ data class ScriptPackBundlePacket(
             StreamCodec.of({ buf, packet -> packet.write(buf) }, { buf -> read(buf) })
 
         fun read(buf: FriendlyByteBuf): ScriptPackBundlePacket {
-            require(buf.readInt() == 0x4b500003) { "Incompatible Katton pack protocol; update client/server and rebuild the v3 cache" }
+            require(buf.readInt() == 0x4b500004) { "Incompatible Katton pack protocol; update client/server and rebuild the v4 cache" }
             val revision = buf.readVarLong()
             val count = ScriptPackPacketLimits.readCount(buf, ScriptPackPacketLimits.MAX_PACKS, "script packs")
             val packs = ArrayList<PackData>(count)

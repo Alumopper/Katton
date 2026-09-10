@@ -19,7 +19,9 @@ internal class ScriptPackSnapshots(val manifest: String, val files: Map<String, 
         val unsigned = JsonParser.parseString(manifest).asJsonObject.apply { remove("signature") }.toString()
         val codeHash = ScriptPackManager.computeScriptHash(unsigned, kotlin, java, libraries = libs)
         val hash = ScriptPackManager.computeScriptHash(manifest, kotlin, java,
-            content.filter { it.relativePath.startsWith("assets/") }, content.filter { it.relativePath.startsWith("data/") }, libs)
+            content.filter { it.relativePath.startsWith("assets/") }, content.filter { it.relativePath.startsWith("data/") }, libs,
+            content.filter { !isSource(it.relativePath) && !isLibrary(it.relativePath) &&
+                !it.relativePath.startsWith("assets/") && !it.relativePath.startsWith("data/") })
         return ScriptPack(syncIdOverride ?: "${scope.serializedName}:${parsed.id}", scope, kind, path, manifest,
             parsed, enabledOverride ?: parsed.enabledByDefault, hash, codeHash, kotlin, content, null)
     }
@@ -28,7 +30,9 @@ internal class ScriptPackSnapshots(val manifest: String, val files: Map<String, 
         fun isLibrary(name: String) = name.startsWith("libs/") && name.count { it == '/' } == 1 && name.endsWith(".jar", true)
         fun isSource(name: String) = !name.startsWith("assets/") && !name.startsWith("data/") && !name.startsWith("libs/") &&
             (name.endsWith(".kt", true) || name.endsWith(".java", true))
-        fun retained(name: String) = isSource(name) || isLibrary(name) || name.startsWith("assets/") || name.startsWith("data/")
+        // Katton's local enabled-state file is not distributable pack content, at any depth or casing.
+        fun retained(name: String) = name != "manifest.json" &&
+            !name.substringAfterLast('/').equals(".kattonpack.state.json", ignoreCase = true)
 
         fun directory(root: Path, manifest: String, limit: Int): ScriptPackSnapshots {
             val files = sortedMapOf<String, ByteArray>()
@@ -42,13 +46,13 @@ internal class ScriptPackSnapshots(val manifest: String, val files: Map<String, 
                 val name = root.relativize(path).toString().replace('\\', '/')
                 validate(name, keys)
                 if (Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS) || name == "manifest.json") return@forEach
+                // Excluded files are not pack content, so they must not consume the content budget.
+                if (!retained(name)) return@forEach
                 require(path.toRealPath().startsWith(root.toRealPath())) { "Path escapes pack: $name" }
+                require(files.size < ScriptPackFileLimits.MAX_FILES_PER_PACK) { "Too many pack files" }
                 val bytes = SafePackFileIo.readBytes(path, minOf(remaining, ScriptPackFileLimits.MAX_FILE_BYTES), name)
                 remaining -= bytes.size
-                if (retained(name)) {
-                    require(files.size < ScriptPackFileLimits.MAX_FILES_PER_PACK) { "Too many pack files" }
-                    files[name] = bytes
-                }
+                files[name] = bytes
             } }
             return ScriptPackSnapshots(manifest, files)
         }
@@ -74,7 +78,9 @@ internal class ScriptPackSnapshots(val manifest: String, val files: Map<String, 
                     if (!entry.isDirectory) regularFiles += portable
                     val bytes = SafePackFileIo.readBytes(zip, minOf(remaining,
                         if (name == "manifest.json") ScriptPackFileLimits.MAX_MANIFEST_BYTES else ScriptPackFileLimits.MAX_FILE_BYTES), name)
-                    remaining -= bytes.size
+                    // The directory scanner charges the manifest against the same content
+                    // budget; mirror that here so both transports accept the same packs.
+                    remaining -= if (name == "manifest.json") 2 * bytes.size else bytes.size
                     if (!entry.isDirectory) {
                         if (name == "manifest.json") manifest = bytes.toString(Charsets.UTF_8)
                         else if (retained(name)) {

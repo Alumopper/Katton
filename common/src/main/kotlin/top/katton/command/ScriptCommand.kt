@@ -79,6 +79,13 @@ object ScriptCommand {
     fun register(dispatcher: CommandDispatcher<CommandSourceStack>) {
         dispatcher.register(
             literal("katton")
+                .then(literal("dev").requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS))
+                    .then(literal("enable").executes { context ->
+                        context.source.sendSuccess({ Component.literal(top.katton.dev.KattonDevBridge.enable()) }, false); 1
+                    })
+                    .then(literal("disable").executes { context ->
+                        context.source.sendSuccess({ Component.literal(top.katton.dev.KattonDevBridge.disable()) }, false); 1
+                    }))
                 .executes {
                     sendHelp(it.source)
                 }

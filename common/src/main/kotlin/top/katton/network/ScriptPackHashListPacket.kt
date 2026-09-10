@@ -51,7 +51,7 @@ data class ScriptPackHashListPacket(
         entries.forEach { entry ->
             ScriptPackPacketLimits.requireUniqueForEncoding(entry.syncId, syncIds, "script pack id")
         }
-        buf.writeInt(0x4b500003)
+        buf.writeInt(0x4b500004)
         buf.writeVarLong(revision)
         buf.writeVarInt(entries.size)
         entries.forEach { it.write(buf) }
@@ -67,7 +67,7 @@ data class ScriptPackHashListPacket(
             StreamCodec.of({ buf, packet -> packet.write(buf) }, { buf -> read(buf) })
 
         fun read(buf: FriendlyByteBuf): ScriptPackHashListPacket {
-            require(buf.readInt() == 0x4b500003) { "Incompatible Katton pack protocol; update client/server and rebuild the v3 cache" }
+            require(buf.readInt() == 0x4b500004) { "Incompatible Katton pack protocol; update client/server and rebuild the v4 cache" }
             val revision = buf.readVarLong()
             val count = ScriptPackPacketLimits.readCount(buf, ScriptPackPacketLimits.MAX_PACKS, "script pack hashes")
             val entries = ArrayList<HashEntry>(count)

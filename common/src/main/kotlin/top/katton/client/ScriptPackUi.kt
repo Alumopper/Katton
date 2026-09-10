@@ -398,6 +398,13 @@ private class ScriptPackManagerScreen(
         refreshData()
 
         val buttonY = height - 28
+        addRenderableWidget(Button.builder(Component.literal("IDE: " + if (top.katton.dev.KattonDevBridge.isEnabled()) "ON" else "OFF")) { button ->
+            runCatching {
+                if (top.katton.dev.KattonDevBridge.isEnabled()) top.katton.dev.KattonDevBridge.disable()
+                else top.katton.dev.KattonDevBridge.enable()
+            }.onFailure { ScriptIssueReporter.report("Development connection failed", it.stackTraceToString()) }
+            button.message = Component.literal("IDE: " + if (top.katton.dev.KattonDevBridge.isEnabled()) "ON" else "OFF")
+        }.bounds(width - 106, 6, 90, 20).build())
         toggleButton = addRenderableWidget(
             Button.builder(tr("katton.button.enable_disable")) {
                 toggleSelectedPack()

@@ -42,6 +42,7 @@ public class KattonClientFabric implements ClientModInitializer {
 		// Initialize common networking (payload type registration)
 		Networking.initialize();
 		ScriptPackUi.installErrorReporter();
+		top.katton.client.audio.ClientAudioManager.initialize();
 
 		// Initialize client networking for item sync
 		ClientNetworkingFabric.INSTANCE.initialize();
@@ -65,6 +66,8 @@ public class KattonClientFabric implements ClientModInitializer {
 			ScriptPackResourceManager.INSTANCE.clearAll();
 			ClientItemRenderMarkerManager.clear();
 			top.katton.client.scene.ClientSceneManager.disconnect();
+			top.katton.client.audio.ClientAudioNetwork.disconnect();
+			top.katton.client.audio.ClientAudioManager.disconnect();
 			ClientPostEffectManager.INSTANCE.clearAll();
 			ServerPackCacheManager.INSTANCE.reset();
 		});
@@ -73,6 +76,8 @@ public class KattonClientFabric implements ClientModInitializer {
 			ScriptReloadManager.tickClientLifecycle();
 			ClientItemRenderMarkerManager.tick();
 			top.katton.client.scene.ClientSceneManager.tick();
+			top.katton.client.audio.ClientAudioNetwork.tick();
+			top.katton.client.audio.ClientAudioManager.tick();
 			while (OPEN_PACK_SCREEN.consumeClick()) {
 				ScriptPackUi.openInWorldScreen();
 			}

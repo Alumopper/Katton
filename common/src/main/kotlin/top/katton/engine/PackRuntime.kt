@@ -124,7 +124,7 @@ internal object PackRuntime {
                 }
                 try {
                     candidates.values.filter { it.preparation.pack.syncId in requestedIds }.forEach { instance ->
-                        check(ManagedResources.activation(instance.ownerPrefix) { execute(instance, invocation) }) { "Entrypoint failed: ${instance.preparation.pack.syncId}" }
+                        check(ManagedResources.activation(instance.ownerPrefix) { AudioPackContext.withPack(instance.preparation.pack) { execute(instance, invocation) } }) { "Entrypoint failed: ${instance.preparation.pack.syncId}" }
                         instance.phases += invocation.phaseName
                     }
                     synchronized(active) {
@@ -181,7 +181,7 @@ internal object PackRuntime {
             if (invocation.phaseName !in instance.phases) {
                 val phasePrefix = instance.ownerPrefix + invocation.phaseName + ":"
                 try {
-                    check(ManagedResources.activation(instance.ownerPrefix) { execute(instance, invocation) }) { "Entrypoint phase failed" }
+                    check(ManagedResources.activation(instance.ownerPrefix) { AudioPackContext.withPack(instance.preparation.pack) { execute(instance, invocation) } }) { "Entrypoint phase failed" }
                     instance.phases += invocation.phaseName
                     pending.get()?.add(Pending({}, { onThread(environment) {
                         ManagedResources.discard(ManagedResources.detach(listOf(phasePrefix), includePersistent = true))

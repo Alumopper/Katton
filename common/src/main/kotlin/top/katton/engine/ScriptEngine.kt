@@ -11,6 +11,7 @@ import top.katton.config.KattonConfigManager
 import top.katton.pack.ScriptPack
 import top.katton.pack.ScriptPackDependencyGraph
 import top.katton.pack.ScriptPackScope
+import top.katton.pack.ScriptPackSnapshots
 import top.katton.registry.KattonRegistry
 import top.katton.util.ScriptExecutionContext
 import java.io.File
@@ -41,7 +42,13 @@ object ScriptEngine {
 
     @JvmStatic
     fun addHostClasspathJar(file: File) {
-        if (file.isFile) synchronized(hostClasspathLock) {
+        if (file.isFile) addHostClasspathEntry(file)
+    }
+
+    /** Registers a platform library JAR or an exploded development class directory. */
+    @JvmStatic
+    fun addHostClasspathEntry(file: File) {
+        if (file.isFile || file.isDirectory) synchronized(hostClasspathLock) {
             if (externalClasspathJars.add(file.absoluteFile)) hostClasspathCache = null
         }
     }
@@ -223,6 +230,17 @@ object ScriptEngine {
                         try {
                             Thread.currentThread().contextClassLoader = instance.loader
                             invokeEntrypoint(clazz, entry, methodType, environment, context)
+                        } catch (failure: Throwable) {
+                            val frame = sequenceOf(failure.cause, failure).filterNotNull().flatMap { it.stackTrace.asSequence() }
+                                .firstOrNull { it.className == entry.className && it.lineNumber > 0 }
+                            val file = frame?.fileName?.let { name -> pack.contentFiles
+                                // Only compiled sources can own a stack frame; a same-named
+                                // asset or data file must not shadow the attribution.
+                                .filter { ScriptPackSnapshots.isSource(it.relativePath) && it.relativePath.substringAfterLast('/') == name }
+                                .singleOrNull()?.relativePath }
+                            top.katton.dev.DevEvents.emit("ERROR", failure.stackTraceToString(), pack.syncId, pack.hash,
+                                file, frame?.lineNumber)
+                            throw failure
                         } finally { Thread.currentThread().contextClassLoader = oldLoader }
                     }
                 }

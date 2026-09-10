@@ -106,6 +106,8 @@ object ScriptPackManager {
     fun scanWorldPacksCandidate(): List<ScriptPack> {
         return scanScopePacks(worldDirectory, ScriptPackScope.WORLD)
     }
+    @Synchronized
+    internal fun scanGlobalPacksCandidate(): List<ScriptPack> = scanScopePacks(gameDirectory, ScriptPackScope.GLOBAL)
 
     /**
      * Publishes discovery metadata and the independently validated executable
@@ -393,7 +395,8 @@ object ScriptPackManager {
         javaFiles: List<ScriptPackScriptFile> = emptyList(),
         assetFiles: List<ScriptPackContentFile> = emptyList(),
         dataFiles: List<ScriptPackContentFile> = emptyList(),
-        libraries: List<ScriptPackContentFile> = emptyList()
+        libraries: List<ScriptPackContentFile> = emptyList(),
+        extraFiles: List<ScriptPackContentFile> = emptyList()
     ): String {
         val digest = MessageDigest.getInstance("SHA-256")
         digest.updateFramed("katton-logical-pack-hash-v3".toByteArray(StandardCharsets.UTF_8))
@@ -403,6 +406,11 @@ object ScriptPackManager {
         digest.updateContentFiles(assetFiles)
         digest.updateContentFiles(dataFiles)
         digest.updateContentFiles(libraries)
+        // Preserve existing hashes for packs without additional content.
+        if (extraFiles.isNotEmpty()) {
+            digest.updateFramed("extra-content-v1".toByteArray(StandardCharsets.UTF_8))
+            digest.updateContentFiles(extraFiles)
+        }
 
         return digest.digest().joinToString("") { "%02x".format(it) }
     }

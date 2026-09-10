@@ -171,6 +171,10 @@ def sanitizedKotlinCompilerJar = tasks.register('sanitizedKotlinCompilerJar', Ja
 }
 
 dependencies {
+    implementation 'javazoom:jlayer:1.0.1'
+    implementation 'org.jflac:jflac-codec:1.5.2'
+    jarJar 'javazoom:jlayer:[1.0.1,1.0.2)'
+    jarJar 'org.jflac:jflac-codec:[1.5.2,1.5.3)'
     // Embed runtime libraries into the NeoForge mod jar.
     kotlinCompilerForPackaging 'org.jetbrains.kotlin:kotlin-compiler-embeddable:2.3.10'
     implementation 'org.jetbrains.kotlin:kotlin-compiler-embeddable'

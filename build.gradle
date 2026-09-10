@@ -17,7 +17,7 @@ plugins {
     // single plugin classloader. Applying versioned copies in both version
     // projects can mix incompatible kotlinx.serialization internals.
     id 'com.gradleup.shadow' version '8.3.10' apply false
-    id 'io.papermc.paperweight.userdev' version '2.0.0-beta.21' apply false
+    id 'io.papermc.paperweight.userdev' version '2.0.0-beta.23' apply false
     id 'xyz.jpenilla.run-paper' version '3.0.2' apply false
     id 'top.katton.api-doc-generator'
 }
@@ -74,6 +74,16 @@ dependencies {
     minecraft "com.mojang:minecraft:${project.minecraft_version}"
 }
 
+// The root project has no loader or mod runtime. Launch the active Fabric
+// version instead of Loom's root development launcher.
+['runClient', 'runServer'].each { runTaskName ->
+    tasks.named(runTaskName) {
+        enabled = false
+        setDependsOn([":fabric:${activeStonecutterVersionProvider.get()}:${runTaskName}"])
+        description = "Launch the active Stonecutter Fabric target via ${runTaskName}."
+    }
+}
+
 // Root build will configure Architectury Loom for subprojects that apply it
 subprojects {
     if (!isStonecutterManagedProject(project)) {
@@ -127,7 +137,7 @@ subprojects {
         }
 
         afterEvaluate {
-            // java-gradle-plugin owns the sign plugin's implementation and marker
+            // java-gradle-plugin owns its implementation and marker
             // publications. Creating a second publication from the same Java
             // component removes artifacts from Gradle's generated plugin metadata.
             if (!project.plugins.hasPlugin('java-gradle-plugin')) {
@@ -427,6 +437,36 @@ tasks.register('verifyReleaseArtifacts') {
                         }
                     }
 
+                    // Audio decoding needs its embedded libraries on the mod platforms, and every
+                    // deployment must carry the license notices for whatever it ships.
+                    ['META-INF/licenses/LGPL-2.1.txt', 'META-INF/licenses/katton-audio-NOTICE.txt'].each { entryName ->
+                        if (jar.getJarEntry(entryName) == null) {
+                            throw new GradleException("${artifact.name} is missing ${entryName}")
+                        }
+                    }
+                    def audioLibraries = ['jlayer-1.0.1.jar', 'jflac-codec-1.5.2.jar']
+                    if (platform == 'paper') {
+                        if (jar.getJarEntry('javazoom/jl/decoder/Bitstream.class') != null) {
+                            throw new GradleException("${artifact.name} unexpectedly bundles the JLayer audio decoder")
+                        }
+                    } else {
+                        audioLibraries.each { library ->
+                            def nested = jar.entries().find {
+                                it.name.endsWith('.jar') && it.name.contains(library) && it.size > 0L
+                            }
+                            if (nested == null) {
+                                throw new GradleException("${artifact.name} is missing the embedded audio library ${library}")
+                            }
+                        }
+                        if (platform == 'fabric') {
+                            audioLibraries.each { library ->
+                                if (!new JsonSlurper().parseText(descriptorText).jars?.any { it.file?.endsWith(library) }) {
+                                    throw new GradleException("${artifact.name} does not declare ${library} in fabric.mod.json jars")
+                                }
+                            }
+                        }
+                    }
+
                     if (platform != 'paper') {
                         requiredAgentAttributes.each { attributeName, expectedValue ->
                             def actualValue = jar.manifest?.mainAttributes?.getValue(attributeName)
@@ -530,11 +570,11 @@ def allMavenLocalPublishTasks = nexusVersionedModules.collectMany { moduleName -
     project(":${moduleName}").subprojects.collect { versionProject ->
         "${versionProject.path}:publishToMavenLocal"
     }
-}.sort() + [':sign-plugin:publishToMavenLocal']
+}.sort()
 
 tasks.register('verifyLocalMavenPublications') {
     group = 'verification'
-    description = 'Publish every release module and the signing plugin to Maven Local to validate POM and module metadata.'
+    description = 'Publish every Minecraft release module to Maven Local to validate POM and module metadata.'
     dependsOn allMavenLocalPublishTasks
 }
 
@@ -569,16 +609,10 @@ def publishAllVersionsToPrivateNexus = tasks.register('publishAllVersionsToPriva
     dependsOn allNexusPublishTasks
 }
 
-def publishSignPluginToPrivateNexus = tasks.register('publishSignPluginToPrivateNexus') {
-    group = 'publishing'
-    description = "Publish the version-independent Katton signing Gradle plugin to ${nexusRepositoryUrl.get()}."
-    dependsOn ':sign-plugin:publishAllPublicationsToPrivateNexusRepository'
-}
-
 tasks.register('publishEverythingToPrivateNexus') {
     group = 'publishing'
-    description = 'Publish all Minecraft versions and the Katton signing Gradle plugin.'
-    dependsOn publishAllVersionsToPrivateNexus, publishSignPluginToPrivateNexus
+    description = 'Publish all Minecraft versions. The signing plugin is published from Katton-Sign.'
+    dependsOn publishAllVersionsToPrivateNexus
 }
 
 tasks.register('publishAllToPrivateNexus') {

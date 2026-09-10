@@ -1,6 +1,7 @@
 package top.katton.platform
 
 import net.fabricmc.loader.api.FabricLoader
+import net.fabricmc.loader.api.metadata.ModOrigin
 import net.fabricmc.loader.api.metadata.ModDependency
 import top.katton.engine.ResolvedScriptDependency
 import top.katton.engine.PlatformDependencyResolver
@@ -29,8 +30,20 @@ object FabricScriptDependencyResolver : PlatformDependencyResolver {
             fun collect(modId: String) {
                 if (!visited.add(modId)) return
                 val current = loader.getModContainer(modId).orElse(null) ?: return
-                addAll(current.origin.paths)
-                addAll(current.rootPaths)
+                if (current.origin.kind == ModOrigin.Kind.PATH) addAll(current.origin.paths)
+                current.rootPaths.forEach { root ->
+                    if (root.fileSystem == java.nio.file.FileSystems.getDefault()) {
+                        add(root)
+                    } else {
+                        // Loader exposes nested JARs as ZIP filesystem roots;
+                        // Kotlin's compiler needs the backing local archive.
+                        val connection = root.toUri().toURL().openConnection()
+                        if (connection is java.net.JarURLConnection) {
+                            add(java.nio.file.Path.of(connection.jarFileURL.toURI()))
+                        }
+                    }
+                }
+                current.containedMods.forEach { collect(it.metadata.id) }
                 current.metadata.dependencies
                     .asSequence()
                     .filter { it.kind == ModDependency.Kind.DEPENDS }

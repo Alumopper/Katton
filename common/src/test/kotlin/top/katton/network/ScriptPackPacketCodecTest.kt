@@ -10,20 +10,28 @@ import kotlin.test.assertFailsWith
 class ScriptPackPacketCodecTest {
     private val validHash = "0".repeat(64)
 
+    private companion object {
+        /** The current script-pack wire generation. */
+        const val CURRENT_MAGIC = 0x4b500004
+
+        /** The pre-0.5.0 script-pack wire generation. */
+        const val PREVIEW_MAGIC = 0x4b500003
+    }
+
     @Test
     fun `collection counts are rejected before allocating`() {
         val bundle = buffer {
-            writeInt(0x4b500003)
+            writeInt(CURRENT_MAGIC)
             writeVarLong(0L)
             writeVarInt(Int.MAX_VALUE)
         }
         val hashes = buffer {
-            writeInt(0x4b500003)
+            writeInt(CURRENT_MAGIC)
             writeVarLong(0L)
             writeVarInt(Int.MAX_VALUE)
         }
         val request = buffer {
-            writeInt(0x4b500003)
+            writeInt(CURRENT_MAGIC)
             writeVarLong(0L)
             writeVarInt(Int.MAX_VALUE)
         }
@@ -36,7 +44,7 @@ class ScriptPackPacketCodecTest {
     @Test
     fun `manifest byte arrays are bounded before copying`() {
         val bundle = buffer {
-            writeInt(0x4b500003)
+            writeInt(CURRENT_MAGIC)
             writeVarLong(0L)
             writeVarInt(1)
             writeUtf("world:example")
@@ -60,7 +68,7 @@ class ScriptPackPacketCodecTest {
     @Test
     fun `bundle rejects traversal paths before reading file content`() {
         val bundle = buffer {
-            writeInt(0x4b500003)
+            writeInt(CURRENT_MAGIC)
             writeVarLong(0L)
             writeVarInt(1)
             writeUtf("world:example")
@@ -96,7 +104,7 @@ class ScriptPackPacketCodecTest {
     @Test
     fun `bundle rejects a sync id whose prefix disagrees with scope`() {
         val bundle = buffer {
-            writeInt(0x4b500003)
+            writeInt(CURRENT_MAGIC)
             writeVarLong(0L)
             writeVarInt(1)
             writeUtf("global:example")
@@ -112,7 +120,7 @@ class ScriptPackPacketCodecTest {
     @Test
     fun `pack packets reject non sha256 hashes at the codec boundary`() {
         val bundle = buffer {
-            writeInt(0x4b500003)
+            writeInt(CURRENT_MAGIC)
             writeVarLong(0L)
             writeVarInt(1)
             writeUtf("world:example")
@@ -141,6 +149,23 @@ class ScriptPackPacketCodecTest {
 
         assertFailsWith<DecoderException> { ClientDataSyncPacket.read(hostileCount) }
         assertFailsWith<DecoderException> { ClientDataSyncPacket.read(duplicateKeys) }
+    }
+
+    @Test
+    fun `an older pack protocol generation is rejected explicitly`() {
+        // 0x4b500003 predates the Alpha 0.5.0 content classifier change. A stale peer must
+        // fail on the version guard instead of being mistaken for an incomplete snapshot.
+        fun stale(write: FriendlyByteBuf.() -> Unit) = buffer {
+            writeInt(PREVIEW_MAGIC)
+            write()
+        }
+
+        assertFailsWith<IllegalArgumentException> { ScriptPackBundlePacket.read(stale { writeVarLong(0L); writeVarInt(0) }) }
+        assertFailsWith<IllegalArgumentException> { ScriptPackRequestPacket.read(stale { writeVarLong(0L); writeVarInt(0) }) }
+        assertFailsWith<IllegalArgumentException> { ScriptPackHashListPacket.read(stale { writeVarLong(0L); writeVarInt(0) }) }
+        assertFailsWith<IllegalArgumentException> {
+            ScriptPackSyncAckPacket.STREAM_CODEC.decode(stale { writeVarLong(0L); writeBoolean(true); writeUtf("ok", 1024) })
+        }
     }
 
     private fun buffer(write: FriendlyByteBuf.() -> Unit): FriendlyByteBuf =

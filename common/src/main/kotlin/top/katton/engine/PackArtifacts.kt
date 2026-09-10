@@ -2,6 +2,11 @@ package top.katton.engine
 
 import org.jetbrains.kotlin.cli.jvm.K2JVMCompiler
 import org.jetbrains.kotlin.cli.common.ExitCode
+import org.jetbrains.kotlin.cli.common.messages.MessageCollector
+import org.jetbrains.kotlin.cli.common.messages.CompilerMessageSeverity
+import org.jetbrains.kotlin.cli.common.messages.CompilerMessageSourceLocation
+import org.jetbrains.kotlin.config.Services
+import top.katton.dev.DevEvents
 import top.katton.pack.*
 import top.katton.api.LOGGER
 import java.io.ByteArrayOutputStream
@@ -99,10 +104,26 @@ internal object PackCompiler {
                 val output = staging.resolve("classes")
                 Files.createDirectories(output)
                 if (sources.any { it.toString().endsWith(".kt", true) }) {
-                    val diagnostics = ByteArrayOutputStream()
+                    val diagnostics = StringBuilder()
                     val args = listOf("-no-stdlib", "-no-reflect", "-jvm-target", "25", "-module-name", "pack_$fingerprint",
                         "-classpath", classpath.joinToString(java.io.File.pathSeparator), "-d", output.toString()) + sources.map(Path::toString)
-                    val result = PrintStream(diagnostics).use { K2JVMCompiler().exec(it, *args.toTypedArray()) }
+                    val collector = object : MessageCollector {
+                        private var errors = false
+                        override fun clear() { errors = false }
+                        override fun hasErrors() = errors
+                        override fun report(severity: CompilerMessageSeverity, message: String, location: CompilerMessageSourceLocation?) {
+                            if (severity.isError) errors = true
+                            if (severity == CompilerMessageSeverity.LOGGING) return
+                            diagnostics.appendLine("$severity: ${location?.path ?: ""}:${location?.line ?: 0}: $message")
+                            val relative = location?.path?.let { path -> runCatching { staging.resolve("sources").relativize(Path.of(path)).toString().replace('\\', '/') }.getOrNull() }
+                            DevEvents.emit(if (severity.isError) "ERROR" else if (severity.isWarning) "WARNING" else "INFO",
+                                message, pack.syncId, pack.hash, relative, location?.line, location?.column)
+                        }
+                    }
+                    val compiler = K2JVMCompiler()
+                    val arguments = compiler.createArguments()
+                    compiler.parseArguments(args.toTypedArray(), arguments)
+                    val result = compiler.exec(collector, Services.EMPTY, arguments)
                     check(result == ExitCode.OK) { "Pack ${pack.syncId}: Kotlin compilation failed:\n$diagnostics" }
                 }
                 val javaSources = sources.filter { it.toString().endsWith(".java", true) }
@@ -111,7 +132,13 @@ internal object PackCompiler {
                     val diagnostics = javax.tools.DiagnosticCollector<javax.tools.JavaFileObject>()
                     compiler.getStandardFileManager(diagnostics, null, Charsets.UTF_8).use { manager ->
                         val options = listOf("--release", "25", "-proc:none", "-classpath", (classpath + listOf(output)).joinToString(java.io.File.pathSeparator), "-d", output.toString())
-                        check(compiler.getTask(null, manager, diagnostics, options, null, manager.getJavaFileObjectsFromPaths(javaSources)).call()) {
+                        val ok = compiler.getTask(null, manager, diagnostics, options, null, manager.getJavaFileObjectsFromPaths(javaSources)).call()
+                        diagnostics.diagnostics.forEach { diagnostic ->
+                            val relative = diagnostic.source?.toUri()?.let { staging.resolve("sources").relativize(Path.of(it)).toString().replace('\\', '/') }
+                            DevEvents.emit(diagnostic.kind.name, diagnostic.getMessage(java.util.Locale.ROOT), pack.syncId, pack.hash,
+                                relative, diagnostic.lineNumber.takeIf { it > 0 }?.toInt(), diagnostic.columnNumber.takeIf { it > 0 }?.toInt())
+                        }
+                        check(ok) {
                             "Pack ${pack.syncId}: Java compilation failed:\n${diagnostics.diagnostics.joinToString("\n")}" }
                     }
                 }

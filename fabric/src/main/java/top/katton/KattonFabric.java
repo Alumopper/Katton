@@ -22,6 +22,7 @@ import top.katton.platform.EntityAttributeHooks;
 import top.katton.platform.FabricEntityAttributeHooks;
 import top.katton.platform.FabricScriptDependencyResolver;
 import top.katton.engine.ScriptDependencyManager;
+import top.katton.engine.ScriptEngine;
 import top.katton.pack.ScriptPlatform;
 import top.katton.network.ScriptPackRequestPacket;
 import top.katton.network.ScriptPackSyncAckPacket;
@@ -33,6 +34,18 @@ public class KattonFabric implements ModInitializer {
     public void onInitialize() {
         //Entrance point for common initialization
         ScriptDependencyManager.install(ScriptPlatform.FABRIC, FabricScriptDependencyResolver.INSTANCE);
+        // Fabric API injects interfaces into Minecraft classes. The compiler
+        // needs every API module, even when scripts only refer to vanilla types.
+        // Loom exposes the fabric-* modules separately in development, so
+        // walking only the aggregate fabric-api container misses those modules.
+        FabricLoader.getInstance().getAllMods().stream()
+            .filter(mod -> mod.getMetadata().getId().startsWith("fabric-"))
+            .forEach(mod -> {
+                var apiModule = FabricScriptDependencyResolver.INSTANCE.resolve(mod.getMetadata().getId());
+                if (apiModule != null) {
+                    apiModule.getClasspath().forEach(path -> ScriptEngine.addHostClasspathEntry(path.toFile()));
+                }
+            });
         setGameDirectory(FabricLoader.getInstance().getGameDir());
         FabricManagedEvents.initialize();
         mainInitialize();

@@ -50,7 +50,8 @@ object ScriptReloadManager {
         var reason: InvocationReason,
         var cause: ReloadCause,
         val callbacks: MutableList<(Boolean) -> Unit>,
-        val future: CompletableFuture<Void> = CompletableFuture()
+        val future: CompletableFuture<Void> = CompletableFuture(),
+        val beforePrepare: (() -> Unit)? = null
     )
 
     private data class PreparedServerReload(
@@ -91,6 +92,8 @@ object ScriptReloadManager {
 
     private val clientReloadRunning = AtomicBoolean(false)
     private val serverReloadRunning = AtomicBoolean(false)
+    private val developmentReload = AtomicBoolean(false)
+    private const val DEVELOPMENT_WATCHDOG_ATTEMPTS = 120
     private val globalClientInitialized = AtomicBoolean(false)
     private val clientReloadQueueLock = Any()
     private val serverReloadStateLock = Any()
@@ -263,9 +266,11 @@ object ScriptReloadManager {
         cause: ReloadCause,
         onComplete: ((Boolean) -> Unit)? = null
     ): Boolean {
-        if (!clientReloadRunning.compareAndSet(false, true)) {
-            enqueuePendingClientReload(reason, cause, onComplete)
-            return true
+        synchronized(clientReloadQueueLock) {
+            if (developmentReload.get() || !clientReloadRunning.compareAndSet(false, true)) {
+                enqueuePendingClientReload(reason, cause, onComplete)
+                return true
+            }
         }
         startClientReload(reason, cause, listOfNotNull(onComplete))
         return true
@@ -330,26 +335,13 @@ object ScriptReloadManager {
 
     private fun startPendingClientReloadIfPresent() {
         val pending = synchronized(clientReloadQueueLock) {
-            pendingClientReload.also { pendingClientReload = null }
-        } ?: return
-
-        if (clientReloadRunning.compareAndSet(false, true)) {
-            startClientReload(pending.reason, pending.cause, pending.callbacks)
-            return
+            if (developmentReload.get() || clientReloadRunning.get()) return
+            val next = pendingClientReload ?: return
+            pendingClientReload = null
+            clientReloadRunning.set(true)
+            next
         }
-
-        // Another caller won the transition between the completed pass and this
-        // drain. Merge our callbacks back into its single queued follow-up pass.
-        synchronized(clientReloadQueueLock) {
-            val queued = pendingClientReload
-            if (queued == null) {
-                pendingClientReload = pending
-            } else {
-                queued.reason = pending.reason
-                queued.cause = pending.cause
-                queued.callbacks += pending.callbacks
-            }
-        }
+        startClientReload(pending.reason, pending.cause, pending.callbacks)
     }
 
     private fun dispatchClientReloadCallbacks(callbacks: List<(Boolean) -> Unit>, success: Boolean) {
@@ -559,6 +551,10 @@ object ScriptReloadManager {
 
     @JvmStatic
     fun resetServerLifecycle(server: MinecraftServer?) {
+        top.katton.dev.KattonDevBridge.worldChanged()
+        // Remote audio handles belong to the stopping server regardless of how far the
+        // global phase got; nothing can command them once the server stops.
+        top.katton.api.audio.AudioServerTransport.clear()
         if (server == null || globalReadyServer === server) {
             PackRuntime.resetGlobalPhase(ScriptEnvironment.SERVER, ServerPhase.READY.name)
             val ownerPrefix = "${ScriptPackScope.GLOBAL.serializedName}:${ServerPhase.READY.name}:"
@@ -713,16 +709,86 @@ object ScriptReloadManager {
 
     private fun scheduleServerReload(request: ServerReloadRequest) {
         serverPreparationExecutor.execute {
-            val preparation = runCatching { prepareServerReload(request.server, request.reason, request.cause) }
+            val preparation = runCatching {
+                request.beforePrepare?.invoke()
+                prepareServerReload(request.server, request.reason, request.cause)
+            }
             activateServerReload(request, preparation)
         }
     }
 
+    /** Reserves both reload lanes before installing a development snapshot. Never blocks a game thread. */
+    fun tryDevelopmentReload(server: MinecraftServer, beforePrepare: () -> Unit, completed: (Boolean) -> Unit): Boolean {
+        val request = synchronized(clientReloadQueueLock) { synchronized(serverReloadStateLock) {
+            if (serverReloadRunning.get() || clientReloadRunning.get() || developmentReload.get()) return false
+            developmentReload.set(true)
+            serverReloadRunning.set(true)
+            val callback: (Boolean) -> Unit = { success ->
+                if (success && Katton.hasClient && !server.isDedicatedServer && Katton.server === server) {
+                    synchronized(clientReloadQueueLock) {
+                        clientReloadRunning.set(true)
+                        developmentReload.set(false)
+                    }
+                    startClientReload(InvocationReason.HOT_RELOAD, ReloadCause.SERVER_PACK_SYNC, listOf { clientOk ->
+                        try { completed(clientOk) } finally { startPendingServerReloadOrFinish() }
+                    })
+                } else {
+                    try { completed(success) } finally {
+                        developmentReload.set(false)
+                        startPendingServerReloadOrFinish(); startPendingClientReloadIfPresent()
+                    }
+                }
+            }
+            ServerReloadRequest(server, InvocationReason.HOT_RELOAD, ReloadCause.COMMAND,
+                mutableListOf(callback), beforePrepare = beforePrepare).also { serverReloadFuture = it.future }
+        } }
+        try {
+            scheduleServerReload(request)
+        } catch (rejected: Throwable) {
+            // The lanes were claimed before submission; release them so reloads keep working.
+            logger.error("Failed to schedule the development reload", rejected)
+            synchronized(clientReloadQueueLock) { synchronized(serverReloadStateLock) {
+                developmentReload.set(false)
+                serverReloadRunning.set(false)
+            } }
+            request.future.completeExceptionally(rejected)
+            request.callbacks.forEach { callback ->
+                runCatching { callback(false) }.onFailure { logger.error("Rejected development reload callback failed", it) }
+            }
+            return false
+        }
+        return true
+    }
+
     private fun activateServerReload(request: ServerReloadRequest, preparation: Result<PreparedServerReload>) {
+        val activationClaimed = AtomicBoolean(false)
+        val watchdogAttempts = AtomicInteger(0)
+        fun abandonStoppedDevelopmentRequest() {
+            if (request.beforePrepare == null || activationClaimed.get()) return
+            if (Katton.server !== request.server && activationClaimed.compareAndSet(false, true)) {
+                request.future.completeExceptionally(IllegalStateException("World closed before script activation"))
+                request.callbacks.forEach { callback ->
+                    runCatching { callback(false) }.onFailure { logger.error("Cancelled development reload callback failed", it) }
+                }
+            } else if (!activationClaimed.get()) {
+                // A queued activation may never run. Stop waiting so a development deployment
+                // cannot hold both reload lanes forever.
+                if (watchdogAttempts.incrementAndGet() > DEVELOPMENT_WATCHDOG_ATTEMPTS && activationClaimed.compareAndSet(false, true)) {
+                    logger.error("Abandoning a development reload whose activation never ran on {}", request.server)
+                    request.future.completeExceptionally(IllegalStateException("Script activation never started"))
+                    request.callbacks.forEach { callback ->
+                        runCatching { callback(false) }.onFailure { logger.error("Abandoned development reload callback failed", it) }
+                    }
+                } else {
+                    CompletableFuture.delayedExecutor(1, TimeUnit.SECONDS).execute { abandonStoppedDevelopmentRequest() }
+                }
+            }
+        }
         // Registry, event, command, and datapack mutations must stay on the
         // platform's server-wide mutation thread (the global region on Folia).
         try {
             ServerTaskScheduler.execute(request.server, Runnable {
+                if (!activationClaimed.compareAndSet(false, true)) return@Runnable
                 var completedSuccessfully = false
                 try {
                     check(Katton.server === request.server) { "Server lifecycle ended during script preparation" }
@@ -740,7 +806,7 @@ object ScriptReloadManager {
                     if (ok) {
                         if (Katton.hasClient) {
                             ServerNetworking.publishPackRevision(request.server)
-                            if (!request.server.isDedicatedServer && request.reason == InvocationReason.HOT_RELOAD) {
+                            if (request.beforePrepare == null && !request.server.isDedicatedServer && request.reason == InvocationReason.HOT_RELOAD) {
                                 reloadClientScriptsAsync(
                                     InvocationReason.HOT_RELOAD,
                                     ReloadCause.SERVER_PACK_SYNC,
@@ -755,6 +821,7 @@ object ScriptReloadManager {
                     completedSuccessfully = ok
                 } catch (t: Throwable) {
                     logger.error("Failed to reload server scripts", t)
+                    top.katton.dev.DevEvents.emit("ERROR", t.stackTraceToString())
                     ReloadProgressState.finish("katton.reload.server.failed")
                     request.future.completeExceptionally(t)
                 } finally {
@@ -763,17 +830,21 @@ object ScriptReloadManager {
                         runCatching { callback(completedSuccessfully) }
                             .onFailure { logger.error("Server script reload completion callback failed", it) }
                     }
-                    startPendingServerReloadOrFinish()
+                    if (request.beforePrepare == null) startPendingServerReloadOrFinish()
                 }
             })
+            // A stopped Minecraft executor may silently retain its queued tasks.
+            // Claim cancellation before activation and release the deployment lanes exactly once.
+            if (request.beforePrepare != null) abandonStoppedDevelopmentRequest()
         } catch (rejected: RuntimeException) {
+            if (!activationClaimed.compareAndSet(false, true)) return
             logger.error("Server scheduler rejected script reload setup", rejected)
             request.future.completeExceptionally(rejected)
             request.callbacks.forEach { callback ->
                 runCatching { callback(false) }
                     .onFailure { logger.error("Rejected server reload callback failed", it) }
             }
-            startPendingServerReloadOrFinish()
+            if (request.beforePrepare == null) startPendingServerReloadOrFinish()
         }
     }
 

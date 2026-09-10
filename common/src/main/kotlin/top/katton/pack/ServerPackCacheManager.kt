@@ -31,7 +31,7 @@ import kotlin.io.path.absolutePathString
 
 object ServerPackCacheManager {
 
-    private const val SERVER_PACKS_DIR_NAME = "serverpacks-v3"
+    private const val SERVER_PACKS_DIR_NAME = "serverpacks-v4"
     private const val MANIFEST_FILE_NAME = "manifest.json"
     private const val REVISIONS_DIR_NAME = "revisions"
     private const val CONFIGURATION_SYNC_TIMEOUT_SECONDS = 120L
@@ -876,7 +876,7 @@ object ServerPackCacheManager {
 
     private fun resolveCachedRoot(bucket: String): Path {
         val gameDir = Katton.gameDirectory ?: error("Game directory is not initialized")
-        if (Files.exists(gameDir.resolve("serverpacks"))) LOGGER.warn("Legacy Katton serverpacks cache is incompatible; rebuilding in serverpacks-v3")
+        if (Files.exists(gameDir.resolve("serverpacks"))) LOGGER.warn("Legacy Katton serverpacks cache is incompatible; rebuilding in serverpacks-v4")
         val serverPacksRoot = ensureRealDirectory(gameDir.resolve(SERVER_PACKS_DIR_NAME), "server-pack cache")
         return ensureRealDirectory(serverPacksRoot.resolve(bucket), "server cache bucket")
     }

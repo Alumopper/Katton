@@ -41,6 +41,17 @@ public class KattonPaperCommand implements BasicCommand {
 
         String sub = args[0].toLowerCase(Locale.ROOT);
         switch (sub) {
+            case "dev" -> {
+                if (!sender.hasPermission("katton.admin") && !sender.isOp()) {
+                    sender.sendMessage("Katton administrator permission required.");
+                    return;
+                }
+                if (args.length == 2 && "enable".equalsIgnoreCase(args[1])) {
+                    sender.sendMessage(top.katton.dev.KattonDevBridge.enable());
+                } else if (args.length == 2 && "disable".equalsIgnoreCase(args[1])) {
+                    sender.sendMessage(top.katton.dev.KattonDevBridge.disable());
+                } else sender.sendMessage("Usage: /katton dev enable|disable");
+            }
             case "status" -> {
                 sender.sendMessage(PaperMessages.tr(
                     sender,
@@ -113,7 +124,7 @@ public class KattonPaperCommand implements BasicCommand {
     @Override
     public @NonNull Collection<String> suggest(@NonNull CommandSourceStack source, String[] args) {
         if (args.length <= 1) {
-            List<String> base = new ArrayList<>(List.of("help", "status", "reload", "errors", "capabilities", "packs"));
+            List<String> base = new ArrayList<>(List.of("help", "status", "reload", "errors", "capabilities", "packs", "dev"));
             // Filter by typed prefix
             String prefix = args.length == 0 ? "" : args[0].toLowerCase();
             return base.stream()
@@ -126,6 +137,7 @@ public class KattonPaperCommand implements BasicCommand {
         if (args.length == 2 && "packs".equalsIgnoreCase(args[0])) {
             return List.of("list", "enable", "disable");
         }
+        if (args.length == 2 && "dev".equalsIgnoreCase(args[0])) return List.of("enable", "disable");
         if (args.length == 3 && "packs".equalsIgnoreCase(args[0])) {
             return ScriptPackManager.INSTANCE.listLocalPacksForGui(false).stream()
                 .map(view -> view.getSyncId())

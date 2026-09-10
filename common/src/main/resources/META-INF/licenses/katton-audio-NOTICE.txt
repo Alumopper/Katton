@@ -1,0 +1,16 @@
+Katton audio decoder dependencies (unmodified, separately packaged libraries):
+
+JLayer 1.0.1 (javazoom:jlayer:1.0.1)
+Copyright JavaZOOM and JLayer contributors.
+GNU Lesser General Public License, version 2.1 or later.
+Source: https://repo.maven.apache.org/maven2/javazoom/jlayer/1.0.1/jlayer-1.0.1-sources.jar
+Project: https://github.com/umjammer/jlayer
+
+jFLAC 1.5.2 (org.jflac:jflac-codec:1.5.2)
+Copyright Josh Coalson, David R. Robison and jFLAC contributors.
+GNU Lesser General Public License (upstream Maven distribution specifies 2.1).
+Source: https://repo.maven.apache.org/maven2/org/jflac/jflac-codec/1.5.2/jflac-codec-1.5.2-sources.jar
+Project: https://github.com/nguillaumin/jflac
+
+The LGPL-2.1 license text is included alongside this notice.
+These libraries are not required or bundled by the Paper audio implementation.

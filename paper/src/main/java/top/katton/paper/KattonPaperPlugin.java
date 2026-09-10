@@ -56,6 +56,7 @@ public class KattonPaperPlugin extends JavaPlugin implements Listener {
     @Override
     public void onEnable() {
         instance = this;
+        PaperAudio.install(this);
         getLogger().info("Katton Paper enabling...");
         ScriptDependencyManager.install(ScriptPlatform.PAPER, new PaperScriptDependencyResolver(this));
 
@@ -141,6 +142,8 @@ public class KattonPaperPlugin extends JavaPlugin implements Listener {
         ScriptPackManager.INSTANCE.clearWorldDirectory();
         ServerTaskScheduler.reset();
         ServerRuntimeCapabilities.reset();
+        // Release the loopback IDE bridge so a plugin reload does not keep a stale port and session file.
+        top.katton.dev.KattonDevBridge.disable();
     }
 
     /**

@@ -47,6 +47,7 @@ public class KattonClientNeoForge {
     @SubscribeEvent
     public static void onAddClientReloadListeners(AddClientReloadListenersEvent event) {
         ScriptPackUi.installErrorReporter();
+        top.katton.client.audio.ClientAudioManager.initialize();
 
         // Initialize entity renderer hooks for hot-reloadable renderer registration
         ReflectUtil.INSTANCE.getPossibleClassFromNames(
@@ -74,6 +75,8 @@ public class KattonClientNeoForge {
         ScriptReloadManager.tickClientLifecycle();
         ClientItemRenderMarkerManager.tick();
         top.katton.client.scene.ClientSceneManager.tick();
+        top.katton.client.audio.ClientAudioNetwork.tick();
+        top.katton.client.audio.ClientAudioManager.tick();
         while (OPEN_PACK_SCREEN.consumeClick()) {
             ScriptPackUi.openInWorldScreen();
         }
@@ -92,6 +95,8 @@ public class KattonClientNeoForge {
         ScriptPackResourceManager.INSTANCE.clearAll();
         ClientItemRenderMarkerManager.clear();
         top.katton.client.scene.ClientSceneManager.disconnect();
+        top.katton.client.audio.ClientAudioNetwork.disconnect();
+        top.katton.client.audio.ClientAudioManager.disconnect();
         ClientPostEffectManager.INSTANCE.clearAll();
         ServerPackCacheManager.INSTANCE.reset();
     }

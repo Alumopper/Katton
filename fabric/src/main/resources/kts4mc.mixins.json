@@ -13,6 +13,7 @@
     "ServerLevelMixin"
   ],
   "client": [
+    "AudioReloadMixin",
     "SceneCameraMixin",
     "SceneHandMixin",
     "SceneInputMixin",

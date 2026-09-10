@@ -27,6 +27,7 @@
     "ServerPlayerMixin"
   ],
   "client": [
+    "AudioReloadMixin",
     "SceneCameraMixin",
     "SceneHandMixin",
     "SceneInputMixin",

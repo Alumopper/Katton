@@ -268,6 +268,7 @@ object ServerNetworking {
     /** Called from a server tick hook to enforce revision acknowledgements. */
     @JvmStatic
     fun pollSyncTimeouts(server: MinecraftServer) {
+        top.katton.api.audio.AudioServerTransport.tick(server)
         val now = System.nanoTime()
         pendingAcks.entries.removeIf { (playerId, pending) ->
             if (pending.deadlineNanos - now > 0L) return@removeIf false
@@ -281,6 +282,7 @@ object ServerNetworking {
 
     @JvmStatic
     fun resetPackRevisions() {
+        top.katton.api.audio.AudioServerTransport.clear()
         pendingAcks.clear()
         configurationSnapshots.clear()
         publishedSnapshot = PublishedPackSnapshot(0L, emptyList())

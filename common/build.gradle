@@ -22,6 +22,10 @@ loom {
 }
 
 dependencies {
+    compileOnly 'javazoom:jlayer:1.0.1'
+    compileOnly 'org.jflac:jflac-codec:1.5.2'
+    testImplementation 'javazoom:jlayer:1.0.1'
+    testImplementation 'org.jflac:jflac-codec:1.5.2'
     compileOnly 'org.jetbrains.kotlin:kotlin-compiler-embeddable'
     compileOnly 'org.jetbrains.kotlin:kotlin-daemon-embeddable'
     compileOnly 'org.jetbrains.kotlin:kotlin-reflect'
@@ -89,6 +93,36 @@ tasks.register('verifySceneExamples', JavaExec) {
     }
 }
 tasks.named('check') { dependsOn tasks.named('verifySceneExamples') }
+
+tasks.register('verifyAudioExamples', JavaExec) {
+    group = 'verification'
+    dependsOn tasks.named('classes')
+    classpath = files(configurations.compileClasspath, sourceSets.main.output)
+    mainClass = 'org.jetbrains.kotlin.cli.jvm.K2JVMCompiler'
+    def source = rootProject.file('examples/audio/AudioExamples.kt')
+    def probes = project.parent.fileTree('src/test/resources/audio-probe') { include '*.kt' }
+    def output = layout.buildDirectory.dir('audio-example-classes')
+    inputs.file(source)
+    inputs.files(probes)
+    inputs.files(classpath)
+    outputs.dir(output)
+    doFirst {
+        args = ['-no-stdlib', '-no-reflect', '-jvm-target', '25', '-classpath', classpath.asPath,
+                '-d', output.get().asFile.absolutePath, source.absolutePath] + probes.files.collect { it.absolutePath }
+    }
+}
+tasks.named('check') { dependsOn tasks.named('verifyAudioExamples') }
+
+tasks.register('verifyAudioNative', Test) {
+    group = 'verification'
+    description = 'Opt-in muted playback probe using an actual OpenAL output device.'
+    dependsOn tasks.named('testClasses')
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    useJUnitPlatform()
+    filter { includeTestsMatching 'top.katton.client.audio.AudioNativeTest' }
+    systemProperty 'katton.audio.native', 'true'
+}
 
 def kattonAgentManifest = [
     'Premain-Class': 'top.katton.engine.KattonAgent',

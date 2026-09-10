@@ -53,6 +53,9 @@ object ScriptDependencyManager {
         ambiguityCache.clear()
     }
 
+    /** Read-only metadata for the local development connection. */
+    fun installedDependency(id: String): ResolvedScriptDependency? = resolver.resolve(id)
+
     fun resolve(
         packs: Collection<ScriptPack>,
         environment: ScriptEnvironment,

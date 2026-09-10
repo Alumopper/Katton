@@ -134,6 +134,29 @@ object ServerNetworkingNeoForge {
                 }.onFailure { LOGGER.warn("Failed to handle client scene packet", it) }
             }
         }
+        val audioRegistrar = event.registrar("1").optional()
+        top.katton.api.audio.AudioServerTransport.send = { player, packet ->
+            // An optional channel is absent for clients without Katton; report that instead of failing.
+            if (net.neoforged.neoforge.network.registration.NetworkRegistry.hasChannel(player.connection, AudioPacket.TYPE.id)) {
+                net.neoforged.neoforge.network.PacketDistributor.sendToPlayer(player, packet)
+                true
+            } else false
+        }
+        // NeoForge keeps one registration per payload id and protocol, so both directions share one call.
+        audioRegistrar.playBidirectional(AudioPacket.TYPE, AudioPacket.STREAM_CODEC, { packet, context ->
+            context.enqueueWork {
+                (context.player() as? net.minecraft.server.level.ServerPlayer)?.let {
+                    top.katton.api.audio.AudioServerTransport.receive(it, packet)
+                }
+            }
+        }, { packet, context ->
+            context.enqueueWork {
+                // Keep the common registration path free of physical-client class references.
+                Class.forName("top.katton.client.audio.ClientAudioNetwork")
+                    .getMethod("receive", AudioPacket::class.java, java.util.function.Consumer::class.java)
+                    .invoke(null, packet, java.util.function.Consumer<AudioPacket> { response -> context.reply(response) })
+            }
+        })
     }
 
     private fun handleClientItemRenderMarkerPacket(packet: ClientItemRenderMarkerPacket) {

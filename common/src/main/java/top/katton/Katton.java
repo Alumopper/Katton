@@ -27,7 +27,7 @@ public class Katton {
     /**
      * Current minecraft server instance. Maybe null during client-side execution.
      */
-    public static MinecraftServer server = null;
+    public static volatile MinecraftServer server = null;
     public static LoadState globalState = LoadState.INIT;
     public static Path gameDirectory = null;
 

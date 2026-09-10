@@ -195,7 +195,18 @@ kattonpacks/gameplay/           # alternatively gameplay.zip
   libs/utility-1.0.jar
   assets/gameplay/...
   data/gameplay/...
+  audio/theme.mp3               # ordinary content, e.g. AudioSource.packFile
 ```
+
+As of Alpha 0.5.0 every file in the pack is content except `manifest.json` and
+the local `.kattonpack.state.json` (excluded by name at any depth and casing).
+Additional files such as audio, documentation, or configuration are hashed,
+signed, synchronized to clients, and counted against the per-pack and per-bundle
+limits. Path validation, the 16 MiB per-file limit, and the 64 MiB per-pack
+budget are unchanged. Do not place editor, VCS, or build output inside a pack
+directory: those files would be distributed as well. Because the accepted file
+set changed in 0.5.0, packs that contain such files must be re-signed and are
+re-synchronized to clients once.
 
 Only direct `libs/*.jar` files are libraries. Nested libraries are ignored.
 Libraries participate in compilation, content hashes, signatures and sync.
