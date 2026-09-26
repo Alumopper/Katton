@@ -207,11 +207,15 @@ kattonApiDocs {
     module('fabric') {
         displayName = 'Fabric'
         sourceRoots.from(project(':fabric').file('src/main/kotlin/top/katton/api'))
+        sourceRoots.from(project(':fabric').file('src/main/kotlin/top/katton/network/ScriptPlayNetworking.kt'))
+        sourceRoots.from(project(':fabric').file('src/main/kotlin/top/katton/network/ClientScriptPlayNetworking.kt'))
     }
 
     module('neoforge') {
         displayName = 'NeoForge'
         sourceRoots.from(project(':neoforge').file('src/main/kotlin/top/katton/api'))
+        sourceRoots.from(project(':neoforge').file('src/main/kotlin/top/katton/network/ScriptPlayNetworking.kt'))
+        sourceRoots.from(project(':neoforge').file('src/main/kotlin/top/katton/network/ClientScriptPlayNetworking.kt'))
     }
 
     module('paper') {

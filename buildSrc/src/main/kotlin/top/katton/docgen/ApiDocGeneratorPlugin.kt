@@ -12,6 +12,10 @@ import org.gradle.api.model.ObjectFactory
 import org.gradle.api.plugins.JavaBasePlugin
 import org.gradle.api.provider.ListProperty
 import org.gradle.api.provider.Property
+import org.gradle.api.tasks.Input
+import org.gradle.api.tasks.InputFiles
+import org.gradle.api.tasks.PathSensitive
+import org.gradle.api.tasks.PathSensitivity
 import java.io.File
 import javax.inject.Inject
 
@@ -30,6 +34,15 @@ class ApiDocGeneratorPlugin : Plugin<Project> {
             task.outputDir.set(extension.outputDir)
             task.locales.set(extension.locales)
             task.defaultLocale.set(extension.defaultLocale)
+            task.sourceFiles.from(project.provider {
+                extension.modules.flatMap { module -> module.sourceRoots.files }
+            })
+            task.moduleDescriptions.set(project.provider {
+                extension.modules.map { module ->
+                    "${module.name}:${module.displayName.orNull ?: module.name}:" +
+                        module.sourceRoots.files.map(File::getAbsolutePath).sorted().joinToString("|")
+                }
+            })
             task.moduleSpecs.set(project.provider {
                 extension.modules.map { module ->
                     ApiModuleSnapshot(
@@ -85,6 +98,13 @@ abstract class GenerateApiDocsTask : org.gradle.api.DefaultTask() {
 
     @get:org.gradle.api.tasks.Input
     abstract val defaultLocale: Property<String>
+
+    @get:InputFiles
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    abstract val sourceFiles: ConfigurableFileCollection
+
+    @get:Input
+    abstract val moduleDescriptions: ListProperty<String>
 
     @get:org.gradle.api.tasks.Internal
     abstract val moduleSpecs: ListProperty<ApiModuleSnapshot>

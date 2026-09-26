@@ -138,7 +138,8 @@ internal class ApiDocGenerator(
         }
 
         val relativeSourcePath = projectRelativePath(file)
-        val relativeFromSourceRoot = sourceRoot.toPath().relativize(file.toPath()).invariantSeparatorsPathString
+        val relativeFromSourceRoot = if (sourceRoot.isFile) file.name
+            else sourceRoot.toPath().relativize(file.toPath()).invariantSeparatorsPathString
         val outputPath = buildString {
             append("api/")
             append(module.name)
