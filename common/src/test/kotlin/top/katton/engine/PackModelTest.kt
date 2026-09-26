@@ -214,6 +214,36 @@ class PackModelTest {
         }
     }
 
+    @Test fun `host archive index matches Java 25 lookup and refreshes after replacement`() {
+        val archive = root.resolve("host.jar")
+        val manifest = java.util.jar.Manifest().apply {
+            mainAttributes.putValue("Manifest-Version", "1.0")
+            mainAttributes.putValue("Multi-Release", "true")
+        }
+        fun write(vararg names: String) {
+            JarOutputStream(Files.newOutputStream(archive), manifest).use { output ->
+                names.forEach { name ->
+                    output.putNextEntry(JarEntry(name))
+                    output.write(name.toByteArray())
+                    output.closeEntry()
+                }
+            }
+        }
+        write("base.txt", "META-INF/versions/25/only.txt", "META-INF/versions/26/future.txt")
+        val indexed = PackHostClasspathIndex.entries(archive)
+        java.util.jar.JarFile(archive.toFile(), true, java.util.jar.JarFile.OPEN_READ, Runtime.Version.parse("25")).use { jar ->
+            listOf("base.txt", "only.txt", "future.txt").forEach { name ->
+                assertEquals(jar.getJarEntry(name) != null, name in indexed, name)
+            }
+        }
+        assertTrue("only.txt" in indexed)
+        assertFalse("future.txt" in indexed)
+        write("replacement-with-different-size.txt")
+        val replaced = PackHostClasspathIndex.entries(archive)
+        assertFalse("only.txt" in replaced)
+        assertTrue("replacement-with-different-size.txt" in replaced)
+    }
+
     @Test fun `ZIP rejects traversal portable duplicates and actual expansion overflow`() {
         fun archive(name: String, entries: Map<String, ByteArray>): Path {
             val path = root.resolve(name)

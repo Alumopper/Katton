@@ -190,20 +190,32 @@ object ScriptReloadManager {
         val activatedPacks = PackReloadBatch.run(previousPacks, effectivePacks,
             activate = { proposed ->
                 val plans = ScriptEngine.selectPreparations(proposed, prepared.preparations, previousPlans)
-                var ok = ScriptTiming.measure("client.activate_registry", cause.name) {
-                    ScriptEngine.executePreparedPacks(proposed, plans, registryInvocation)
+                var joined = false
+                val ok = ScriptTiming.measure("client.activate_wait", cause.name) {
+                    var activated = false
+                    ScriptEngine.onRuntimeThread(ScriptEnvironment.CLIENT, PackRuntime.carryTransaction {
+                        activated = ScriptTiming.measure("client.activate_registry", cause.name) {
+                            ScriptEngine.executePreparedPacks(proposed, plans, registryInvocation)
+                        }
+                        if (activated && minecraft.player != null && minecraft.level != null) {
+                            joined = true
+                            activated = ScriptTiming.measure("client.activate_joined", cause.name) {
+                                ScriptEngine.executePreparedPacks(proposed, plans,
+                                    ScriptInvocation.client(ClientPhase.JOINED, reason, cause, minecraft))
+                            }
+                        }
+                    })
+                    activated
                 }
-                if (ok && minecraft.player != null && minecraft.level != null) {
-                    ok = ScriptTiming.measure("client.activate_joined", cause.name) {
-                        ScriptEngine.executePreparedPacks(proposed, plans,
-                            ScriptInvocation.client(ClientPhase.JOINED, reason, cause, minecraft))
-                    }
-                    if (ok) clientJoinedDispatchPending = false
-                } else if (ok) clientJoinedDispatchPending = true
+                if (ok) {
+                    clientJoinedDispatchPending = !joined
+                }
                 if (!ok) null else {
                     val active = PackRuntime.effectivePacks(ScriptEnvironment.CLIENT,
                         setOf(ScriptPackScope.WORLD, ScriptPackScope.SERVER_CACHE))
-                    if (ScriptPackResourceManager.activateAndReload(globals + active)) active else null
+                    if (ScriptTiming.measure("client.resources", cause.name) {
+                            ScriptPackResourceManager.activateAndReload(globals + active)
+                        }) active else null
                 }
             },
             restoreResources = { old ->
@@ -662,8 +674,12 @@ object ScriptReloadManager {
             activate = { proposed ->
                 if (!ScriptEngine.executePreparedPacks(proposed, prepared.select(proposed), invocation)) null else {
                     val active = PackRuntime.effectivePacks(ScriptEnvironment.SERVER, setOf(ScriptPackScope.WORLD))
-                    if (!ScriptPackDataManager.activateAndReload(server, globals + active)) null
-                    else if (runCatching { ServerDatapackManager.apply(server) }
+                    if (!ScriptTiming.measure("server.resources", cause.name) {
+                            ScriptPackDataManager.activateAndReload(server, globals + active)
+                        }) null
+                    else if (runCatching { ScriptTiming.measure("server.datapacks", cause.name) {
+                            ServerDatapackManager.apply(server)
+                        } }
                             .onFailure { logger.error("Failed to apply scripted datapack resources", it) }.isSuccess) active
                     else null
                 }

@@ -13,6 +13,8 @@ import java.io.ByteArrayOutputStream
 import java.io.PrintStream
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.attribute.BasicFileAttributes
+import java.nio.file.attribute.FileTime
 import java.security.MessageDigest
 import java.util.jar.JarEntry
 import java.util.jar.JarFile
@@ -224,6 +226,57 @@ internal class PackClassLoader(
     private fun ownResource(name: String): java.net.URL? = if (name in artifact.files) java.net.URI.create("jar:${artifact.jar.toUri()}!${java.net.URI(null, null, "/$name", null).rawPath}").toURL() else null
 }
 
+/** Shared archive entry snapshots avoid reopening every host JAR for each class lookup. */
+internal object PackHostClasspathIndex {
+    private data class Archive(
+        val size: Long,
+        val modified: FileTime,
+        val fileKey: Any?,
+        val entries: Set<String>
+    )
+
+    private val archives = ConcurrentHashMap<Path, Archive>()
+    private val runtimeVersion = Runtime.Version.parse("25")
+    private const val VERSIONED_PREFIX = "META-INF/versions/"
+
+    /** Build the archive index during immutable pack preparation, before client activation. */
+    fun prime(paths: Collection<Path>) {
+        ScriptTiming.measure("host_classpath.index", "archives=${paths.distinct().count { !Files.isDirectory(it) }}") {
+            paths.distinct().filterNot(Files::isDirectory).forEach(::entries)
+        }
+    }
+
+    fun entries(path: Path): Set<String> {
+        val attributes = runCatching { Files.readAttributes(path, BasicFileAttributes::class.java) }.getOrNull()
+            ?: return emptySet()
+        if (!attributes.isRegularFile) return emptySet()
+        return archives.compute(path) { _, previous ->
+            if (previous != null && previous.size == attributes.size() &&
+                previous.modified == attributes.lastModifiedTime() && previous.fileKey == attributes.fileKey()) previous
+            else Archive(attributes.size(), attributes.lastModifiedTime(), attributes.fileKey(), readEntries(path))
+        }!!.entries
+    }
+
+    private fun readEntries(path: Path): Set<String> = runCatching {
+        JarFile(path.toFile(), true, JarFile.OPEN_READ, runtimeVersion).use { jar ->
+            val names = hashSetOf<String>()
+            val multiRelease = jar.isMultiRelease
+            jar.entries().asSequence().forEach { entry ->
+                val name = entry.name
+                names += name
+                if (multiRelease && name.startsWith(VERSIONED_PREFIX)) {
+                    val rest = name.removePrefix(VERSIONED_PREFIX)
+                    val version = rest.substringBefore('/').toIntOrNull()
+                    if (version != null && version in 9..runtimeVersion.feature() && '/' in rest) {
+                        names += rest.substringAfter('/')
+                    }
+                }
+            }
+            names
+        }
+    }.getOrDefault(emptySet())
+}
+
 /** Keeps undeclared platform plugins/mods out of runtime lookup while preserving host class identity. */
 internal class PackHostClassLoader(
     parent: ClassLoader,
@@ -231,14 +284,13 @@ internal class PackHostClassLoader(
     private val dependencies: List<ResolvedScriptDependency>
 ) : ClassLoader(parent) {
     private val roots = (basePaths + dependencies.flatMap { it.classpath }).distinct()
+    private val archiveEntries = roots.filterNot(Files::isDirectory).associateWith(PackHostClasspathIndex::entries)
     private val resources = ConcurrentHashMap<Pair<Path, String>, Boolean>()
     private fun contains(root: Path, name: String): Boolean = resources.computeIfAbsent(root to name) {
         if (Files.isDirectory(root)) {
             val path = root.resolve(name).normalize()
             path.startsWith(root) && Files.isRegularFile(path)
-        } else runCatching {
-            JarFile(root.toFile(), true, JarFile.OPEN_READ, Runtime.Version.parse("25")).use { it.getJarEntry(name) != null }
-        }.getOrDefault(false)
+        } else name in archiveEntries.getValue(root)
     }
     override fun loadClass(name: String, resolve: Boolean): Class<*> {
         try { return ClassLoader.getPlatformClassLoader().loadClass(name) } catch (_: ClassNotFoundException) { }

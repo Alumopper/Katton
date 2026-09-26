@@ -90,6 +90,11 @@ internal object PackRuntime {
             } }
             prepared[pack.syncId] = PackPreparation(pack, artifact, libraries, host, visible.map { it.pack.syncId })
         }
+        if (prepared.isNotEmpty()) {
+            PackHostClasspathIndex.prime(hostClasspath + prepared.values.flatMap { plan ->
+                plan.host.resolved.flatMap { it.classpath }
+            })
+        }
         return prepared.values.toList()
     }
 
@@ -122,7 +127,9 @@ internal object PackRuntime {
                     val dependencies = plan.visible.map { id -> candidates[id] ?: synchronized(active) { active[environment to id] }
                         ?: error("Missing active dependency instance: $id") }
                     candidates[plan.pack.syncId] = PackInstance(plan, environment, generations.incrementAndGet(),
-                        PackClassLoader(plan.artifact, plan.libraries, hostLoader(plan.host), dependencies.map { it.loader }), dependencies)
+                        ScriptTiming.measure("runtime.loader.create", plan.pack.syncId) {
+                            PackClassLoader(plan.artifact, plan.libraries, hostLoader(plan.host), dependencies.map { it.loader })
+                        }, dependencies)
                 }
                 val candidatePrefixes = candidates.values.map { it.ownerPrefix }
                 ManagedResources.pause(candidatePrefixes, 0)

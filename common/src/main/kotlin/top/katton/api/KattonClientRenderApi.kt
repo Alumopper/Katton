@@ -322,7 +322,7 @@ fun dispatchHudRender(graphics: GuiGraphicsExtractor, tickDelta: Float) {
                 entry.render(ctx)
             }
         }.onFailure {
-            LOGGER.warn("HUD renderer callback failed", it)
+            if (it !is top.katton.util.ManagedCallbackPausedException) LOGGER.warn("HUD renderer callback failed", it)
         }
     }
 }
@@ -351,7 +351,7 @@ fun dispatchWorldRender(camera: CameraRenderState?, tickDelta: Float) {
                 entry.render(ctx)
             }
         }.onFailure {
-            LOGGER.warn("World renderer callback failed", it)
+            if (it !is top.katton.util.ManagedCallbackPausedException) LOGGER.warn("World renderer callback failed", it)
         }
     }
 }

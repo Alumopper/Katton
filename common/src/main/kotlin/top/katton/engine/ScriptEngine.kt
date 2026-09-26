@@ -203,10 +203,12 @@ object ScriptEngine {
             registerConfigs(packs.toList())
             var success = false
             onRuntimeThread(invocation.environment, PackRuntime.carryTransaction {
-            success = PackRuntime.execute(prepared, invocation, packs.mapTo(hashSetOf()) { it.syncId }, { selection ->
-                PackHostClassLoader(selectScriptHostClassLoader(),
-                    resolveHostClasspath().map { it.toPath() }, selection.resolved)
-            }, ::executePackInstance)
+                success = PackRuntime.execute(prepared, invocation, packs.mapTo(hashSetOf()) { it.syncId }, { selection ->
+                    ScriptTiming.measure("host_loader.create", invocation.environment.name) {
+                        PackHostClassLoader(selectScriptHostClassLoader(),
+                            resolveHostClasspath().map { it.toPath() }, selection.resolved)
+                    }
+                }, ::executePackInstance)
             })
             success
         }.getOrElse {
@@ -230,11 +232,13 @@ object ScriptEngine {
 
     private fun executePackInstance(instance: PackInstance, invocation: ScriptInvocation): Boolean {
         val pack = instance.preparation.pack
-        val entries = instance.preparation.artifact.files.filterKeys { it.endsWith(".class") }.flatMap { (path, bytes) ->
-            ScriptEnvironment.entries.flatMap { environment ->
-                scanEntrypoints(bytes, path.removeSuffix(".class").replace('/', '.'), Type.getDescriptor(environment.annotationClass),
-                    if (environment == ScriptEnvironment.CLIENT) ClientPhase.READY.name else ServerPhase.BOOTSTRAP.name)
-                    .map { environment to it }
+        val entries = ScriptTiming.measure("entrypoint.scan", "${pack.syncId}:${invocation.phaseName}") {
+            instance.preparation.artifact.files.filterKeys { it.endsWith(".class") }.flatMap { (path, bytes) ->
+                ScriptEnvironment.entries.flatMap { environment ->
+                    scanEntrypoints(bytes, path.removeSuffix(".class").replace('/', '.'), Type.getDescriptor(environment.annotationClass),
+                        if (environment == ScriptEnvironment.CLIENT) ClientPhase.READY.name else ServerPhase.BOOTSTRAP.name)
+                        .map { environment to it }
+                }
             }
         }
         if (entries.isEmpty() && warnedNoEntrypoints.add("${pack.syncId}:${pack.hash}")) {
@@ -257,7 +261,9 @@ object ScriptEngine {
                         val oldLoader = Thread.currentThread().contextClassLoader
                         try {
                             Thread.currentThread().contextClassLoader = instance.loader
-                            invokeEntrypoint(clazz, entry, methodType, environment, context)
+                            ScriptTiming.measure("entrypoint.invoke", "${pack.syncId}:${invocation.phaseName}:${entry.methodName}") {
+                                invokeEntrypoint(clazz, entry, methodType, environment, context)
+                            }
                         } catch (failure: Throwable) {
                             val frame = sequenceOf(failure.cause, failure).filterNotNull().flatMap { it.stackTrace.asSequence() }
                                 .firstOrNull { it.className == entry.className && it.lineNumber > 0 }
@@ -402,7 +408,9 @@ object ScriptEngine {
                     ?.let(::addClassSource)
             }
 
-            externalClasspathJars.forEach(::addFile)
+            // Fabric discovers nested API modules in a different order across launches.
+            // Keep compiler classpath precedence and its artifact fingerprint stable.
+            externalClasspathJars.sortedBy { it.absolutePath }.forEach(::addFile)
 
             files.toList().also {
                 hostClasspathCache = it
