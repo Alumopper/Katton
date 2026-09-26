@@ -24,6 +24,9 @@ object ClientNetworkingFabric {
         ClientPlayNetworking.registerGlobalReceiver(ClientScenePacket.TYPE) { packet, context ->
             context.client().execute { top.katton.client.scene.ClientSceneManager.handlePacket(packet) }
         }
+        ClientPlayNetworking.registerGlobalReceiver(ScriptPayloadPacket.TYPE) { packet, context ->
+            context.client().execute { ClientScriptPlayNetworking.receive(packet) }
+        }
         ClientConfigurationNetworking.registerGlobalReceiver(ScriptPackHashListPacket.TYPE) { packet, context ->
             if (context.client().isLocalServer) return@registerGlobalReceiver
             val sync = ServerPackCacheManager.beginMainThreadSync()

@@ -70,6 +70,13 @@ object Networking {
             SERVERBOUND_PLAY.register(ScriptPackSyncAckPacket.TYPE, ScriptPackSyncAckPacket.STREAM_CODEC)
         }
 
+        if (CLIENTBOUND_PLAY.get(ScriptPayloadPacket.TYPE.id) == null) {
+            CLIENTBOUND_PLAY.register(ScriptPayloadPacket.TYPE, ScriptPayloadPacket.STREAM_CODEC)
+        }
+        if (SERVERBOUND_PLAY.get(ScriptPayloadPacket.TYPE.id) == null) {
+            SERVERBOUND_PLAY.register(ScriptPayloadPacket.TYPE, ScriptPayloadPacket.STREAM_CODEC)
+        }
+
         if(CLIENTBOUND_PLAY.get(ClientScenePacket.TYPE.id) == null){
             CLIENTBOUND_PLAY.register(ClientScenePacket.TYPE, ClientScenePacket.STREAM_CODEC)
         }

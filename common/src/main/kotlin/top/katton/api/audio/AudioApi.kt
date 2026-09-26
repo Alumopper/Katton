@@ -13,7 +13,8 @@ import java.util.UUID
 import java.util.concurrent.CompletableFuture
 import kotlin.time.Duration
 
-/** %en Audio bytes are resolved on the client. %zh 音频内容在客户端解析。 */
+/** %en Audio bytes are resolved on the client.
+ * %zh 音频内容在客户端解析。 */
 @ConsistentCopyVisibility
 data class AudioSource internal constructor(val kind: Kind, val path: String, val packId: String = "", val revision: String = "") {
     enum class Kind { SOUND, RESOURCE, PACK_FILE }
@@ -87,6 +88,7 @@ object AudioClientProvider {
     @Volatile var play: ((AudioSource, AudioOptions) -> AudioHandle)? = null
 }
 
-/** %en Play through the installed Katton client. %zh 使用 Katton 客户端播放器播放音频。 */
+/** %en Play through the installed Katton client.
+ * %zh 使用 Katton 客户端播放器播放音频。 */
 fun playClientAudio(source: AudioSource, options: AudioOptions = AudioOptions()): AudioHandle =
     checkNotNull(AudioClientProvider.play) { "Full audio playback requires a Fabric/NeoForge Katton client" }(source, options)

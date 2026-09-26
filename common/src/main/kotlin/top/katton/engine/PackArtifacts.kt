@@ -85,13 +85,28 @@ internal data class PrivateLibraries(val paths: List<Path>, val classes: Map<Str
 
 internal object PackCompiler {
     private val cache = ConcurrentHashMap<String, PackArtifact>()
+
+    /** Manifest presentation changes do not change the compiler's inputs. */
+    internal fun compilationHash(pack: ScriptPack): String {
+        val java = pack.contentFiles.filter { it.relativePath.endsWith(".java", true) && ScriptPackSnapshots.isSource(it.relativePath) }
+            .map { ScriptPackScriptFile(it.relativePath, it.absolutePath, it.bytes) }
+        val libraries = pack.contentFiles.filter { ScriptPackSnapshots.isLibrary(it.relativePath) }
+        return ScriptPackManager.computeScriptHash("", pack.scripts, java, libraries = libraries)
+    }
+
     @Synchronized
-    fun compile(pack: ScriptPack, root: Path, classpath: List<Path>, dependencyFingerprints: List<String>): PackArtifact {
+    fun compile(pack: ScriptPack, root: Path, classpath: List<Path>, dependencyFingerprints: List<String>): PackArtifact =
+        ScriptTiming.measure("artifact.prepare", pack.syncId) {
         Files.createDirectories(root)
-        val fingerprint = sha256((listOf("katton-pack-compiler-v3", pack.syncId, pack.codeHash) + dependencyFingerprints).joinToString("\u0000").toByteArray())
-        cache[fingerprint]?.takeIf { Files.isRegularFile(it.jar) }?.let { return it }
+        val fingerprint = sha256((listOf("katton-pack-compiler-v4", pack.syncId, compilationHash(pack)) + dependencyFingerprints).joinToString("\u0000").toByteArray())
+        cache[fingerprint]?.takeIf { Files.isRegularFile(it.jar) }?.let {
+            LOGGER.info("Katton script artifact cache=memory pack={}", pack.syncId)
+            return@measure it
+        }
         val jar = root.resolve("pack-$fingerprint.jar")
         if (!Files.isRegularFile(jar)) {
+            LOGGER.info("Katton script artifact cache=miss pack={} sources={} classpath={}", pack.syncId,
+                pack.contentFiles.count { ScriptPackSnapshots.isSource(it.relativePath) }, classpath.size)
             val staging = Files.createTempDirectory(root, ".compile-")
             try {
                 val sources = pack.contentFiles.filter { ScriptPackSnapshots.isSource(it.relativePath) }.map { file ->
@@ -123,7 +138,9 @@ internal object PackCompiler {
                     val compiler = K2JVMCompiler()
                     val arguments = compiler.createArguments()
                     compiler.parseArguments(args.toTypedArray(), arguments)
-                    val result = compiler.exec(collector, Services.EMPTY, arguments)
+                    val result = ScriptTiming.measure("kotlin.compile", pack.syncId) {
+                        compiler.exec(collector, Services.EMPTY, arguments)
+                    }
                     check(result == ExitCode.OK) { "Pack ${pack.syncId}: Kotlin compilation failed:\n$diagnostics" }
                 }
                 val javaSources = sources.filter { it.toString().endsWith(".java", true) }
@@ -153,9 +170,10 @@ internal object PackCompiler {
                 Files.move(temporary, jar, java.nio.file.StandardCopyOption.REPLACE_EXISTING)
             } finally { Files.walk(staging).use { it.sorted(Comparator.reverseOrder()).forEach(Files::deleteIfExists) } }
         }
+        else LOGGER.info("Katton script artifact cache=disk pack={}", pack.syncId)
         val files = JarFile(jar.toFile()).use { archive -> archive.entries().asSequence().filterNot { it.isDirectory }
             .associate { it.name to archive.getInputStream(it).use { input -> input.readAllBytes() } } }
-        return PackArtifact(fingerprint, jar, files).also {
+        PackArtifact(fingerprint, jar, files).also {
             if (cache.size >= 128) cache.clear()
             cache[fingerprint] = it
         }

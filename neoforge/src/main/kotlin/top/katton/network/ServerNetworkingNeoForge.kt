@@ -120,6 +120,21 @@ object ServerNetworkingNeoForge {
             }
         }
 
+        event.registrar("1").optional().playBidirectional(ScriptPayloadPacket.TYPE, ScriptPayloadPacket.STREAM_CODEC, { packet, context ->
+            context.enqueueWork {
+                val player = context.player() as? net.minecraft.server.level.ServerPlayer
+                    ?: return@enqueueWork
+                ScriptPlayNetworking.receive(player, packet)
+            }
+        }, { packet, context ->
+            context.enqueueWork {
+                runCatching {
+                    Class.forName("top.katton.network.ClientScriptPlayNetworking")
+                        .getMethod("receive", ScriptPayloadPacket::class.java).invoke(null, packet)
+                }.onFailure { LOGGER.warn("Failed to handle client script packet", it) }
+            }
+        })
+
         registrar.playToClient(ClientPostEffectPacket.TYPE, ClientPostEffectPacket.STREAM_CODEC) { packet, context ->
             context.enqueueWork {
                 handleClientPostEffectPacket(packet)

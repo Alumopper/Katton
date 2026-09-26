@@ -9,6 +9,7 @@
     "LivingEntityMixin",
     "PlayerMixin",
     "ServerConfigurationPacketListenerImplMixin",
+    "ServerLoginPacketListenerImplMixin",
     "ServerExplosionMixin",
     "ServerLevelMixin"
   ],

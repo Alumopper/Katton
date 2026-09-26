@@ -1,6 +1,7 @@
 package top.katton.dev
 
 import com.google.gson.JsonObject
+import com.mojang.logging.LogUtils
 import net.minecraft.SharedConstants
 import net.minecraft.world.level.storage.LevelResource
 import top.katton.Katton
@@ -13,12 +14,40 @@ import java.util.concurrent.CompletableFuture
 
 /** Optional development service. Enabling it never enables JDWP or changes a remote server. */
 object KattonDevBridge : DevRuntime {
+    /** JVM property a development launcher sets to turn the bridge on without the in-game switch. */
+    const val AUTO_ENABLE_PROPERTY = "katton.dev.autoEnable"
+
+    /** Environment fallback for launchers that cannot add JVM properties. */
+    const val AUTO_ENABLE_ENVIRONMENT = "KATTON_DEV_AUTO_ENABLE"
+
+    private val LOGGER = LogUtils.getLogger()
     @Volatile private var bridge: DevBridgeServer? = null
     private val target = DevTargetSession()
     private var issueListenerInstalled = false
     private var logAppender: DevLogAppender? = null
     @JvmStatic fun worldChanged() { target.invalidate() }
     @JvmStatic fun isEnabled(): Boolean = bridge != null
+
+    /**
+     * Enables the bridge when a development launcher explicitly asked for it through
+     * [AUTO_ENABLE_PROPERTY] or [AUTO_ENABLE_ENVIRONMENT]. Normal players and release
+     * builds set neither, so the bridge stays off by default.
+     */
+    @JvmStatic
+    fun enableIfRequested(): Boolean {
+        if (isEnabled()) return true
+        if (!autoEnableRequested()) return false
+        return runCatching { enable() }
+            .onSuccess { LOGGER.info(it) }
+            .onFailure { LOGGER.warn("Could not auto-enable the Katton development bridge", it) }
+            .isSuccess
+    }
+
+    private fun autoEnableRequested(): Boolean {
+        fun requested(value: String?): Boolean = value?.equals("true", ignoreCase = true) == true
+        return requested(System.getProperty(AUTO_ENABLE_PROPERTY)) || requested(System.getenv(AUTO_ENABLE_ENVIRONMENT))
+    }
+
     @JvmStatic @Synchronized fun enable(): String {
         if (bridge == null) {
             bridge = DevBridgeServer(this, Path.of(System.getProperty("user.home"), ".katton", "dev", "instances"))

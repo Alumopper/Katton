@@ -63,9 +63,10 @@ object ScriptEngine {
         val replay: Boolean
     )
 
-    data class PreparedPackSelection(
+    internal data class PreparedPackSelection(
         val packs: List<ScriptPack>,
-        val rejectedCandidateSyncIds: Set<String>
+        val rejectedCandidateSyncIds: Set<String>,
+        val preparations: List<PackPreparation>
     )
 
     @JvmStatic
@@ -84,10 +85,14 @@ object ScriptEngine {
 
     /** Compiles and resolves a candidate snapshot without invoking any entrypoints. */
     fun prepareAll(packs: Collection<ScriptPack>, invocation: ScriptInvocation): Boolean {
-        return runCatching { preparePacks(packs, invocation); true }.getOrElse {
+        return tryPreparePacks(packs, invocation) != null
+    }
+
+    private fun tryPreparePacks(packs: Collection<ScriptPack>, invocation: ScriptInvocation): List<PackPreparation>? {
+        return runCatching { preparePacks(packs, invocation) }.getOrElse {
             LOGGER.error("Script pack preparation failed", it)
             ScriptIssueReporter.report("Katton script compilation failed", it.message ?: it.toString())
-            false
+            null
         }
     }
 
@@ -130,13 +135,13 @@ object ScriptEngine {
      * component falls back to its last-known-good pack snapshots without
      * preventing unrelated components from updating.
      */
-    fun prepareWithFallback(
+    internal fun prepareWithFallback(
         candidates: Collection<ScriptPack>,
         previous: Collection<ScriptPack>,
         invocation: ScriptInvocation
     ): PreparedPackSelection? {
         val enabled = candidates.filter { it.enabled }
-        if (prepareAll(enabled, invocation)) return PreparedPackSelection(enabled, emptySet())
+        tryPreparePacks(enabled, invocation)?.let { return PreparedPackSelection(enabled, emptySet(), it) }
         if (enabled.any { it.scope == ScriptPackScope.SERVER_CACHE }) return null
         // Validate each candidate with its dependency closure. Reject its consumers using both graphs.
         val graph = ScriptPackDependencyGraph.resolve(withGlobalDependencies(enabled))
@@ -147,12 +152,35 @@ object ScriptEngine {
                 if (closure.add(target)) graph.edges[target].orEmpty().forEach { include(it.target) }
             }
             include(pack)
-            if (!prepareAll(closure, invocation)) rejected += pack.syncId
+            if (tryPreparePacks(closure, invocation) == null) rejected += pack.syncId
         }
         val affected = ScriptPackDependencyGraph.affected(previous, enabled, rejected)
         val effective = enabled.filterNot { it.syncId in affected } + previous.filter { it.enabled && it.syncId in affected }
-        if (!prepareAll(effective, invocation)) return null
-        return PreparedPackSelection(effective, affected)
+        val preparations = tryPreparePacks(effective, invocation) ?: return null
+        return PreparedPackSelection(effective, affected, preparations)
+    }
+
+    internal fun selectPreparations(
+        packs: List<ScriptPack>, candidate: List<PackPreparation>, previous: List<PackPreparation>
+    ): List<PackPreparation> {
+        val next = candidate.associateBy { it.pack.syncId }
+        val old = previous.associateBy { it.pack.syncId }
+        val chosen = next.toMutableMap()
+        packs.forEach { pack ->
+            chosen[pack.syncId] = next[pack.syncId]?.takeIf { it.pack.hash == pack.hash }
+                ?: old[pack.syncId]?.takeIf { it.pack.hash == pack.hash }
+                ?: error("No immutable preparation for ${pack.syncId}")
+        }
+        val result = mutableListOf<PackPreparation>()
+        val seen = hashSetOf<String>()
+        fun visit(id: String) {
+            if (!seen.add(id)) return
+            val plan = chosen[id] ?: old[id] ?: error("Missing prepared dependency: $id")
+            plan.visible.forEach(::visit)
+            result += plan
+        }
+        packs.forEach { visit(it.syncId) }
+        return result
     }
 
     fun compileAndExecuteAll(

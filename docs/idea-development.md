@@ -2,7 +2,7 @@
 
 配套独立仓库为同级 `Katton-IDEA`。其中包含 IDEA 插件、`top.katton.dev` Gradle 插件、模板、三包示例和协议 v1 文档。游戏侧位于 `common/src/main/kotlin/top/katton/dev`。
 
-默认关闭。已有客户端可在脚本包界面右上角打开 **IDE**；服务器管理员可执行 `/katton dev enable` 和 `/katton dev disable`。Fabric、NeoForge、Paper 共用回环 HTTP 接口。客户端连接远端服务器时不会获得其部署权限。
+默认关闭。Katton-IDEA 直接启动的开发实例会带上 `-Dkatton.dev.autoEnable=true`（或环境变量 `KATTON_DEV_AUTO_ENABLE=true`），游戏在世界（服务器）启动时自动打开开发桥并写入发现记录，插件在进入世界后即可自动连接。其他启动方式仍默认关闭：已有客户端可在脚本包界面右上角打开 **IDE**；服务器管理员可执行 `/katton dev enable` 和 `/katton dev disable`。Fabric、NeoForge、Paper 共用回环 HTTP 接口。客户端连接远端服务器时不会获得其部署权限。
 
 IDEA 从当前用户的 `~/.katton/dev/instances` 发现进程，选择当前本地世界，发送完整脚本快照。令牌不写入共享工程。写入和游戏内重载共用 ScriptReloadManager 的串行协调机制；Kotlin/Java 编译器提供结构化诊断，原有日志继续输出。
 

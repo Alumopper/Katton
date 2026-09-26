@@ -67,19 +67,27 @@ internal object PackRuntime {
         require(graph.invalidPacks.isEmpty()) { graph.errors.joinToString("\n") }
         val prepared = linkedMapOf<String, PackPreparation>()
         graph.orderedPacks.forEach { pack ->
-            val host = ScriptDependencyManager.resolve(listOf(pack), invocation.environment, invocation.phaseName)
+            val host = ScriptTiming.measure("dependency.resolve", pack.syncId) {
+                ScriptDependencyManager.resolve(listOf(pack), invocation.environment, invocation.phaseName)
+            }
             require(host.validPacks.size == 1) { host.errors.joinToString("\n") }
-            val libraries = PrivateLibraries.prepare(pack, root.resolve("libraries-v3"))
+            val libraries = ScriptTiming.measure("libraries.prepare", pack.syncId) {
+                PrivateLibraries.prepare(pack, root.resolve("libraries-v3"))
+            }
             val visible = graph.visiblePacks(pack).map { prepared.getValue(it.syncId) }
             val classpath = hostClasspath + host.resolved.flatMap { it.classpath } + libraries.paths + visible.map { it.artifact.jar }
             val fingerprints = host.fingerprints + visible.map { "${it.pack.syncId}:${it.artifact.fingerprint}" } +
                 hostClasspath.map { "host:$it:${java.nio.file.Files.getLastModifiedTime(it)}" }
             val artifact = PackCompiler.compile(pack, root.resolve("artifacts-v3"), classpath, fingerprints)
-            PackApiValidator.validate(pack, artifact, libraries, visible)
+            ScriptTiming.measure("api.validate", pack.syncId) {
+                PackApiValidator.validate(pack, artifact, libraries, visible)
+            }
             val visibleNames = visible.flatMap { it.artifact.classNames }.toSet() + artifact.classNames
             val hidden = prepared.values.flatMap { dependency -> dependency.artifact.classNames.filterNot { it in visibleNames }
                 .map { it to "non-exported package ${dependency.pack.syncId}" } }.toMap()
-            visible.forEach { dependency -> PackApiValidator.validate(pack, dependency.artifact, dependency.libraries, visible, hidden) }
+            visible.forEach { dependency -> ScriptTiming.measure("api.validate_dependency", dependency.pack.syncId) {
+                PackApiValidator.validate(pack, dependency.artifact, dependency.libraries, visible, hidden)
+            } }
             prepared[pack.syncId] = PackPreparation(pack, artifact, libraries, host, visible.map { it.pack.syncId })
         }
         return prepared.values.toList()
@@ -98,7 +106,9 @@ internal object PackRuntime {
                     LOGGER.warn("Global pack {} changed; restart required", plan.pack.syncId)
                 return@filter false
             }
-            current.none { it.preparation.pack.syncId == plan.pack.syncId && it.preparation.artifact.fingerprint == plan.artifact.fingerprint }
+            current.none { it.preparation.pack.syncId == plan.pack.syncId &&
+                it.preparation.artifact.fingerprint == plan.artifact.fingerprint &&
+                it.preparation.pack.codeHash == plan.pack.codeHash }
         }.mapTo(linkedSetOf()) { it.pack.syncId }
         // Only scopes explicitly dispatched by this lifecycle are eligible for removal.
         val scopes = newPacks.filter { it.syncId in requestedIds }.mapTo(hashSetOf()) { it.scope }.ifEmpty { hashSetOf(ScriptPackScope.WORLD, ScriptPackScope.SERVER_CACHE) }
@@ -173,7 +183,8 @@ internal object PackRuntime {
         // A dependency does not force any earlier phase; dispatch only the phase requested by the platform.
         prepared.filter { it.pack.syncId in requestedIds }.forEach { plan ->
             val instance = synchronized(active) { active[environment to plan.pack.syncId] } ?: return@forEach
-            if (instance.preparation.artifact.fingerprint == plan.artifact.fingerprint && instance.preparation.pack.hash != plan.pack.hash) {
+            if (instance.preparation.artifact.fingerprint == plan.artifact.fingerprint &&
+                instance.preparation.pack.codeHash == plan.pack.codeHash && instance.preparation.pack.hash != plan.pack.hash) {
                 val updated = instance.copy(preparation = plan)
                 synchronized(active) { active[environment to plan.pack.syncId] = updated }
                 pending.get()?.add(Pending({}, { synchronized(active) { active[environment to plan.pack.syncId] = instance } }))

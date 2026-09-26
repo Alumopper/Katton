@@ -102,6 +102,9 @@ public class KattonNeoForge {
     private void onServerStarted(ServerStartedEvent event) {
         Katton.server = event.getServer();
         Katton.globalState = LoadState.SERVER_STARTED;
+        // Opt-in only: an IDE launcher sets katton.dev.autoEnable so the bridge appears
+        // once the world exists, without the in-game switch.
+        top.katton.dev.KattonDevBridge.enableIfRequested();
         ScriptReloadManager.reloadScriptsAsync(event.getServer(), InvocationReason.INITIAL_LOAD, ReloadCause.SERVER_START, serverOk -> {
             if (serverOk) {
                 event.getServer().execute(() -> ScriptCommand.syncCommandTree(event.getServer()));

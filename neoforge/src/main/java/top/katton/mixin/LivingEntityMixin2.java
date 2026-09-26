@@ -63,7 +63,7 @@ public abstract class LivingEntityMixin2 {
 
     @Inject(method = "hurtServer", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/entity/LivingEntity;isSleeping()Z"), cancellable = true)
     private void beforeDamage(ServerLevel level, DamageSource source, float amount, CallbackInfoReturnable<Boolean> cir) {
-        if (!ServerLivingEntityEvent.onAllowDamage.invoke(new AllowDamageArg((LivingEntity) (Object) this, source, amount)).notEmptyAndTrue()) {
+        if (!ServerLivingEntityEvent.onAllowDamage.invoke(new AllowDamageArg((LivingEntity) (Object) this, source, amount)).emptyOrTrue()) {
             cir.setReturnValue(false);
         }
     }

@@ -24,6 +24,7 @@
     "ResourceManagerRegistryLoadTaskMixin",
     "ServerConfigurationPacketListenerImplMixin",
     "ServerGamePacketListenerImplMixin",
+    "ServerLoginPacketListenerImplMixin",
     "ServerPlayerMixin"
   ],
   "client": [

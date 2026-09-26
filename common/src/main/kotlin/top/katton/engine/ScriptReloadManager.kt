@@ -60,26 +60,8 @@ object ScriptReloadManager {
         val globalCandidate: List<ScriptPack>?, val plans: List<PackPreparation>,
         val previousPlans: List<PackPreparation>
     ) {
-        fun select(packs: List<ScriptPack>): List<PackPreparation> {
-            val next = plans.associateBy { it.pack.syncId }
-            val old = previousPlans.associateBy { it.pack.syncId }
-            val chosen = next.toMutableMap()
-            packs.forEach { pack ->
-                chosen[pack.syncId] = next[pack.syncId]?.takeIf { it.pack.hash == pack.hash }
-                    ?: old[pack.syncId]?.takeIf { it.pack.hash == pack.hash }
-                    ?: error("No immutable preparation for ${pack.syncId}")
-            }
-            val result = mutableListOf<PackPreparation>()
-            val seen = hashSetOf<String>()
-            fun visit(id: String) {
-                if (!seen.add(id)) return
-                val plan = chosen[id] ?: old[id] ?: error("Missing prepared dependency: $id")
-                plan.visible.forEach(::visit)
-                result += plan
-            }
-            packs.forEach { visit(it.syncId) }
-            return result
-        }
+        fun select(packs: List<ScriptPack>): List<PackPreparation> =
+            ScriptEngine.selectPreparations(packs, plans, previousPlans)
     }
 
     private val serverPreparationExecutor = Executors.newSingleThreadExecutor { runnable ->
@@ -93,6 +75,14 @@ object ScriptReloadManager {
     private val clientReloadRunning = AtomicBoolean(false)
     private val serverReloadRunning = AtomicBoolean(false)
     private val developmentReload = AtomicBoolean(false)
+
+    /**
+     * Number of connection threads currently blocked in [awaitServerReloadCompletion].
+     * The login listener keeps ticking on the server thread while a connection thread
+     * waits here, so the platform pauses its slow-login timeout for as long as this
+     * counter is positive.
+     */
+    private val awaitingServerReload = AtomicInteger(0)
     private const val DEVELOPMENT_WATCHDOG_ATTEMPTS = 120
     private val globalClientInitialized = AtomicBoolean(false)
     private val clientReloadQueueLock = Any()
@@ -154,6 +144,7 @@ object ScriptReloadManager {
 
         // Keep the last-known-good snapshot live until the candidate compiles.
         val previousPacks = activeClientPacks.toList()
+        val previousPlans = PackRuntime.preparations(ScriptEnvironment.CLIENT)
 
         //set world and game directories for script packs
         ScriptPackManager.setGameDirectory(Katton.gameDirectory)
@@ -181,7 +172,9 @@ object ScriptReloadManager {
         //compile and execute all scripts, then activate any resource packs
         tracker.step("katton.reload.common.compile_execute_scripts")
         val registryInvocation = ScriptInvocation.client(ClientPhase.REGISTRY_SETUP, reason, cause)
-        val prepared = ScriptEngine.prepareWithFallback(mergedPacks, previousPacks, registryInvocation)
+        val prepared = ScriptTiming.measure("client.prepare", cause.name) {
+            ScriptEngine.prepareWithFallback(mergedPacks, previousPacks, registryInvocation)
+        }
         if (prepared == null) {
             tracker.finish("katton.reload.client.failed")
             return false
@@ -196,10 +189,15 @@ object ScriptReloadManager {
         }
         val activatedPacks = PackReloadBatch.run(previousPacks, effectivePacks,
             activate = { proposed ->
-                var ok = ScriptEngine.compileAndExecuteAll(proposed, registryInvocation, tracker::update)
+                val plans = ScriptEngine.selectPreparations(proposed, prepared.preparations, previousPlans)
+                var ok = ScriptTiming.measure("client.activate_registry", cause.name) {
+                    ScriptEngine.executePreparedPacks(proposed, plans, registryInvocation)
+                }
                 if (ok && minecraft.player != null && minecraft.level != null) {
-                    ok = ScriptEngine.compileAndExecuteAll(proposed,
-                        ScriptInvocation.client(ClientPhase.JOINED, reason, cause, minecraft), tracker::update)
+                    ok = ScriptTiming.measure("client.activate_joined", cause.name) {
+                        ScriptEngine.executePreparedPacks(proposed, plans,
+                            ScriptInvocation.client(ClientPhase.JOINED, reason, cause, minecraft))
+                    }
                     if (ok) clientJoinedDispatchPending = false
                 } else if (ok) clientJoinedDispatchPending = true
                 if (!ok) null else {
@@ -443,16 +441,24 @@ object ScriptReloadManager {
     @JvmStatic
     fun initializeGlobalClientPacks() {
         if (!Katton.hasClient || !globalClientInitialized.compareAndSet(false, true)) return
-        ScriptPackManager.refreshGlobalPacks()
-        val packs = ScriptPackManager.collectExecutableGlobalPacks()
-        if (packs.isEmpty()) return
-        val ok = ScriptEngine.compileAndExecuteAll(
-            packs,
-            ScriptInvocation.client(ClientPhase.READY, InvocationReason.INITIAL_LOAD, ReloadCause.CLIENT_JOIN)
-        )
-        if (!ok) {
+        try {
+            clientReloadExecutor.execute {
+                val ok = runCatching {
+                    ScriptPackManager.refreshGlobalPacks()
+                    val packs = ScriptPackManager.collectExecutableGlobalPacks()
+                    packs.isEmpty() || ScriptEngine.compileAndExecuteAll(
+                        packs,
+                        ScriptInvocation.client(ClientPhase.READY, InvocationReason.INITIAL_LOAD, ReloadCause.CLIENT_JOIN)
+                    )
+                }.onFailure { logger.error("Failed to initialize global client script packs", it) }.getOrDefault(false)
+                if (!ok) {
+                    globalClientInitialized.set(false)
+                    logger.error("Failed to initialize global client script packs")
+                }
+            }
+        } catch (rejected: RuntimeException) {
             globalClientInitialized.set(false)
-            logger.error("Failed to initialize global client script packs")
+            logger.error("Client reload executor rejected global script initialization", rejected)
         }
     }
 
@@ -470,29 +476,28 @@ object ScriptReloadManager {
         val minecraft = Minecraft.getInstance()
         if (minecraft.player == null || minecraft.level == null) return
         clientJoinedDispatchPending = false
-        val packs = activeClientPacks
-        if (packs.isNotEmpty()) {
-            var ok = true
-            val invocation = ScriptInvocation.client(
-                    ClientPhase.JOINED,
-                    InvocationReason.INITIAL_LOAD,
-                    ReloadCause.CLIENT_JOIN,
-                    minecraft
-                )
-            ok = ScriptEngine.compileAndExecuteAll(packs, invocation)
-            if (!ok) logger.error("Failed to execute client JOINED entrypoints")
+        if (activeClientPacks.isNotEmpty()) {
+            reloadClientScriptsAsync(InvocationReason.INITIAL_LOAD, ReloadCause.CLIENT_JOIN) { ok ->
+                if (!ok) logger.error("Failed to execute client JOINED entrypoints")
+            }
         }
     }
 
     /**
      * Blocks the calling thread until any in-progress server reload completes.
      * Used by registry-sensitive operations (client login, config sync) to ensure
-     * they see finalized registries after a script reload. The wait duration is
-     * bounded by the compilation time (typically < 2 seconds).
+     * they see finalized registries after a script reload.
+     *
+     * The wait is bounded by [SERVER_RELOAD_WAIT_TIMEOUT_SECONDS]. While it is
+     * in progress [isAwaitingServerReload] stays true so the platform can pause
+     * Minecraft's slow-login timeout; without that pause a cold first compilation
+     * (tens of seconds) disconnects the player before the registries are ready.
      */
     @JvmStatic
     fun awaitServerReloadCompletion() {
         val future = synchronized(serverReloadStateLock) { serverReloadFuture } ?: return
+        val blocking = !future.isDone
+        if (blocking) awaitingServerReload.incrementAndGet()
         try {
             future.get(SERVER_RELOAD_WAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
         } catch (interrupted: InterruptedException) {
@@ -505,8 +510,14 @@ object ScriptReloadManager {
                 "Server script reload did not complete before registry-sensitive work",
                 failure
             )
+        } finally {
+            if (blocking) awaitingServerReload.decrementAndGet()
         }
     }
+
+    /** True while a connection thread is blocked in [awaitServerReloadCompletion]. */
+    @JvmStatic
+    fun isAwaitingServerReload(): Boolean = awaitingServerReload.get() > 0
 
     /**
      * Compiles and executes all GLOBAL-scoped script packs.
@@ -582,37 +593,56 @@ object ScriptReloadManager {
     ): Boolean {
         var success = false
         return try {
-            reloadServerScriptsPrepared(server, reason, cause).also { success = it }
+            val result = if (server == null) false else {
+                // The tracker must start before preparation: compilation is the longest
+                // phase and used to be invisible because the bar only began at activation.
+                val tracker = ReloadProgressTracker(24)
+                tracker.begin("katton.reload.server.begin")
+                val prepared = prepareServerReload(server, reason, cause, tracker)
+                reloadServerScriptsPrepared(server, reason, cause, prepared, tracker)
+            }
+            result.also { success = it }
         } finally { ScriptPackManager.finishGlobalResourceRefresh(success) }
     }
 
     /** Reads and compiles immutable snapshots without invoking script code or mutating native resources. */
-    private fun prepareServerReload(server: MinecraftServer, reason: InvocationReason, cause: ReloadCause): PreparedServerReload {
+    private fun prepareServerReload(server: MinecraftServer, reason: InvocationReason, cause: ReloadCause,
+                                    tracker: ReloadProgressTracker): PreparedServerReload {
         ScriptPackManager.setGameDirectory(Katton.gameDirectory)
+        tracker.step("katton.reload.common.set_game_directory")
         ScriptPackManager.setWorldDirectory(server.getWorldPath(LevelResource.ROOT))
         ensureDirectory(ScriptPackManager.getWorldScriptDirectory())
+        tracker.step("katton.reload.common.set_world_directory")
         val previousWorld = ScriptPackManager.collectExecutableWorldPacks()
         val previousGlobals = ScriptPackManager.collectExecutableGlobalPacks()
         val previousPlans = PackRuntime.preparations(ScriptEnvironment.SERVER)
         ScriptPackManager.refreshGlobalResources()
+        tracker.step("katton.reload.common.scan_world_packs")
         try {
             val candidates = ScriptPackManager.scanWorldPacksCandidate()
+            tracker.step("katton.reload.common.collect_world_packs")
             val invocation = ScriptInvocation.server(ServerPhase.READY, reason, cause, server)
-            val effective = ScriptEngine.prepareWithFallback(candidates.filter { it.enabled }, previousWorld, invocation)
-                ?: error("Server script preparation failed")
+            // Stepped before the call so the overlay shows the compile label while it runs.
+            tracker.step("katton.reload.common.compile_execute_scripts")
+            val effective = ScriptTiming.measure("server.prepare_candidate", cause.name) {
+                ScriptEngine.prepareWithFallback(candidates.filter { it.enabled }, previousWorld, invocation)
+            } ?: error("Server script preparation failed")
             val globals = ScriptPackManager.collectExecutableGlobalPacks()
-            val plans = ScriptEngine.preparePacks(globals + effective.packs, invocation)
+            val preparedIds = effective.preparations.mapTo(hashSetOf()) { it.pack.syncId }
+            val plans = if (globals.all { it.syncId in preparedIds }) effective.preparations else
+                ScriptTiming.measure("server.prepare_global", cause.name) {
+                    ScriptEngine.preparePacks(globals + effective.packs, invocation)
+                }
+            tracker.step("katton.reload.common.prepare_scripts")
             return PreparedServerReload(previousWorld, candidates, effective.packs, previousGlobals,
                 ScriptPackManager.captureGlobalResourceCandidate(), plans, previousPlans)
         } finally { ScriptPackManager.finishGlobalResourceRefresh(false) }
     }
 
     private fun reloadServerScriptsPrepared(server: MinecraftServer?, reason: InvocationReason, cause: ReloadCause,
-                                            snapshot: PreparedServerReload? = null): Boolean {
+                                            snapshot: PreparedServerReload, tracker: ReloadProgressTracker): Boolean {
         if (server == null) return false
-        val prepared = snapshot ?: prepareServerReload(server, reason, cause)
-        val tracker = ReloadProgressTracker(24)
-        tracker.begin("katton.reload.server.begin")
+        val prepared = snapshot
         val previousWorldPacks = prepared.previousWorld
         val candidateWorldPacks = prepared.candidateWorld
         val effectiveWorldPacks = prepared.effectiveWorld
@@ -620,14 +650,15 @@ object ScriptReloadManager {
         ScriptPackManager.stageGlobalResourceCandidate(prepared.globalCandidate)
         val invocation = ScriptInvocation.server(ServerPhase.READY, reason, cause, server)
 
-        tracker.step("katton.reload.common.compile_execute_scripts")
+        tracker.step("katton.reload.common.execute_source_scripts")
         var globals = ScriptPackManager.collectExecutableGlobalPacks()
         if (globals != previousGlobals) {
             val accepted = ScriptPackDataManager.activateAndReload(server, globals + previousWorldPacks)
             ScriptPackManager.finishGlobalResourceRefresh(accepted)
             if (!accepted) globals = previousGlobals
         }
-        val activatedWorldPacks = PackReloadBatch.run(previousWorldPacks, effectiveWorldPacks,
+        val activatedWorldPacks = ScriptTiming.measure("server.activate", cause.name) {
+            PackReloadBatch.run(previousWorldPacks, effectiveWorldPacks,
             activate = { proposed ->
                 if (!ScriptEngine.executePreparedPacks(proposed, prepared.select(proposed), invocation)) null else {
                     val active = PackRuntime.effectivePacks(ScriptEnvironment.SERVER, setOf(ScriptPackScope.WORLD))
@@ -642,7 +673,8 @@ object ScriptReloadManager {
                 ServerDatapackManager.apply(server)
                 KattonConfigManager.retainPacks(setOf(ScriptPackScope.WORLD), old.mapTo(hashSetOf(), KattonConfigManager::configId))
             }
-        ) ?: run { tracker.finish("katton.reload.server.failed"); return false }
+        )
+        } ?: run { tracker.finish("katton.reload.server.failed"); return false }
         ScriptPackManager.publishWorldPacks(candidateWorldPacks, activatedWorldPacks)
         KattonConfigManager.retainPacks(
             setOf(ScriptPackScope.WORLD),
@@ -708,12 +740,15 @@ object ScriptReloadManager {
     }
 
     private fun scheduleServerReload(request: ServerReloadRequest) {
+        // Begin before preparation so the overlay covers the compilation phase too.
+        val tracker = ReloadProgressTracker(24)
+        tracker.begin("katton.reload.server.begin")
         serverPreparationExecutor.execute {
             val preparation = runCatching {
                 request.beforePrepare?.invoke()
-                prepareServerReload(request.server, request.reason, request.cause)
+                prepareServerReload(request.server, request.reason, request.cause, tracker)
             }
-            activateServerReload(request, preparation)
+            activateServerReload(request, preparation, tracker)
         }
     }
 
@@ -760,7 +795,8 @@ object ScriptReloadManager {
         return true
     }
 
-    private fun activateServerReload(request: ServerReloadRequest, preparation: Result<PreparedServerReload>) {
+    private fun activateServerReload(request: ServerReloadRequest, preparation: Result<PreparedServerReload>,
+                                     tracker: ReloadProgressTracker) {
         val activationClaimed = AtomicBoolean(false)
         val watchdogAttempts = AtomicInteger(0)
         fun abandonStoppedDevelopmentRequest() {
@@ -802,7 +838,7 @@ object ScriptReloadManager {
                         }
                         globalReadyServer = request.server
                     }
-                    val ok = reloadServerScriptsPrepared(request.server, request.reason, request.cause, snapshot)
+                    val ok = reloadServerScriptsPrepared(request.server, request.reason, request.cause, snapshot, tracker)
                     if (ok) {
                         if (Katton.hasClient) {
                             ServerNetworking.publishPackRevision(request.server)

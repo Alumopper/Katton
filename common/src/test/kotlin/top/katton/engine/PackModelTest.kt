@@ -63,6 +63,19 @@ class PackModelTest {
         Files.write(initial.location.resolve("libs/helper.jar"), byteArrayOf(4))
         assertNotEquals(directory.codeHash, ScriptPackManager.scanPackDirectory(initial.location, initial.scope)!!.codeHash)
     }
+    @Test fun `manifest metadata reuses compilation inputs while source edits invalidate them`() {
+        val initial = pack("compile-cache", source = "val answer = 42")
+        val firstInputs = PackCompiler.compilationHash(initial)
+        Files.writeString(initial.location.resolve("manifest.json"),
+            """{"id":"compile-cache","version":"2.0","description":"renamed","dependencies":[],"packDependencies":[]}""")
+        val metadataOnly = assertNotNull(ScriptPackManager.scanPackDirectory(initial.location, initial.scope))
+        assertNotEquals(initial.codeHash, metadataOnly.codeHash)
+        assertEquals(firstInputs, PackCompiler.compilationHash(metadataOnly))
+
+        Files.writeString(initial.location.resolve("Code.kt"), "val answer = 43")
+        val edited = assertNotNull(ScriptPackManager.scanPackDirectory(initial.location, initial.scope))
+        assertNotEquals(firstInputs, PackCompiler.compilationHash(edited))
+    }
     @Test fun `rollback restores original contributions without replaying handlers`() {
         val map = mutableMapOf("value" to "base")
         ScriptExecutionContext.withOwner("a:1:") { ManagedResources.put(map, "value", "a") }

@@ -26,6 +26,8 @@ import top.katton.engine.ScriptEngine;
 import top.katton.pack.ScriptPlatform;
 import top.katton.network.ScriptPackRequestPacket;
 import top.katton.network.ScriptPackSyncAckPacket;
+import top.katton.network.ScriptPayloadPacket;
+import top.katton.network.ScriptPlayNetworking;
 
 import static top.katton.Katton.*;
 
@@ -57,6 +59,10 @@ public class KattonFabric implements ModInitializer {
 
         Networking.initialize();
         ServerNetworking.setPlaySender(ServerPlayNetworking::send);
+        ServerPlayNetworking.registerGlobalReceiver(
+            ScriptPayloadPacket.TYPE,
+            (packet, context) -> context.server().execute(() -> ScriptPlayNetworking.receive(context.player(), packet))
+        );
 
         ServerConfigurationNetworking.registerGlobalReceiver(
             ScriptPackRequestPacket.TYPE,
@@ -87,6 +93,10 @@ public class KattonFabric implements ModInitializer {
         ServerLifecycleEvents.SERVER_STARTED.register(serverInstance -> {
             server = serverInstance;
             globalState = LoadState.SERVER_STARTED;
+            // Opt-in only: an IDE launcher sets katton.dev.autoEnable so the bridge appears
+            // once the world exists, without the in-game switch. The world id stays stable
+            // for the whole server lifetime, so the IDE does not reconnect on world change.
+            top.katton.dev.KattonDevBridge.enableIfRequested();
             ScriptReloadManager.reloadScriptsAsync(serverInstance, InvocationReason.INITIAL_LOAD, ReloadCause.SERVER_START, serverOk -> {
                 if (serverOk) {
                     serverInstance.execute(() -> ScriptCommand.syncCommandTree(serverInstance));
@@ -95,7 +105,10 @@ public class KattonFabric implements ModInitializer {
             });
         });
 
-        ServerLifecycleEvents.SERVER_STOPPED.register(_ -> {
+        ServerLifecycleEvents.SERVER_STOPPED.register(stoppedServer -> {
+            if (!stoppedServer.isDedicatedServer()) {
+                top.katton.dev.KattonDevBridge.disable();
+            }
             ScriptReloadManager.resetServerLifecycle(server);
             server = null;
             globalState = LoadState.SERVER_STOPPED;
